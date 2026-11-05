@@ -38,7 +38,7 @@ NEEDS_PROFILE: Final[str] = (
 
 
 class Profile(TypedDict):
-    """Contents of profile/profile.json."""
+    """The stored profile settings."""
 
     resume_root: str
     resume_dirs: NotRequired[list[str]]
@@ -47,7 +47,7 @@ class Profile(TypedDict):
 
 
 class OpenItem(TypedDict):
-    """One entry of profile/open_items.json."""
+    """One open item."""
 
     id: int
     text: str

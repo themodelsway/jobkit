@@ -11,6 +11,7 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - Prefer Python scripts over `jq` for repeated tasks. If a question is needed, ask one at a time.
 
 ## Where to start
+- The user-facing skills are in `skills/` and ship as a Claude Code plugin (`.claude-plugin/`); `.claude/skills/` holds only the OpenSpec tooling. Load the plugin's skills in this checkout with `claude --plugin-dir .`. A plugin does not load this file, so every rule a plugin user needs is repeated inside the skills.
 - Build a resume for a job description, or add a resume file: `resume-workflows` skill.
 - Quiz or mock interview: `interview-prep` skill. Teach, explain or readiness: `tutor` skill.
 - Read personal open items at the start of resume work with `profile open`; add with `profile open add TEXT`.
@@ -23,6 +24,7 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - Every function typed and documented; about 20 lines, 40 at most. Records are `TypedDict`s or dataclasses. Shared helpers go in `common.py` and `resume_data.py`, not copied between tools. Use the `pythonic-tools` skill when writing Python.
 - Format readers live in `resumes/extract.py`: a new format is one `@register` class.
 - Checks (all need `uv sync`): `.venv/bin/python -m unittest discover -s tests -t .`, `.venv/bin/pyright`, `.venv/bin/ruff check src tests`, `.venv/bin/pylint src` (for tests add `--disable=missing-function-docstring,missing-class-docstring,protected-access,consider-using-with`). The pre-commit hook runs gitleaks, ruff, pyright and the tests (not pylint); enable with `git config core.hooksPath .githooks`.
+- Skill text (`skills/`): what the user reads is plain English, in lines that start with `>`, with no commands, file names or technical words; commands and rules are for Claude. The preflight, talking and rules blocks are identical in all three skills (`<!-- shared:... -->`); edit one and copy it to the others. `tests/test_plugin.py` enforces this, and `setup/install` is the only place that installs software, and only after the user says yes.
 - A behaviour change updates the matching spec in `openspec/specs/` and the docs in the same change.
 
 ## Interview data
@@ -31,4 +33,4 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - Lifecycle words: maintenance = closed to new customers, no new features; sunset = has an end date. Seeded AWS values are unverified leads until refreshed.
 
 ## Resume data model
-Parsing layouts, bullet ids and variants, and curation are described in `.claude/rules/resume-data-model.md`, which loads when you work on `src/jobkit/resumes/` or `tests/resumes/`.
+Parsing layouts, bullet ids and variants, and curation are described in `skills/resume-workflows/data-model.md` (it ships with the skill). Read it when you work on `src/jobkit/resumes/` or `tests/resumes/`.

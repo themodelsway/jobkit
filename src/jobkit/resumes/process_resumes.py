@@ -48,7 +48,7 @@ def load_config() -> Config:
 
 def scan_companies(files: Iterable[Path], save: bool) -> None:
     """First-run scan: find the employers in every resume so nothing has to be typed in. With `save`, new
-    employers are stored in profile/companies.json (existing entries are never changed)."""
+    employers are stored in the database (existing entries are never changed)."""
     found: dict[str, str] = {}
     for path in files:
         try:
@@ -63,7 +63,7 @@ def scan_companies(files: Iterable[Path], save: bool) -> None:
     print("Employers found in your resumes: " + ", ".join(found[k] for k in new))
     if save:
         up.add_companies({k: found[k] for k in new})
-        print("  Saved to profile/companies.json. Merge or rename entries there if one employer appears twice.")
+        print("  Saved the employers. If one employer appears twice, use `profile companies merge FROM INTO` or `rename ID NAME`.")
     else:
         print("  (survey: not saved)")
     pr.set_companies({**pr.COMPANIES, **{k: (found[k], re.escape(found[k]) + rf"(?:{pr.SEP}(?P<t>.+))?")
@@ -265,7 +265,7 @@ def retag(data: ResumeData) -> None:
 
 
 def add_extra_skills(data: ResumeData, extra: dict[str, list[dict[str, Any]]]) -> None:
-    """Skills listed in curated.json that no resume mentions."""
+    """Skills in your curation that no resume mentions."""
     for group, items in extra.items():
         entries = data["skills"]["groups"].setdefault(group, [])
         for item in items:
@@ -302,7 +302,7 @@ def assign_groups(found: dict[str, dict[str, Any]], drop: set[str], override: di
 
 
 def curate_skills(data: ResumeData) -> None:
-    """Merge duplicate spellings, drop non-skills, give every skill exactly one group (resume-data/curated.json)."""
+    """Merge duplicate spellings, drop non-skills, give every skill exactly one group (your skill curation)."""
     cur = rd.load_curated()
     add_extra_skills(data, cur.get("extra_skills", {}))
     found = collect_skills(data, {k.lower(): v for k, v in cur.get("skill_merge", {}).items()})
@@ -312,7 +312,7 @@ def curate_skills(data: ResumeData) -> None:
 
 
 def apply_themes(data: ResumeData) -> None:
-    """Themes, ignored fragments and summary angles from resume-data/themes.json."""
+    """Themes, ignored fragments and summary angles from your curation."""
     themes = rd.load_themes_file()
     for company in data["companies"].values():
         for bullet in company["bullets"]:
@@ -343,7 +343,7 @@ def apply_curated(data: ResumeData) -> None:
 # ---------------------------------------------------------------- write
 
 def build_index(data: ResumeData, ledger: dict[str, Any]) -> dict[str, Any]:
-    """index.json: a summary of what the data holds."""
+    """The index: a summary of what the data holds."""
     companies = rd.newest_first(data["companies"].values())
     return {
         "generated": now(),
@@ -426,12 +426,12 @@ def build(files: Iterable[Path], root: Path, force: bool) -> None:
     write_data(data, ledger, unparsed)
     orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file())
     if orphans:
-        print(f"\nWARNING: {len(orphans)} entr(ies) in themes.json match no bullet or summary "
+        print(f"\nWARNING: {len(orphans)} entr(ies) in your curation match no bullet or summary "
               f"(run `query-resume review` to list them).")
     bullets = sum(len(c["bullets"]) for c in data["companies"].values())
     print(f"\n{outcomes.count('parsed')} new/changed, {outcomes.count('unchanged')} unchanged, {len(pruned)} pruned. "
           f"Resume data: {len(data['companies'])} companies, {bullets} bullets. "
-          f"{len(unparsed)} file(s) listed in _unparsed.json.")
+          f"{len(unparsed)} file(s) in the unparsed report (`jobkit export --only resume-unparsed`).")
 
 
 def cmd_process(args: argparse.Namespace) -> None:

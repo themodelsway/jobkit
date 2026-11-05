@@ -1,6 +1,6 @@
 """Seed topics for the architecture drill (generic, no personal data, no model answers).
 
-`arch init` merges this into prep/arch/catalog.json. Everything AWS-specific lives in
+`arch init` merges this into the stored catalog. Everything AWS-specific lives in
 src/aws/. Lifecycle facts and recent changes are NOT seeded: they are looked up on AWS pages and stored
 with a source URL and a verified_on date by `arch refresh`.
 """

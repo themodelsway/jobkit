@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interview-prep sessions, kept in prep/sessions/. Standard library only.
+"""Interview-prep sessions, kept in the database. Standard library only.
 
   sessions new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
                                    [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--count 10]
@@ -12,7 +12,7 @@
 
 A session is one file with a queue of items (architecture cards or STAR stories) and an append-only log that
 keeps your FULL answers. Re-drilling a topic in a later session adds a log entry there and never edits an old
-session. Confidence per card is shared across sessions (prep/arch/progress.json).
+session. Confidence per card is shared across sessions (stored card progress).
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class LogEntry(TypedDict):
 
 
 class Session(TypedDict):
-    """prep/sessions/<id>.json."""
+    """One stored session."""
 
     id: str
     title: str

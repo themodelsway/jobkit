@@ -7,7 +7,7 @@ Handles the two layouts seen so far:
 
 Library module (no command line). Pure functions, no file or network access, except that the employer
 registry is module state: `set_companies` installs {id: (name, header regex)} from
-profile/companies.json, and `parse_work` / `parse_resume` use it unless you pass `company_res`.
+the stored employers, and `parse_work` / `parse_resume` use it unless you pass `company_res`.
 """
 from __future__ import annotations
 
@@ -418,7 +418,7 @@ def parse_skills(sections: Mapping[str, list[str]]) -> tuple[dict[str, list[Skil
                 _add_skills(groups, "Leadership", split_items(text))
                 continue
             labelled = _split_label(text, labels)
-            if labelled is None:     # unlabeled list, e.g. "Agile methodologies, CI/CD": sorted by curated.json
+            if labelled is None:     # unlabeled list, e.g. "Agile methodologies, CI/CD": sorted by your skill curation
                 _add_skills(groups, "Unsorted", split_items(text))
                 continue
             label, rest = labelled

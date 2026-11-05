@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leadership interview questionnaire, kept in prep/leadership/. Standard library only.
+"""Leadership interview questionnaire, kept in the database. Standard library only.
 
   lead init                      # create/extend questions + progress (never overwrites answers)
   lead status                    # per category: confidence counts; profile gaps
@@ -67,7 +67,7 @@ class QuestionProgress(TypedDict):
     examples: dict[str, dict[str, str]]
 
 
-# `init` keeps only the themes that appear in the user's own scanned resume data (resume-data/json/index.json),
+# `init` keeps only the themes that appear in the user's own scanned resume data (the stored resume index),
 # so nothing here depends on any one person's resume.
 SEED: Final[tuple[SeedQuestion, ...]] = tuple(SeedQuestion(*row) for row in (
     ("team-scope", "Scope and facts", "How many people have you led, directly and indirectly, in each role?", ["team-leadership"]),

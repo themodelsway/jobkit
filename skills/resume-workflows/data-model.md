@@ -1,9 +1,3 @@
----
-paths:
-  - "src/jobkit/resumes/**"
-  - "tests/resumes/**"
----
-
 # Resume data model
 
 - Bullet id is a short hash of normalised text. A bullet seen in several resumes gains `sources`; near-identical text (ratio >= 0.92) becomes a `variant`; materially different claims stay separate, including near-duplicates across resumes. If summaries state different years of experience, ask the user to pick one.

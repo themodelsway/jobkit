@@ -13,6 +13,7 @@ import argparse
 import sqlite3
 import sys
 from collections.abc import Sequence
+from importlib.metadata import version
 from pathlib import Path
 
 from jobkit import common, export, legacy, records, store
@@ -79,6 +80,7 @@ def cmd_backup(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """The command-line parser."""
     parser = common.make_parser(__doc__)
+    parser.add_argument("--version", action="version", version=f"jobkit {version('jobkit')}")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init", help="create the home folder and the database").set_defaults(fn=cmd_init)
     sub.add_parser("status", help="show the database location, version and counts").set_defaults(fn=cmd_status)

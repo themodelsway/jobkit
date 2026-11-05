@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Interview-prep stories and engagements, kept in prep/. Standard library only.
+"""Interview-prep stories and engagements, kept in the database. Standard library only.
 
 Stories (STAR narratives)
-  prep init              # (alias: skeleton) create/extend prep/stories.json + prep/themes.json from resume data
+  prep init              # (alias: skeleton) create/extend the stories and themes from resume data
   prep status            # stories per company: how many are filled
   prep list [--company <company-id>]    # every story: id, status, headline
   prep next [--company <company-id>]   # next empty story to work on (prints it)
@@ -116,7 +116,7 @@ class Health(TypedDict):
 # ---- storage -------------------------------------------------------------------------------------------------------
 
 def load_story_data() -> dict[str, Any]:
-    """prep/stories.json with every story normalized; fails when `init` has not run."""
+    """The stored stories with every story normalized; fails when `init` has not run."""
     data = tables.load_stories()
     if data is None:
         raise ToolError(NO_STORIES)
@@ -125,7 +125,7 @@ def load_story_data() -> dict[str, Any]:
 
 
 def load_eng_data() -> dict[str, Any]:
-    """prep/engagements.json with every engagement normalized (empty before the first one)."""
+    """The stored engagements with every engagement normalized (empty before the first one)."""
     data = tables.load_engagements()
     data["engagements"] = [sm.normalize_engagement(e) for e in data["engagements"]]
     return cast(dict[str, Any], data)
@@ -142,13 +142,13 @@ def engagements() -> list[Engagement]:
 
 
 def save_stories(data: dict[str, Any]) -> None:
-    """Write stories.json with the current schema version."""
+    """Store the stories with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
     tables.save_stories(data)
 
 
 def save_engs(data: dict[str, Any]) -> None:
-    """Write engagements.json with the current schema version."""
+    """Store the engagements with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
     tables.save_engagements(data)
 
@@ -267,7 +267,7 @@ def company_stories(company: Company, old: dict[str, Story], cutoff: str) -> tup
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create or extend stories.json and themes.json from the resume data."""
+    """Create or extend the stories and themes from the resume data."""
     companies, _ = qr.load()
     old = {s["id"]: s for s in (tables.load_stories() or {"stories": []})["stories"]}
     out: list[Story] = []

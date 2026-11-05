@@ -1,0 +1,12 @@
+{
+  "name": "jobkit",
+  "owner": { "name": "jobkit" },
+  "description": "Resume and interview-prep helpers that keep your data on your own computer.",
+  "plugins": [
+    {
+      "name": "jobkit",
+      "source": "./",
+      "description": "Build tailored resumes from your own resumes and practise for interviews, with all your data kept on your computer."
+    }
+  ]
+}

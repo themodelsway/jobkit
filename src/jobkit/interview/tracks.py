@@ -2,7 +2,7 @@
 
 A track is a seed of topics (services, decision pairs, scenarios) plus the documentation hosts that
 count as a source for facts. AWS is bundled as the worked example (`jobkit.interview.aws.arch_seed`).
-Any other track is a JSON file in the git-ignored `prep/arch/tracks/`, added with `arch track add`;
+Any other track is a seed stored in the database, added with `arch track add`;
 no code is needed. A seed holds topic names only, never facts: facts are researched and recorded
 with a source URL by `arch refresh`.
 """

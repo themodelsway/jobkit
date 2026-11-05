@@ -5,7 +5,7 @@
   build-resume jd.txt -o out.md --top 5     # custom path / bullets per company
   build-resume - < jd.txt                   # job description from stdin
 
-Picks, from resume-data/json/: the best-fitting opening summary, the best bullets for each company
+Picks, from the stored resume data: the best-fitting opening summary, the best bullets for each company
 (same scoring as `query-resume for-jd`), the skills the JD asks for (grouped), certifications and education.
 
 Name and contact lines are NOT stored in resume-data/. They come from profile/header.md; a template is created on first run. Output goes to output/.

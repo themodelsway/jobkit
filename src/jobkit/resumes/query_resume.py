@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query the resume data in resume-data/json/ (read-only, standard library only).
+"""Query the stored resume data (read-only, standard library only).
 
   query-resume for-jd jd.txt         # rank bullets per company for a job description ("-" = stdin; alias: match)
   query-resume search --skill Python    # filter bullets (also --company, --text, --theme)
@@ -32,7 +32,7 @@ NEEDS_REVIEW_PENALTY: Final[float] = 6.0
 MIN_EVIDENCE: Final[int] = 2             # matched skills + themes needed to list a bullet (or OVERLAP_ENOUGH words)
 OVERLAP_ENOUGH: Final[int] = 4
 
-# JD wording that implies a theme (themes are tagged on bullets in resume-data/themes.json)
+# JD wording that implies a theme (themes are tagged on bullets with `process-resumes curate add theme`)
 THEME_HINTS: Final[dict[str, list[str]]] = {
     "topic-06": ["placeholder", "topic-09", "placeholder", "placeholder", "placeholder"], "topic-09": ["topic-09"],
     "topic-12": ["topic-12", "placeholder", "placeholder", "placeholder"], "topic-01": ["placeholder"],
@@ -103,7 +103,7 @@ class JdContext:
 
 
 def load() -> tuple[dict[str, Company], Skills]:
-    """(companies by id, skills) from resume-data/json/. Raises OSError when there is no resume data."""
+    """(companies by id, skills) from the stored data. Raises OSError when there is no resume data."""
     skills = cast("Skills | None", tables.load_skills())
     if skills is None:
         raise FileNotFoundError(rd.MISSING_DATA)
@@ -341,7 +341,7 @@ def cmd_review(args: argparse.Namespace) -> None:
     total = sum(len(c["bullets"]) for c in companies.values())
     live = [b for c in companies.values() for b in c["bullets"] if not b.get("ignored")]
     orphans = rd.orphan_curation(companies, rd.load_profile(), rd.load_themes_file())
-    print("\nCuration entries (themes.json) that match no bullet or summary:" + ("" if orphans else " none"))
+    print("\nCuration entries that match no bullet or summary:" + ("" if orphans else " none"))
     for orphan in orphans:
         print(f"  {orphan}")
     print(f"\nBullets without themes: {sum(1 for b in live if not b['themes'])} of {len(live)} "

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Architecture-fundamentals drill data for one or more technologies (tracks), kept in prep/arch/.
+"""Architecture-fundamentals drill data for one or more technologies (tracks), kept in the database.
 Standard library only.
 
   arch tracks                # tracks you can drill (aws is bundled; others you add) and which are enabled
@@ -80,7 +80,7 @@ class Card(TypedDict):
 
 
 class Catalog(TypedDict):
-    """prep/arch/catalog.json."""
+    """The stored architecture catalog."""
 
     dimensions: list[str]
     scenarios_note: str
@@ -98,7 +98,7 @@ class Progress(TypedDict):
 
 
 class ProgressFile(TypedDict):
-    """prep/arch/progress.json."""
+    """The stored card progress."""
 
     cards: dict[str, Progress]
 
