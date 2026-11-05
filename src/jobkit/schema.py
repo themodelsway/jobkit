@@ -1,0 +1,162 @@
+"""The database schema as numbered upgrade steps (see `store.migrate`).
+
+Record tables keep the whole record as JSON in `body` and repeat the few fields that are keys, links or
+queried (id, status, dates, ...) as real columns. The columns are written from the body in one place
+(`jobkit.interview.tables`), so they cannot drift, and the record round-trips exactly.
+Never edit a step after release: add a new one.
+"""
+from __future__ import annotations
+
+import sqlite3
+from typing import Final
+
+APPEND_ONLY: Final[str] = """
+CREATE TRIGGER {table}_no_update BEFORE UPDATE ON {table}
+BEGIN SELECT RAISE(ABORT, '{table} entries are append-only'); END;
+CREATE TRIGGER {table}_no_delete BEFORE DELETE ON {table}
+BEGIN SELECT RAISE(ABORT, '{table} entries are append-only'); END;
+"""
+
+
+def run_script(conn: sqlite3.Connection, script: str) -> None:
+    """Run several statements one by one (`executescript` would commit the upgrade transaction)."""
+    for statement in _split(script):
+        conn.execute(statement)
+
+
+def _split(script: str) -> list[str]:
+    """Statements of a script (SQLite itself decides where a statement, including a trigger body, ends)."""
+    out, current = [], ""
+    for line in script.strip().splitlines():
+        current += line + "\n"
+        if sqlite3.complete_statement(current):
+            out.append(current.strip().rstrip(";"))
+            current = ""
+    return out
+
+
+def step_meta_and_docs(conn: sqlite3.Connection) -> None:
+    """Version 1: the meta table and the transitional document table."""
+    run_script(conn, """
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE doc (key TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at TEXT NOT NULL);
+""")
+
+
+def step_sessions(conn: sqlite3.Connection) -> None:
+    """Version 2: practice sessions, their queue and the append-only answer log."""
+    run_script(conn, """
+CREATE TABLE session (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL,
+  created TEXT NOT NULL, updated TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE session_item (
+  session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE, position INTEGER NOT NULL,
+  item TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (session_id, position));
+CREATE TABLE session_log (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES session(id) ON DELETE RESTRICT,
+  at TEXT NOT NULL, item TEXT NOT NULL, kind TEXT NOT NULL, answered INTEGER NOT NULL,
+  confidence_after INTEGER, tutor INTEGER NOT NULL, quiz INTEGER NOT NULL, body TEXT NOT NULL);
+CREATE INDEX session_log_item ON session_log(item);
+CREATE INDEX session_log_session ON session_log(session_id);
+""" + APPEND_ONLY.format(table="session_log"))
+
+
+def step_architecture(conn: sqlite3.Connection) -> None:
+    """Version 3: architecture cards, the user's progress on them, and custom tracks."""
+    run_script(conn, """
+CREATE TABLE card (
+  id TEXT PRIMARY KEY, position INTEGER NOT NULL, track TEXT NOT NULL, kind TEXT NOT NULL, area TEXT,
+  name TEXT NOT NULL, tier INTEGER, body TEXT NOT NULL);
+CREATE TABLE card_progress (
+  card_id TEXT PRIMARY KEY REFERENCES card(id) ON DELETE CASCADE, confidence INTEGER NOT NULL,
+  last_drilled TEXT, body TEXT NOT NULL);
+CREATE TABLE track (name TEXT PRIMARY KEY, body TEXT NOT NULL);
+""")
+
+
+def step_stories(conn: sqlite3.Connection) -> None:
+    """Version 4: engagements with their facts, decisions and people; stories; themes."""
+    run_script(conn, """
+CREATE TABLE engagement (
+  id TEXT PRIMARY KEY, position INTEGER NOT NULL, company TEXT, title TEXT, updated TEXT, body TEXT NOT NULL);
+CREATE TABLE fact (
+  engagement_id TEXT NOT NULL REFERENCES engagement(id) ON DELETE CASCADE, id TEXT NOT NULL, position INTEGER NOT NULL,
+  basis TEXT, body TEXT NOT NULL, PRIMARY KEY (engagement_id, id));
+CREATE TABLE decision (
+  engagement_id TEXT NOT NULL REFERENCES engagement(id) ON DELETE CASCADE, id TEXT NOT NULL, position INTEGER NOT NULL,
+  ownership TEXT, body TEXT NOT NULL, PRIMARY KEY (engagement_id, id));
+CREATE TABLE person (
+  engagement_id TEXT NOT NULL REFERENCES engagement(id) ON DELETE CASCADE, position INTEGER NOT NULL,
+  body TEXT NOT NULL, PRIMARY KEY (engagement_id, position));
+CREATE TABLE story (
+  id TEXT PRIMARY KEY, position INTEGER NOT NULL, company TEXT, theme TEXT, status TEXT NOT NULL,
+  engagement_id TEXT REFERENCES engagement(id) DEFERRABLE INITIALLY DEFERRED, updated TEXT, body TEXT NOT NULL);
+CREATE INDEX story_engagement ON story(engagement_id);
+CREATE TABLE theme (name TEXT PRIMARY KEY, body TEXT NOT NULL);
+""")
+
+
+def step_leadership(conn: sqlite3.Connection) -> None:
+    """Version 5: leadership questions, the user's answers, and factual scope per employer."""
+    run_script(conn, """
+CREATE TABLE lead_question (
+  id TEXT PRIMARY KEY, position INTEGER NOT NULL, category TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE lead_progress (
+  question_id TEXT PRIMARY KEY REFERENCES lead_question(id) ON DELETE CASCADE, confidence INTEGER NOT NULL,
+  last_drilled TEXT, body TEXT NOT NULL);
+CREATE TABLE lead_company_fact (company_id TEXT PRIMARY KEY, body TEXT NOT NULL);
+""")
+
+
+def step_profile(conn: sqlite3.Connection) -> None:
+    """Version 6: the user's settings, the employers found in the resumes, and open items."""
+    run_script(conn, """
+CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE employer (id TEXT PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE open_item (id INTEGER PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
+""")
+
+
+def step_resume_data(conn: sqlite3.Connection) -> None:
+    """Version 7: what the resumes contain (companies, roles, bullets, skills, sections) and the scan ledger."""
+    run_script(conn, """
+CREATE TABLE company (id TEXT PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE role (
+  company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE, position INTEGER NOT NULL,
+  start TEXT, body TEXT NOT NULL, PRIMARY KEY (company_id, position));
+CREATE TABLE bullet (
+  company_id TEXT NOT NULL REFERENCES company(id) ON DELETE CASCADE, id TEXT NOT NULL, position INTEGER NOT NULL,
+  needs_review INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (company_id, id));
+CREATE TABLE bullet_source (
+  company_id TEXT NOT NULL, bullet_id TEXT NOT NULL, source TEXT NOT NULL,
+  PRIMARY KEY (company_id, bullet_id, source),
+  FOREIGN KEY (company_id, bullet_id) REFERENCES bullet(company_id, id) ON DELETE CASCADE);
+CREATE INDEX bullet_source_file ON bullet_source(source);
+CREATE TABLE skill (
+  group_name TEXT NOT NULL, position INTEGER NOT NULL, name TEXT NOT NULL, body TEXT NOT NULL,
+  PRIMARY KEY (group_name, position));
+CREATE TABLE resume_item (
+  section TEXT NOT NULL, position INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (section, position));
+CREATE TABLE ledger (file TEXT PRIMARY KEY, kind TEXT NOT NULL, mtime REAL, body TEXT NOT NULL);
+CREATE TABLE unparsed (file TEXT PRIMARY KEY, body TEXT NOT NULL);
+""")
+
+
+def step_curation(conn: sqlite3.Connection) -> None:
+    """Version 8: the user's curation (certifications, skill rules, bullet themes, ...), one row per entry."""
+    run_script(conn, """
+CREATE TABLE curation (
+  file TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, position INTEGER NOT NULL, body TEXT NOT NULL,
+  PRIMARY KEY (file, kind, key));
+""")
+
+
+def step_drop_documents(conn: sqlite3.Connection) -> None:
+    """Version 9: the transitional document table is gone; refuse to drop it if anything is still in it."""
+    if conn.execute("SELECT 1 FROM doc LIMIT 1").fetchone() is not None:
+        raise RuntimeError("The transitional doc table still holds data; export it before upgrading.")
+    conn.execute("DROP TABLE doc")
+
+
+STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
+               step_profile, step_resume_data, step_curation, step_drop_documents]

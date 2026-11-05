@@ -2,19 +2,18 @@
 Run: .venv/bin/python -m unittest discover -s tests -t ."""
 import contextlib
 import io
-import shutil
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 
-from jobkit import common
 from jobkit.resumes import build_resume as br
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import process_resumes as proc
 from jobkit.resumes import query_resume as qr
 from jobkit.resumes import resume_data as rd
+from jobkit.resumes import tables
+from tests.support import HomeClassCase
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures"
 REGISTRY = {
@@ -25,18 +24,13 @@ REGISTRY = {
 JD = "Senior Software Engineer: Python, PostgreSQL, performance tuning, search services, mentor engineers, shared build systems."
 
 
-class PipelineCase(unittest.TestCase):
+class PipelineCase(HomeClassCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = Path(tempfile.mkdtemp())
-        cls.data_dir = cls.tmp / "json"
+        super().setUpClass()
+        cls.tmp = cls.home
         saved = dict(pr.COMPANIES)
         pr.set_companies(REGISTRY)
-        patches = [mock.patch.object(proc, "DATA_DIR", cls.data_dir), mock.patch.object(qr, "DATA", cls.data_dir),
-                   mock.patch.object(rd, "CURATED_FILE", cls.tmp / "curated.json"),
-                   mock.patch.object(rd, "THEMES_FILE", cls.tmp / "themes.json")]
-        for p in patches:
-            p.start()
         data = {"companies": {}, "skills": {"groups": {}}, "profile": rd.empty_profile()}
         text_a, lay_a = (FIX / "layout_a.txt").read_text(), (FIX / "layout_a.layout.txt").read_text()
         text_b = (FIX / "layout_b.txt").read_text()
@@ -49,14 +43,12 @@ class PipelineCase(unittest.TestCase):
                   "c.pdf": {"mtime": 50.0, "size": 1, "kind": "other"}}
         proc.write_data(data, ledger, {})
         cls.data = data
-        cls._saved, cls._patches = saved, patches
+        cls._saved = saved
 
     @classmethod
     def tearDownClass(cls):
-        for p in cls._patches:
-            p.stop()
         pr.set_companies(cls._saved)
-        shutil.rmtree(cls.tmp)
+        super().tearDownClass()
 
     def cli(self, main, *argv):
         out, err = io.StringIO(), io.StringIO()
@@ -67,23 +59,24 @@ class PipelineCase(unittest.TestCase):
 
 class WriteTests(PipelineCase):
     def test_files_written(self):
-        names = {p.name for p in self.data_dir.iterdir()}
-        self.assertEqual(names, {"companies", "skills.json", "profile.json", "index.json", "ledger.json", "_unparsed.json"})
-        self.assertEqual(sorted(p.stem for p in (self.data_dir / "companies").iterdir()), ["acme-corp", "globex", "initech"])
-        self.assertEqual(list(self.data_dir.rglob("*.bak")), [])
+        self.assertEqual(sorted(tables.load_companies()), ["acme-corp", "globex", "initech"])
+        for loaded in (tables.load_skills(), tables.load_profile(), tables.load_index(), tables.load_ledger()):
+            self.assertTrue(loaded)
+        self.assertEqual(tables.load_unparsed(), {})
+        self.assertTrue(tables.has_resume_data())
 
     def test_index_orders_companies_newest_first(self):
-        index = common.load_json(self.data_dir / "index.json", None)
+        index = tables.load_index()
         self.assertEqual([c["id"] for c in index["companies"]], ["acme-corp", "initech", "globex"])
         self.assertEqual(index["resumes"], 3)
 
     def test_skills_curated_into_groups(self):
-        groups = common.load_json(self.data_dir / "skills.json", None)["groups"]
+        groups = tables.load_skills()["groups"]
         self.assertIn("PostgreSQL", [s["name"] for s in groups["Unsorted"]])
         self.assertIn("Unsorted", groups)                         # the unlabeled list awaits curation
 
     def test_bullets_are_tagged_with_skills(self):
-        acme = common.load_json(self.data_dir / "companies" / "acme-corp.json", None)
+        acme = tables.load_companies()["acme-corp"]
         tagged = {s for b in acme["bullets"] for s in b["skills"]}
         self.assertTrue(tagged & {"Python", "TypeScript", "Go"} or tagged, tagged)
 
@@ -116,10 +109,10 @@ class QueryTests(PipelineCase):
         self.assertIn("Bullets flagged needs_review:", self.cli(qr.main, "review")[1])
 
     def test_missing_data_is_a_clear_error(self):
-        with mock.patch.object(qr, "DATA", self.tmp / "nothing-here"):
+        with mock.patch.object(tables, "has_resume_data", return_value=False):
             code, _, err = self.cli(qr.main, "stats")
         self.assertEqual(code, 1)
-        self.assertIn("process_resumes.py", err)
+        self.assertIn("process-resumes", err)
 
 
 class BuildTests(PipelineCase):

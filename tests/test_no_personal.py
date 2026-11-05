@@ -2,15 +2,16 @@
 
 Checks every file git would commit (tracked + untracked, minus .gitignore) for:
   * generic leaks: home-directory paths, email addresses, phone numbers
-  * anything in the git-ignored profile/: your name, resume folder and employer names
+  * anything in your real profile (read-only from ~/.jobkit or $JOBKIT_HOME): name, resume folder, employer names
 
-Without a profile/ only the generic checks run.
+Without a profile only the generic checks run, and the profile check is reported as skipped.
 """
-import json
 import re
 import subprocess
 import unittest
 from pathlib import Path
+
+from tests.support import real_personal_terms
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,24 +27,6 @@ def committable():
             and f != "tests/test_no_personal.py"]
 
 
-def personal_terms():
-    terms = set()
-    prof = ROOT / "profile"
-    if (prof / "profile.json").exists():
-        p = json.loads((prof / "profile.json").read_text())
-        for k in ("name", "resume_root"):
-            if p.get(k):
-                terms.add(str(p[k]).strip())
-        header = prof / "header.md"
-        if header.exists():
-            first = header.read_text().splitlines()[:1]
-            terms |= {re.sub(r"^#\s*", "", ln).strip() for ln in first}
-    if (prof / "companies.json").exists():
-        for c in json.loads((prof / "companies.json").read_text()).values():
-            terms.add(c["name"])
-    return {t for t in terms if len(t) >= 3 and t.lower() != "your name"}
-
-
 class TestNoPersonalData(unittest.TestCase):
     def test_generic_leaks(self):
         bad = []
@@ -54,14 +37,14 @@ class TestNoPersonalData(unittest.TestCase):
         self.assertEqual(bad, [], "home path, email or phone number in committable files")
 
     def test_profile_terms(self):
-        terms = personal_terms()
+        terms = real_personal_terms()
         if not terms:
-            self.skipTest("no profile/ terms (name, resume folder, employers): only the generic checks ran")
+            self.skipTest("no profile terms (name, resume folder, employers) in the real home: only the generic checks ran")
         bad = []
         for f in committable():
             low = f.read_text(errors="ignore").lower()
             bad += [f"{f.relative_to(ROOT)}: {t}" for t in terms if t.lower() in low]
-        self.assertEqual(bad, [], "values from profile/ found in committable files")
+        self.assertEqual(bad, [], "values from your profile found in committable files")
 
 
 if __name__ == "__main__":

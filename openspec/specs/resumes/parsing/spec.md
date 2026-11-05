@@ -27,7 +27,7 @@ The system SHALL read work history from `layout_text`, and other sections from t
 - **THEN** the dates are split from the heading
 
 ### Requirement: Employers come from the profile
-The system SHALL match employers using the registry installed from `profile/companies.json` and SHALL NOT contain employer names in committed code.
+The system SHALL match employers using the registry stored in the profile (the employers found by the first scan, changed with the `companies` commands) and SHALL NOT contain employer names in committed code.
 
 #### Scenario: No registry
 - **WHEN** no employers are installed

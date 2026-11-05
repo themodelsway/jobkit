@@ -1,26 +1,30 @@
 # user/profile Specification
 
 ## Purpose
-Hold per-user settings in the git-ignored `profile/` folder so committed files stay free of personal data. Implemented in `src/jobkit/user/profile.py`.
+Hold per-user settings in the database under the home folder so committed files stay free of personal data. Implemented in `src/jobkit/user/profile.py`.
 
 ## Requirements
 
 ### Requirement: Profile files
-The system SHALL keep `profile.json` (resume root, resume folders, optional name and tier-1 services), `companies.json` (employers found by the first scan, with name and regex) and `header.md` (name and contact line for generated resumes) under `profile/`.
+The system SHALL keep the settings (resume root, resume folders, optional name and tier-1 services) and the employers found by the first scan (name and regex) in the database, and `header.md` (name and contact line for generated resumes) as a file under `profile/` in the home folder.
 
 #### Scenario: Init
 - **WHEN** `init --resume-root PATH` is run
-- **THEN** `profile/profile.json` is created and an existing answer is not overwritten
+- **THEN** the settings are stored and an existing answer is not overwritten
 
 ### Requirement: Employers are editable
-The system SHALL list the scanned employers with `companies` and let the user merge or rename them by editing `companies.json`.
+The system SHALL list the scanned employers with `companies` and let the user rename them and merge them with commands, without editing any file.
 
 #### Scenario: Renamed employer
-- **WHEN** a company name is edited
+- **WHEN** `companies rename ID NAME` is run
 - **THEN** the next run uses the new name
 
+#### Scenario: Merged employers
+- **WHEN** `companies merge FROM INTO` is run
+- **THEN** the next run treats both names as the one employer
+
 ### Requirement: Open items
-The system SHALL keep personal open items and data notes in `profile/open_items.json`, listed with `open`, added with `open add TEXT` and closed with `open done ID`.
+The system SHALL keep personal open items and data notes in the database, listed with `open`, added with `open add TEXT` and closed with `open done ID`.
 
 #### Scenario: Add item
 - **WHEN** `open add "check figure"` is run

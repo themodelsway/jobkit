@@ -3,7 +3,6 @@ generated data and on the resume folder. Run: .venv/bin/python -m unittest disco
 import contextlib
 import hashlib
 import io
-import json
 import os
 import re
 import tempfile
@@ -18,6 +17,8 @@ from jobkit.resumes import extract
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import process_resumes as proc
 from jobkit.resumes import resume_data as rd
+from jobkit.resumes import tables
+from tests.support import HomeCase, real_resume_texts
 from tests.resumes.test_extract import REGISTRY as BASE_REGISTRY
 from tests.resumes.test_extract import as_txt, write_docx
 
@@ -34,27 +35,24 @@ def snapshot(folder: Path) -> dict[str, tuple[int, float, str]]:
             for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
-def contact_hits(folder: Path) -> list[str]:
-    """Files under folder holding an email address or phone-like number."""
-    return [str(p.relative_to(folder)) for p in sorted(folder.rglob("*.json"))
-            if EMAIL.search(p.read_text(errors="ignore")) or PHONE.search(p.read_text(errors="ignore"))]
+def contact_hits() -> list[str]:
+    """Stored resume records holding an email address or phone-like number."""
+    return [name for name, text in sorted(tables.stored_texts().items()) if EMAIL.search(text) or PHONE.search(text)]
 
 
-class RebuildCase(unittest.TestCase):
-    """A temporary resume folder and data folder; build() is run for real."""
+class RebuildCase(HomeCase):
+    """A temporary resume folder and home; build() is run for real."""
 
     def setUp(self):
-        tmp = Path(tempfile.mkdtemp())
-        self.resumes, self.data_dir, self.text_dir = tmp / "resumes", tmp / "json", tmp / "output"
+        super().setUp()
+        tmp = self.home
+        self.resumes, self.text_dir = tmp / "resumes", tmp / "output"
         self.resumes.mkdir()
         saved = dict(pr.COMPANIES)
         pr.set_companies(REGISTRY)
         self.addCleanup(lambda: pr.set_companies(saved))
         self.tmp = tmp
-        for patch in (mock.patch.object(proc, "DATA_DIR", self.data_dir), mock.patch.object(proc, "TEXT_DIR", self.text_dir),
-                      mock.patch.object(rd, "DATA_DIR", self.data_dir), mock.patch.object(rd, "TEXT_DIR", self.text_dir),
-                      mock.patch.object(rd, "CURATED_FILE", tmp / "curated.json"),
-                      mock.patch.object(rd, "THEMES_FILE", tmp / "themes.json")):
+        for patch in (mock.patch.object(proc, "TEXT_DIR", self.text_dir), mock.patch.object(rd, "TEXT_DIR", self.text_dir)):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -71,7 +69,7 @@ class RebuildCase(unittest.TestCase):
 
     def bullets(self) -> dict[str, list[str]]:
         """{bullet text: sources} over all companies."""
-        companies = rd.load_companies(self.data_dir)
+        companies = rd.load_companies()
         return {b["text"]: b["sources"] for c in companies.values() for b in c["bullets"]}
 
 
@@ -87,16 +85,16 @@ class PruneTests(RebuildCase):
         self.assertIn("pruned (file gone): two.txt", out)
         shared = "Built a search service on PostgreSQL."
         self.assertEqual(self.bullets()[shared], ["one.txt"])
-        self.assertNotIn("two.txt", rd.load_ledger(self.data_dir))
+        self.assertNotIn("two.txt", rd.load_ledger())
 
     def test_company_with_no_source_left_loses_its_file(self):
         self.write("one.txt", as_txt())
         self.write("two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nInitech      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
         self.rebuild()
-        self.assertTrue((self.data_dir / "companies" / "initech.json").exists())
+        self.assertTrue("initech" in tables.load_companies())
         (self.resumes / "two.txt").unlink()
         self.rebuild()
-        self.assertFalse((self.data_dir / "companies" / "initech.json").exists())
+        self.assertFalse("initech" in tables.load_companies())
 
     def test_renamed_resume_appears_once_under_the_new_name(self):
         path = self.write("old.txt", as_txt())
@@ -104,7 +102,7 @@ class PruneTests(RebuildCase):
         path.rename(self.resumes / "new.txt")
         self.rebuild()
         self.assertEqual({tuple(v) for v in self.bullets().values()}, {("new.txt",)})
-        self.assertEqual(list(rd.load_ledger(self.data_dir)), ["new.txt"])
+        self.assertEqual(list(rd.load_ledger()), ["new.txt"])
 
     def test_edited_resume_loses_a_removed_bullet(self):
         path = self.write("me.txt", as_txt())
@@ -127,33 +125,32 @@ class PruneTests(RebuildCase):
     def test_empty_scan_refuses_and_leaves_data_alone(self):
         self.write("one.txt", as_txt())
         self.rebuild()
-        before = snapshot(self.data_dir)
+        before = tables.stored_texts()
         (self.resumes / "one.txt").unlink()
         with mock.patch.object(proc, "load_config", return_value=proc.Config(self.resumes, [self.resumes])):
             with self.assertRaises(common.ToolError):
                 proc.cmd_process(mock.Mock(survey=False, force=False))
-        self.assertEqual(snapshot(self.data_dir), before)
+        self.assertEqual(tables.stored_texts(), before)
 
 
 class OrphanTests(RebuildCase):
     def test_stale_ids_are_listed_and_the_file_is_untouched(self):
         self.write("one.txt", as_txt())
         self.rebuild()
-        live = next(iter(rd.load_companies(self.data_dir)["acme-corp"]["bullets"]))["id"]
+        live = next(iter(rd.load_companies()["acme-corp"]["bullets"]))["id"]
         themes = {"themes": {live: ["cost"], "gone-bullet": ["x"]}, "ignore": ["gone-ignored"], "summary_angles": {"sum-gone": ["a"]}}
-        path = self.tmp / "themes.json"
-        path.write_text(json.dumps(themes), encoding="utf-8")
-        before = path.read_bytes()
-        orphans = rd.orphan_curation(rd.load_companies(self.data_dir), rd.load_profile(self.data_dir), themes)
+        tables.save_curation("themes", themes)
+        before = tables.load_curation("themes")
+        orphans = rd.orphan_curation(rd.load_companies(), rd.load_profile(), themes)
         self.assertEqual(orphans, ["ignore gone-ignored", "summary angle sum-gone", "theme gone-bullet"])
         self.assertIn("WARNING: 3 entr", self.rebuild())
-        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(tables.load_curation("themes"), before)
 
     def test_no_orphans_when_every_id_matches(self):
         self.write("one.txt", as_txt())
         self.rebuild()
-        live = rd.load_companies(self.data_dir)["acme-corp"]["bullets"][0]["id"]
-        self.assertEqual(rd.orphan_curation(rd.load_companies(self.data_dir), rd.load_profile(self.data_dir),
+        live = rd.load_companies()["acme-corp"]["bullets"][0]["id"]
+        self.assertEqual(rd.orphan_curation(rd.load_companies(), rd.load_profile(),
                                             {"themes": {live: ["x"]}}), [])
 
 
@@ -215,18 +212,18 @@ class PrivacyTests(RebuildCase):
     def test_generated_data_has_no_contact_details(self):
         self.write("one.txt", as_txt().replace("Jane Example", "Jane Example\njane@example.com\n555.010.0100"))
         self.rebuild()
-        self.assertEqual(contact_hits(self.data_dir), [])
+        self.assertEqual(contact_hits(), [])
 
     def test_contact_check_catches_an_email(self):
-        (self.data_dir).mkdir(parents=True)
-        (self.data_dir / "profile.json").write_text('{"x": "jane@example.com"}', encoding="utf-8")
-        self.assertEqual(contact_hits(self.data_dir), ["profile.json"])
+        tables.save_profile({"summaries": [{"id": "s1", "text": "write to jane@example.com"}]})
+        self.assertEqual(contact_hits(), ["profile"])
 
     def test_real_resume_data_has_no_contact_details(self):
-        folder = ROOT / "resume-data" / "json"
-        if not folder.is_dir():
-            self.skipTest("resume-data/json/ does not exist (fresh clone): nothing to check")
-        self.assertEqual(contact_hits(folder), [], "email or phone-like number in generated resume data")
+        texts = real_resume_texts()
+        if not texts:
+            self.skipTest("no stored resume data in the real home (fresh install): nothing to check")
+        hits = [name for name, text in sorted(texts.items()) if EMAIL.search(text) or PHONE.search(text)]
+        self.assertEqual(hits, [], "email or phone-like number in stored resume data")
 
     def test_rebuild_leaves_the_resume_folder_untouched(self):
         self.write("one.txt", as_txt())

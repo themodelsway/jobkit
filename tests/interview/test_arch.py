@@ -1,16 +1,15 @@
-"""Tests for src/interview/arch.py in a temp folder (the real prep/ is never touched).
+"""Tests for src/jobkit/interview/arch.py in a temp folder (the real prep/ is never touched).
 Run: .venv/bin/python -m unittest discover -s tests -t ."""
 import contextlib
 import io
-import shutil
-import tempfile
+import json
 import unittest
 from datetime import date, timedelta
-from pathlib import Path
 from unittest import mock
 
 
-from jobkit import common
+from jobkit.interview import tables
+from tests.support import HomeCase, drop_catalog
 from jobkit.interview import arch
 
 COMPANIES = {"acme": {"id": "acme", "name": "Acme", "bullets": [
@@ -20,17 +19,10 @@ SKILLS = {"groups": {"Cloud": [{"name": "CloudFront", "aliases": []}]}}
 GOOD_SOURCE = "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html"
 
 
-class ArchTestCase(unittest.TestCase):
+class ArchTestCase(HomeCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: shutil.rmtree(self.tmp))
-        d = self.tmp / "prep" / "arch"
-        for obj, name, value in ((arch, "ROOT", self.tmp), (arch, "DIR", d), (arch, "CATALOG", d / "catalog.json"),
-                                 (arch, "PROGRESS", d / "progress.json"),
-                                 (common, "LOCK_FILE", self.tmp / "prep" / ".lock")):
-            patcher = mock.patch.object(obj, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        super().setUp()
+        self.tmp = self.home
         self.pinned = []
         patcher = mock.patch.object(arch.qr, "load", return_value=(COMPANIES, SKILLS))
         patcher.start()
@@ -49,7 +41,7 @@ class ArchTestCase(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def cards(self):
-        return {c["id"]: c for c in common.load_json(arch.CATALOG, None)["cards"]}
+        return {c["id"]: c for c in tables.load_catalog()["cards"]}
 
 
 class InitTests(ArchTestCase):
@@ -74,18 +66,18 @@ class InitTests(ArchTestCase):
 
     def test_init_is_idempotent_and_keeps_hand_added_cards_and_progress(self):
         self.cli("init")
-        cat = common.load_json(arch.CATALOG, None)
+        cat = tables.load_catalog()
         cat["cards"].append(arch.new_card("service", "my-card", "My Card", "Mine", 2))
-        common.save_json(arch.CATALOG, cat)
+        tables.save_catalog(cat)
         self.cli("set", "vpc", "confidence", "2")
         _, out, _ = self.cli("init")
         self.assertIn("(0 new)", out)
         self.assertIn("my-card", self.cards())
-        self.assertEqual(common.load_json(arch.PROGRESS, None)["cards"]["vpc"]["confidence"], 2)
+        self.assertEqual(tables.load_progress()["vpc"]["confidence"], 2)
 
     def test_resume_links_ignore_ignored_bullets(self):
         self.cli("init")
-        links = common.load_json(arch.PROGRESS, None)["cards"]
+        links = tables.load_progress()
         lam = next(c for c in self.cards().values() if c["name"] == "Lambda")
         self.assertEqual(links[lam["id"]]["links"], {"acme": ["acme-1"]})
 
@@ -102,10 +94,10 @@ class CommandTests(ArchTestCase):
         self.cli("init")
 
     def test_requires_init(self):
-        arch.CATALOG.unlink()
+        drop_catalog()
         code, _, err = self.cli("status")
         self.assertEqual(code, 1)
-        self.assertIn("run `arch.py init` first", err)
+        self.assertIn("run `arch init` first", err)
 
     def test_set_validates(self):
         self.assertEqual(self.cli("set", "vpc", "confidence", "5")[0], 1)
@@ -157,9 +149,108 @@ class CommandTests(ArchTestCase):
         self.assertEqual(self.cli("refresh", "vpc", "--status", "sunset", "--source", GOOD_SOURCE, "--date", future)[0], 0)
 
     def test_valid_source(self):
-        self.assertTrue(arch.valid_source(GOOD_SOURCE))
+        card = arch.new_card("service", "vpc", "VPC", "Networking", 2)
+        self.assertTrue(arch.valid_source(GOOD_SOURCE, card))
         for bad in ("http://docs.aws.amazon.com/x", "https://docs.aws.amazon.com", "https://evil.com/docs.aws.amazon.com/x", None):
-            self.assertFalse(arch.valid_source(bad), bad)
+            self.assertFalse(arch.valid_source(bad, card), bad)
+
+
+ACMEDATA = {"label": "Acme Data", "source_hosts": ["docs.example.com"],
+              "services": [{"area": "Compute", "name": "Turbo", "tier": 2},
+                           {"area": "Governance", "name": "Data Catalog", "tier": 2, "aliases": ["UC"]},
+                           {"area": "Governance", "name": "VPC", "tier": 3}],
+              "pairs": [{"topic": "Tables", "name": "Format A vs Format B", "members": ["Format A", "Format B"]}],
+              "scenarios": ["Design a lakehouse for streaming and BI"]}
+ACMEDATA_SOURCE = "https://docs.example.com/en/compute/turbo.html"
+
+
+class TrackTests(ArchTestCase):
+    def register(self, seed=ACMEDATA, name="acmedata"):
+        path = self.tmp / "seed.json"
+        path.write_text(json.dumps(seed), encoding="utf-8")
+        return self.cli("track", "add", name, "--seed", str(path))
+
+    def test_add_and_init_two_tracks_keeps_ids_apart(self):
+        self.assertEqual(self.register()[0], 0)
+        self.assertEqual(self.cli("init", "--track", "aws", "--track", "acmedata")[0], 0)
+        cards = self.cards()
+        self.assertEqual(cards["vpc"]["track"], "aws")
+        self.assertEqual(cards["acmedata-vpc"]["track"], "acmedata")      # same name, no collision
+        self.assertIn("acmedata-pair-format-a-vs-format-b", cards)
+        self.assertIn("acmedata-scn-design-a-lakehouse-for-streaming-and-bi", cards)
+
+    def test_init_without_track_extends_enabled_tracks_only(self):
+        self.register()
+        self.cli("init", "--track", "acmedata")
+        self.assertNotIn("vpc", self.cards())                                  # aws was not asked for
+        self.cli("init")
+        self.assertNotIn("vpc", self.cards())
+        self.cli("init", "--track", "aws")
+        self.cli("init")
+        self.assertIn("vpc", self.cards())
+        self.assertIn("acmedata-turbo", self.cards())
+
+    def test_refresh_accepts_only_the_cards_own_docs(self):
+        self.register()
+        self.cli("init", "--track", "aws", "--track", "acmedata")
+        self.assertEqual(self.cli("refresh", "acmedata-turbo", "--status", "active", "--source", ACMEDATA_SOURCE)[0], 0)
+        code, _, err = self.cli("refresh", "acmedata-turbo", "--status", "active", "--source", GOOD_SOURCE)
+        self.assertEqual(code, 1)
+        self.assertIn("docs.example.com", err)
+        self.assertEqual(self.cli("refresh", "vpc", "--status", "active", "--source", ACMEDATA_SOURCE)[0], 1)
+
+    def test_filter_by_track_and_status_labels_tracks(self):
+        self.register()
+        self.cli("init", "--track", "aws", "--track", "acmedata")
+        _, out, _ = self.cli("list", "--track", "acmedata")
+        self.assertIn("acmedata-turbo", out)
+        self.assertNotIn("lambda", out)
+        _, status, _ = self.cli("status")
+        self.assertIn("acmedata: Governance", status)
+        self.assertIn("aws: ", status)
+
+    def test_for_jd_matches_across_tracks(self):
+        self.register()
+        self.cli("init", "--track", "aws", "--track", "acmedata")
+        jd = self.tmp / "jd.txt"
+        jd.write_text("Lambda and Data Catalog experience", encoding="utf-8")
+        _, out, _ = self.cli("for-jd", str(jd))
+        self.assertIn("acmedata-data-catalog", out)
+        self.assertIn("lambda", out)
+
+    def test_tracks_lists_enabled_state(self):
+        self.register()
+        self.cli("init", "--track", "acmedata")
+        _, out, _ = self.cli("tracks")
+        self.assertRegex(out, r"aws\s+not enabled")
+        self.assertRegex(out, r"acmedata\s+enabled\s+\d+ cards")
+
+    def test_bad_seeds_are_rejected_with_a_reason(self):
+        cases = [({**ACMEDATA, "source_hosts": ["https://docs.example.com/x"]}, "acmedata", "bare host"),
+                 ({**ACMEDATA, "source_hosts": []}, "acmedata", "source_hosts"),
+                 ({**ACMEDATA, "services": []}, "acmedata", "services"),
+                 ({**ACMEDATA, "services": [{"area": "A", "name": "B", "tier": 1}]}, "acmedata", "tier"),
+                 (ACMEDATA, "aws", "not 'aws'"),
+                 (ACMEDATA, "Bad Name", "lower-case")]
+        for seed, name, message in cases:
+            with self.subTest(message=message):
+                code, _, err = self.register(seed, name)
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+        self.assertEqual(self.cli("tracks")[0], 0)
+        self.assertEqual(self.cli("init", "--track", "nope")[0], 1)
+
+    def test_old_catalog_without_track_field_still_works(self):
+        self.cli("init")
+        cat = tables.load_catalog()
+        for card in cat["cards"]:
+            card.pop("track", None)
+        tables.save_catalog(cat)
+        self.assertEqual(self.cli("refresh", "vpc", "--status", "active", "--source", GOOD_SOURCE)[0], 0)
+        self.assertEqual(self.cli("list", "--track", "aws")[0], 0)
+        cat.pop("tracks", None)
+        tables.save_catalog(cat)
+        self.assertRegex(self.cli("tracks")[1], r"aws\s+enabled")
 
 
 if __name__ == "__main__":

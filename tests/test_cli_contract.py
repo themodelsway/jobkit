@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 TOOLS = ["jobkit.user.profile", "jobkit.resumes.process_resumes", "jobkit.resumes.query_resume",
          "jobkit.resumes.build_resume", "jobkit.interview.arch", "jobkit.interview.lead",
-         "jobkit.interview.prep", "jobkit.interview.sessions", "jobkit.interview.readiness"]
+         "jobkit.interview.prep", "jobkit.interview.sessions", "jobkit.interview.readiness", "jobkit.admin"]
 
 
 class HelpTests(unittest.TestCase):
@@ -48,7 +48,7 @@ class SeedTests(unittest.TestCase):
 
     def test_no_urls_or_facts_in_seed(self):
         text = Path(seed.__file__).read_text(encoding="utf-8")
-        self.assertNotIn("http", text)                    # lifecycle facts come from `arch.py refresh --source`
+        self.assertNotIn("http", text)                    # lifecycle facts come from `arch refresh --source`
         self.assertFalse(hasattr(seed, "SEED_FACTS"))
 
 

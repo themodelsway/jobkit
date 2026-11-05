@@ -2,39 +2,25 @@
 Run: .venv/bin/python -m unittest discover -s tests -t ."""
 import contextlib
 import io
-import json
-import shutil
 import sys
-import tempfile
 import unittest
 from datetime import date, timedelta
-from pathlib import Path
 from unittest import mock
 
 
-from jobkit import common
-from jobkit.interview import arch, lead, prep, readiness, sessions
+from jobkit import store
+from jobkit.interview import tables
+from tests.support import HomeCase, drop_catalog
+from jobkit.interview import arch, lead, readiness, sessions
 
 COMPANIES = {"acme": {"id": "acme", "name": "Acme", "bullets": [], "roles": [{"start": "2021-01", "end": None, "titles": ["T"]}]}}
 SKILLS = {"groups": {"Cloud": [{"name": "VPC", "aliases": []}]}}
 
 
-class SessionCase(unittest.TestCase):
+class SessionCase(HomeCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: shutil.rmtree(self.tmp))
-        prep_dir, d = self.tmp / "prep", self.tmp / "prep" / "arch"
-        lead_dir = prep_dir / "leadership"
-        values = [(arch, "ROOT", self.tmp), (arch, "DIR", d), (arch, "CATALOG", d / "catalog.json"),
-                  (arch, "PROGRESS", d / "progress.json"), (common, "LOCK_FILE", prep_dir / ".lock"),
-                  (sessions, "SESS", prep_dir / "sessions"), (sessions, "INDEX", prep_dir / "sessions" / "index.json"),
-                  (lead, "QUESTIONS", lead_dir / "questions.json"), (lead, "PROGRESS", lead_dir / "progress.json"),
-                  (lead, "PROFILE", lead_dir / "profile.json"),
-                  (prep, "STORIES", prep_dir / "stories.json"), (prep, "ENGS", prep_dir / "engagements.json")]
-        for obj, name, value in values:
-            patcher = mock.patch.object(obj, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        super().setUp()
+        self.tmp = self.home
         for obj, name, value in ((arch.qr, "load", (COMPANIES, SKILLS)), (lead.qr, "load", (COMPANIES, SKILLS))):
             patcher = mock.patch.object(obj, name, return_value=value)
             patcher.start()
@@ -61,7 +47,7 @@ class SessionCase(unittest.TestCase):
         return out.split("Started session ")[1].split(" ")[0]
 
     def session(self, sid):
-        return json.loads((sessions.SESS / f"{sid}.json").read_text())
+        return tables.load_session(sid)
 
 
 class SessionTests(SessionCase):
@@ -89,8 +75,17 @@ class SessionTests(SessionCase):
         self.assertIn("Confidence recorded: 2", out)
         entry = self.session(sid)["log"][0]
         self.assertEqual((entry["answer"], entry["confidence_after"], entry["tutor"]), ("my full answer", 2, False))
-        self.assertEqual(common.load_json(arch.PROGRESS, None)["cards"][item]["confidence"], 2)
+        self.assertEqual(tables.load_progress()[item]["confidence"], 2)
         self.assertIn("1/3 items", self.cli(sessions.main, "list")[1])
+
+    def test_confidence_is_shared_between_sessions(self):
+        first = self.new_session()
+        item = self.session(first)["queue"][0]["id"]
+        self.cli(sessions.main, "log", first, item, "--question", "Q", "--answer", "one", "--confidence", "1")
+        second = self.cli(sessions.main, "new", "Second", "--count", "3")[1].split("Started session ")[1].split(" ")[0]
+        self.cli(sessions.main, "log", second, item, "--question", "Q", "--answer", "two", "--confidence", "2")
+        self.assertEqual(tables.load_progress()[item]["confidence"], 2)
+        self.assertEqual([e["confidence_after"] for e in self.session(first)["log"]], [1])   # the old session is unchanged
 
     def test_log_validation(self):
         sid = self.new_session()
@@ -109,12 +104,12 @@ class SessionTests(SessionCase):
         item = self.session(sid)["queue"][0]["id"]
         taught = ["log", sid, item, "--question", "Q", "--answer", "lesson", "--confidence", "2"]
         self.cli(sessions.main, *taught)
-        self.assertEqual(common.load_json(arch.PROGRESS, None)["cards"][item]["confidence"], 1)   # capped at 1
+        self.assertEqual(tables.load_progress()[item]["confidence"], 1)   # capped at 1
         quiz = ["log", sid, item, "--question", "Q2", "--answer", "right", "--grade", "correct", "--confidence", "2", "--quiz"]
         self.cli(sessions.main, *quiz)
-        self.assertEqual(common.load_json(arch.PROGRESS, None)["cards"][item]["confidence"], 2)
+        self.assertEqual(tables.load_progress()[item]["confidence"], 2)
         self.cli(sessions.main, *taught)                                                          # a lesson never lowers it
-        self.assertEqual(common.load_json(arch.PROGRESS, None)["cards"][item]["confidence"], 2)
+        self.assertEqual(tables.load_progress()[item]["confidence"], 2)
 
     def test_leadership_mode_queue_and_resume(self):
         sid = self.new_session("--mode", "leadership")
@@ -122,15 +117,16 @@ class SessionTests(SessionCase):
         out = self.cli(sessions.main, "resume", sid)[1]
         self.assertIn("Next item (leader):", out)
 
-    def test_unreadable_session_file_is_reported_not_fatal(self):
-        sid = self.new_session()
-        (sessions.SESS / "broken.json").write_text("{nope")
-        code, _, err = self.cli(sessions.main, "close", sid)
-        self.assertEqual(code, 0)
-        self.assertIn("broken.json is unreadable", err)
-
 
 class ReadinessTests(SessionCase):
+    def test_report_changes_nothing_in_the_database(self):
+        self.new_session()
+        files = [store.db_path(), store.db_path().with_name("jobkit.db-wal")]
+        before = [(f.stat().st_mtime_ns, f.stat().st_size) for f in files if f.exists()]
+        self.cli(readiness.main)
+        self.cli(readiness.main)
+        self.assertEqual([(f.stat().st_mtime_ns, f.stat().st_size) for f in files if f.exists()], before)
+
     def test_labels(self):
         today = date.today().isoformat()
         old = (date.today() - timedelta(days=90)).isoformat()
@@ -163,9 +159,9 @@ class ReadinessTests(SessionCase):
         self.assertIn("LEADERSHIP: not filtered by a JD", out)
 
     def test_requires_catalog(self):
-        arch.CATALOG.unlink()
+        drop_catalog()
         code, _, err = self.cli(readiness.main)
-        self.assertEqual((code, "run arch.py init" in err), (1, True))
+        self.assertEqual((code, "run arch init" in err), (1, True))
 
 
 if __name__ == "__main__":

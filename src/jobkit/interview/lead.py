@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Leadership interview questionnaire, kept in prep/leadership/. Standard library only.
 
-  python src/interview/lead.py init                      # create/extend questions + progress (never overwrites answers)
-  python src/interview/lead.py status                    # per category: confidence counts; profile gaps
-  python src/interview/lead.py next [--category C] [--order default|random]
-  python src/interview/lead.py show ID                   # question, profile facts, candidate stories for the top 3 companies, saved answers
-  python src/interview/lead.py list [--category C]
-  python src/interview/lead.py set ID principle|notes|confidence VALUE      # principle = "how I handle this" in your own words
-  python src/interview/lead.py example ID COMPANY FIELD VALUE               # FIELD: situation task action result metric
-  python src/interview/lead.py profile show
-  python src/interview/lead.py profile set COMPANY FIELD VALUE              # factual scope: team sizes, reports, budget, cadence...
+  lead init                      # create/extend questions + progress (never overwrites answers)
+  lead status                    # per category: confidence counts; profile gaps
+  lead next [--category C] [--order default|random]
+  lead show ID                   # question, profile facts, candidate stories for the top 3 companies, saved answers
+  lead list [--category C]
+  lead set ID principle|notes|confidence VALUE      # principle = "how I handle this" in your own words
+  lead example ID COMPANY FIELD VALUE               # FIELD: situation task action result metric
+  lead profile show
+  lead profile set COMPANY FIELD VALUE              # factual scope: team sizes, reports, budget, cadence...
 
 Every question can hold a principle plus one STAR example per company (the most recent three: see TOP_N).
 Candidate stories come from prep.py (resume-based stories whose themes match); a finished story there can be reused.
@@ -21,21 +21,17 @@ import random
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
-from pathlib import Path
-from typing import Any, Final, NamedTuple, TypedDict
+from typing import Any, Final, NamedTuple, TypedDict, cast
 
 from jobkit import common
 from jobkit.common import ToolError
 from jobkit.interview import arch
-from jobkit.interview import prep
+from jobkit.interview import prep, tables
 from jobkit.interview.story_model import Story
 from jobkit.resumes import query_resume as qr
+from jobkit.resumes import tables as rd_tables
 from jobkit.resumes.resume_data import Company
 
-DIR: Path = arch.ROOT / "prep" / "leadership"
-QUESTIONS: Path = DIR / "questions.json"
-PROGRESS: Path = DIR / "progress.json"
-PROFILE: Path = DIR / "profile.json"
 TOP_N: Final[int] = 3
 STAR: Final[tuple[str, ...]] = ("situation", "task", "action", "result", "metric")
 PROFILE_FIELDS: Final[tuple[str, ...]] = ("title", "direct_reports", "indirect_team", "team_composition", "budget",
@@ -129,14 +125,14 @@ def top_company_ids() -> list[str]:
 
 def cards() -> list[Question]:
     """All questions; fails when `init` has not run."""
-    if not QUESTIONS.exists():
-        raise ToolError("No prep/leadership/questions.json yet: run `lead.py init` first.")
-    return arch.load(QUESTIONS, {})["questions"]
+    if not tables.has_questions():
+        raise ToolError("No leadership questions yet: run `lead init` first.")
+    return cast(list[Question], tables.load_questions())
 
 
 def prog() -> dict[str, Any]:
-    """prep/leadership/progress.json: {"questions": {id: QuestionProgress}}."""
-    return arch.load(PROGRESS, {"questions": {}})
+    """{"questions": {id: QuestionProgress}} for every question the user has touched."""
+    return {"questions": tables.load_lead_progress()}
 
 
 def find(qid: str) -> Question:
@@ -150,7 +146,7 @@ def find(qid: str) -> Question:
 def user_themes() -> set[str] | None:
     """Themes found in the user's resume data, or None when there is no resume data yet."""
     try:
-        return set(common.load_json(qr.DATA / "index.json", {})["themes"])
+        return set((rd_tables.load_index() or {})["themes"])
     except (OSError, KeyError, ValueError):
         return None
 
@@ -167,7 +163,7 @@ def require_top_company(company: str) -> None:
 def cmd_init(args: argparse.Namespace) -> None:
     """Create or extend the questions, progress and company profiles."""
     mine = user_themes()
-    old = {q["id"]: q for q in arch.load(QUESTIONS, {"questions": []})["questions"]}
+    old: dict[str, Question] = {q["id"]: cast(Question, q) for q in tables.load_questions()}
     out: list[Question] = []
     added = 0
     for seed in SEED:
@@ -176,22 +172,22 @@ def cmd_init(args: argparse.Namespace) -> None:
         out.append({"id": seed.id, "category": seed.category, "question": seed.question,
                     "themes": [t for t in seed.themes if mine is None or t in mine]})
     out += list(old.values())
-    arch.save(QUESTIONS, {"questions": out})
+    tables.save_questions(out)
     progress = prog()
     for question in out:
         progress["questions"].setdefault(question["id"], blank())
-    arch.save(PROGRESS, progress)
-    profile = arch.load(PROFILE, {"companies": {}})
+    tables.save_lead_progress(progress["questions"])
+    profile = {"companies": tables.load_company_facts()}
     ids = top_company_ids()
     for cid in ids:
         profile["companies"].setdefault(cid, blank_profile())
-    arch.save(PROFILE, profile)
-    print(f"{len(out)} questions ({added} new) in {QUESTIONS.relative_to(arch.ROOT)}; profile for {', '.join(ids)}")
+    tables.save_company_facts(profile["companies"])
+    print(f"{len(out)} questions ({added} new); profile for {', '.join(ids)}")
 
 
 def show_profile(only: Sequence[str] | None = None) -> None:
     """Print the factual scope (team sizes, budget ...) saved per company."""
-    for cid, facts in arch.load(PROFILE, {"companies": {}})["companies"].items():
+    for cid, facts in tables.load_company_facts().items():
         if only and cid not in only:
             continue
         filled = {k: v for k, v in facts.items() if v}
@@ -295,7 +291,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         by_category[question["category"]][progress.get(question["id"], blank())["confidence"]] += 1
     for category, n in by_category.items():
         print(f"  {category:<30} {n[2]} solid, {n[1]} some gaps, {n[0]} not drilled")
-    profile = arch.load(PROFILE, {"companies": {}})["companies"]
+    profile = tables.load_company_facts()
     gaps = [cid for cid, facts in profile.items() if not any(facts.values())]
     print("\nProfile facts missing for: " + (", ".join(gaps) or "none"))
 
@@ -311,7 +307,7 @@ def cmd_set(args: argparse.Namespace) -> None:
         entry["confidence"], entry["last_drilled"] = int(args.value), date.today().isoformat()
     else:
         entry[args.field] = args.value
-    arch.save(PROGRESS, progress)
+    tables.save_lead_progress(progress["questions"])
     print(f"Updated {args.id}.{args.field}")
 
 
@@ -324,7 +320,7 @@ def cmd_example(args: argparse.Namespace) -> None:
     progress = prog()
     entry = progress["questions"].setdefault(args.id, blank())
     entry["examples"].setdefault(args.company, {})[args.field] = args.value
-    arch.save(PROGRESS, progress)
+    tables.save_lead_progress(progress["questions"])
     print(f"Updated {args.id} example for {args.company}.{args.field}")
 
 
@@ -336,9 +332,9 @@ def cmd_profile(args: argparse.Namespace) -> None:
     if args.company is None or args.field not in PROFILE_FIELDS:
         raise ToolError("usage: profile set COMPANY FIELD VALUE; FIELD in " + ", ".join(PROFILE_FIELDS))
     require_top_company(args.company)
-    profile = arch.load(PROFILE, {"companies": {}})
-    profile["companies"].setdefault(args.company, blank_profile())[args.field] = args.value
-    arch.save(PROFILE, profile)
+    facts = tables.load_company_facts()
+    facts.setdefault(args.company, blank_profile())[args.field] = args.value
+    tables.save_company_facts(facts)
     print(f"Updated profile {args.company}.{args.field}")
 
 

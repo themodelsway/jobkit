@@ -1,7 +1,7 @@
 # interview/sessions Specification
 
 ## Purpose
-Keep resumable practice and tutor sessions in `prep/sessions/`, with the user's full answers. Implemented in `sessions`.
+Keep resumable practice and tutor sessions stored in the database, with the user's full answers. Implemented in `sessions`.
 
 ## Requirements
 
@@ -11,6 +11,10 @@ A session SHALL hold a queue of items (architecture cards, stories or leadership
 #### Scenario: Re-drill a topic
 - **WHEN** a topic is drilled in a later session
 - **THEN** the new session logs it and the old session is not edited
+
+#### Scenario: Log entry for an unknown item
+- **WHEN** an answer is logged for an item that does not exist
+- **THEN** the command fails and the log is unchanged
 
 ### Requirement: Resume and close
 The system SHALL show what was covered, the last answers and the next item to ask on `resume ID`, and SHALL allow `close` and `reopen`.
@@ -34,7 +38,7 @@ In tutor sessions a logged confidence SHALL be capped at 1, and a passed quiz (`
 - **THEN** it is stored as 1
 
 ### Requirement: Confidence is shared
-Confidence per architecture card SHALL be shared across sessions through `prep/arch/progress.json`.
+Confidence per architecture card SHALL be stored once, outside any session, and SHALL be shared across sessions.
 
 #### Scenario: Two sessions
 - **WHEN** a card is graded in session B after session A

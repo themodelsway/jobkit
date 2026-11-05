@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Interview-prep sessions, kept in prep/sessions/. Standard library only.
 
-  python src/interview/sessions.py new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
-                                   [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--count 10]
-  python src/interview/sessions.py list
-  python src/interview/sessions.py resume ID         # what was covered, last answers, and the next item to ask
-  python src/interview/sessions.py log ID ITEM --question Q --answer A|- [--grade G] [--confidence 0|1|2] [--quiz]
+  sessions new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
+                                   [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--count 10]
+  sessions list
+  sessions resume ID         # what was covered, last answers, and the next item to ask
+  sessions log ID ITEM --question Q --answer A|- [--grade G] [--confidence 0|1|2] [--quiz]
                                                  # --answer - reads the full answer from stdin
-  python src/interview/sessions.py close ID
-  python src/interview/sessions.py reopen ID          # continue a closed session
+  sessions close ID
+  sessions reopen ID          # continue a closed session
 
 A session is one file with a queue of items (architecture cards or STAR stories) and an append-only log that
 keeps your FULL answers. Re-drilling a topic in a later session adds a log entry there and never edits an old
@@ -17,24 +17,20 @@ session. Confidence per card is shared across sessions (prep/arch/progress.json)
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import re
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Sequence
 from datetime import date
-from pathlib import Path
-from typing import Any, Final, NotRequired, TypedDict
+from typing import Any, Final, NotRequired, TypedDict, cast
 
 from jobkit import common
 from jobkit.common import ToolError
 from jobkit.interview import arch
 from jobkit.interview import lead
-from jobkit.interview import prep
+from jobkit.interview import prep, tables
 from jobkit.resumes import query_resume as qr
 
-SESS: Path = arch.ROOT / "prep" / "sessions"
-INDEX: Path = SESS / "index.json"
 ID_RE: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 MODE_KINDS: Final[dict[str, str]] = {"architecture": "architecture", "stories": "stories", "leadership": "leadership"}
 SLUG_CHARS: Final[int] = 40
@@ -80,61 +76,27 @@ class Session(TypedDict):
 
 # ---------------------------------------------------------------- storage
 
-def session_path(sid: str) -> Path:
-    """File holding the session."""
-    return SESS / f"{sid}.json"
-
-
-def iter_sessions(on_error: Callable[[Path], None]) -> Iterator[tuple[Path, Session]]:
-    """(file, session) for every session on disk (not the index); `on_error` is called for invalid JSON."""
-    for file in sorted(SESS.glob("*.json")):
-        if file.name == "index.json":
-            continue
-        try:
-            yield file, json.loads(file.read_text())
-        except json.JSONDecodeError:
-            on_error(file)
-
-
 def get_session(sid: str) -> Session:
     """The session with this id."""
-    if not ID_RE.match(sid) or not session_path(sid).exists():
-        raise ToolError(f"No session {sid}. Run `sessions.py list`.")
-    return arch.load(session_path(sid), None)
-
-
-def summary(session: Session) -> dict[str, Any]:
-    """One index row for a session."""
-    return {"id": session["id"], "title": session["title"], "mode": session["mode"], "status": session["status"],
-            "created": session["created"], "updated": session["updated"],
-            "logged": len({e["item"] for e in session["log"]}), "total": len(session["queue"])}
+    session = tables.load_session(sid) if ID_RE.match(sid) else None
+    if session is None:
+        raise ToolError(f"No session {sid}. Run `sessions list`.")
+    return cast(Session, session)
 
 
 def put_session(session: Session) -> None:
-    """Save the session, then rebuild the index from the session files so it cannot drift."""
+    """Save the session (its log can only grow)."""
     session["updated"] = now()
-    arch.save(session_path(session["id"]), session)
-
-    def warn(file: Path) -> None:
-        print(f"Warning: {file.name} is unreadable; see {file.name}.bak", file=sys.stderr)
-
-    rows = []
-    for file, stored in iter_sessions(warn):
-        try:
-            rows.append(summary(stored))
-        except KeyError:
-            warn(file)
-    rows.sort(key=lambda row: row["updated"], reverse=True)
-    arch.save(INDEX, {"sessions": rows})
+    tables.save_session(session)
 
 
 def known_kind(item: str) -> str | None:
     """card / leader / story for an id that exists in the data, else None (tolerates missing data files)."""
-    if any(c["id"] == item for c in arch.load(arch.CATALOG, {"cards": []})["cards"]):
+    if any(c["id"] == item for c in (tables.load_catalog() or {"cards": []})["cards"]):
         return "card"
-    if lead.QUESTIONS.exists() and any(q["id"] == item for q in lead.cards()):
+    if tables.has_questions() and any(q["id"] == item for q in lead.cards()):
         return "leader"
-    if prep.STORIES.exists() and any(s["id"] == item for s in prep.stories()):
+    if tables.has_stories() and any(s["id"] == item for s in prep.stories()):
         return "story"
     return None
 
@@ -186,7 +148,7 @@ def unique_session_id(title: str) -> str:
     """Date plus slug of the title, with -2, -3 ... when the id is taken."""
     base = f"{date.today().isoformat()}-{arch.slug(title)[:SLUG_CHARS]}"
     sid, n = base, 2
-    while session_path(sid).exists():
+    while tables.session_exists(sid):
         sid, n = f"{base}-{n}", n + 1
     return sid
 
@@ -233,7 +195,7 @@ def cmd_new(args: argparse.Namespace) -> None:
 
 def cmd_list(args: argparse.Namespace) -> None:
     """List sessions, newest first."""
-    rows = arch.load(INDEX, {"sessions": []})["sessions"]
+    rows = tables.session_rows()
     if not rows:
         print("No sessions yet.")
         return
@@ -262,14 +224,14 @@ def resolve_item(session: Session, item: str) -> QueueItem | None:
     """The queue entry for `item`, or None if it is not queued; fails for an id that exists nowhere."""
     queued = next((x for x in session["queue"] if x["id"] == item), None)
     if queued is None and not known_kind(item):
-        raise ToolError(f"Unknown item {item}. Use an id from arch.py list, lead.py list or prep.py status.")
+        raise ToolError(f"Unknown item {item}. Use an id from arch list, lead list or prep status.")
     return queued
 
 
 def check_log_flags(session: Session, args: argparse.Namespace, kind: str) -> None:
     """Reject confidence on stories and --quiz outside tutor sessions."""
     if args.confidence is not None and kind == "story":
-        raise ToolError("Stories have no confidence: omit --confidence (use prep.py set for story status).")
+        raise ToolError("Stories have no confidence: omit --confidence (use prep set for story status).")
     if args.quiz and (session["mode"] != "tutor" or not args.grade or args.confidence != 2):
         raise ToolError("--quiz is for tutor sessions only, and needs --grade (what the answer got right) "
                         "and --confidence 2.")
@@ -277,24 +239,26 @@ def check_log_flags(session: Session, args: argparse.Namespace, kind: str) -> No
 
 def record_confidence(kind: str, item: str, confidence: int, tutor: bool) -> None:
     """Save the confidence for a card or question; a lesson never lowers what a real drill earned."""
-    store: dict[str, Any]
-    blank: Callable[[], Any]
     if kind == "card":
-        store, key, blank, target = dict(arch.progress()), "cards", arch.blank_progress, arch.PROGRESS
+        cards: dict[str, Any] = dict(arch.progress()["cards"])
+        entry: dict[str, Any] = cards.setdefault(item, arch.blank_progress())
     else:
-        store, key, blank, target = lead.prog(), "questions", lead.blank, lead.PROGRESS
-    entry = store[key].setdefault(item, blank())
+        cards = lead.prog()["questions"]
+        entry = cards.setdefault(item, lead.blank())
     if not tutor or confidence > entry["confidence"]:
         entry["confidence"] = confidence
     entry["last_drilled"] = date.today().isoformat()
-    arch.save(target, store)
+    if kind == "card":
+        tables.save_progress(cards)
+    else:
+        tables.save_lead_progress(cards)
 
 
 def cmd_log(args: argparse.Namespace) -> None:
     """Append the user's full answer to the session and record confidence."""
     session = get_session(args.id)
     if session["status"] != "open":
-        raise ToolError(f"Session {session['id']} is closed. Run `sessions.py reopen {session['id']}` to continue it.")
+        raise ToolError(f"Session {session['id']} is closed. Run `sessions reopen {session['id']}` to continue it.")
     answer = sys.stdin.read().strip() if args.answer == "-" else args.answer.strip()
     if not answer:
         raise ToolError("Empty answer: nothing logged. Pass the user's full answer.")
@@ -346,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("title")
     new.add_argument("--mode", choices=["architecture", "stories", "jd", "leadership", "tutor"], default="architecture")
     new.add_argument("--jd")
+    new.add_argument("--track")
     new.add_argument("--area")
     new.add_argument("--tier", type=int)
     new.add_argument("--kind", choices=list(arch.KINDS))

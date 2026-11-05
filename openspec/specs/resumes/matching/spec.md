@@ -27,7 +27,7 @@ The system SHALL support filtering bullets by skill, company, text and theme, an
 - **THEN** only bullets tagged with that skill are listed
 
 ### Requirement: Build a tailored resume
-The system SHALL write a markdown resume to `output/resumes/<jd name>.md` (or `-o`) with the best summary, top bullets per company (default 4, at most 2 for old companies), matching skills, certifications and education, with the header taken from `profile/header.md`.
+The system SHALL write a markdown resume to `output/resumes/<jd name>.md` under the home folder (or `-o`) with the best summary, top bullets per company (default 4, at most 2 for old companies), matching skills, certifications and education, with the header taken from `profile/header.md` in the home folder.
 
 #### Scenario: Title override
 - **WHEN** `--title COMPANY=TITLE` is given

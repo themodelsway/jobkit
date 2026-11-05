@@ -41,8 +41,8 @@ With `--jd` the report SHALL cover only architecture cards and stories that the 
 - **THEN** unrelated cards are omitted
 
 ### Requirement: Read-only
-The report SHALL NOT write any file.
+The report SHALL NOT change any stored data.
 
 #### Scenario: Run twice
 - **WHEN** the report is run
-- **THEN** no file under `prep/` changes
+- **THEN** the database is unchanged, including its modification time

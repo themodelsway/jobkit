@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Query the resume data in resume-data/json/ (read-only, standard library only).
 
-  python query_resume.py for-jd jd.txt         # rank bullets per company for a job description ("-" = stdin; alias: match)
-  python query_resume.py search --skill Python    # filter bullets (also --company, --text, --theme)
-  python query_resume.py review                # bullets flagged needs_review, one-source skills, untagged themes
-  python query_resume.py stats                 # counts per company and skill group
+  query-resume for-jd jd.txt         # rank bullets per company for a job description ("-" = stdin; alias: match)
+  query-resume search --skill Python    # filter bullets (also --company, --text, --theme)
+  query-resume review                # bullets flagged needs_review, one-source skills, untagged themes
+  query-resume stats                 # counts per company and skill group
 """
 from __future__ import annotations
 
@@ -13,15 +13,14 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Final, NamedTuple
+from typing import Any, Final, NamedTuple, cast
 
 from jobkit import common
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import resume_data as rd
+from jobkit.resumes import tables
 from jobkit.resumes.resume_data import Bullet, Company, ResumeProfile, Skills, Summary
 
-DATA: Path = rd.DATA_DIR
 STOP: Final[frozenset[str]] = frozenset("""a about above after all also an and any are as at be been being but by can could do
 does for from had has have having how if in into is it its more most must of on or other our out over per should so such
 than that the their them then there these they this those through to under up us use using was we were what when where
@@ -105,15 +104,15 @@ class JdContext:
 
 def load() -> tuple[dict[str, Company], Skills]:
     """(companies by id, skills) from resume-data/json/. Raises OSError when there is no resume data."""
-    skills: Skills | None = common.load_json(DATA / "skills.json", None)
+    skills = cast("Skills | None", tables.load_skills())
     if skills is None:
         raise FileNotFoundError(rd.MISSING_DATA)
-    return rd.load_companies(DATA), skills
+    return rd.load_companies(), skills
 
 
 def load_or_fail() -> tuple[dict[str, Company], Skills]:
     """Like `load`, but a missing data folder becomes a ToolError with the instruction to build it."""
-    if not (DATA / "skills.json").exists():
+    if not tables.has_resume_data():
         raise common.ToolError(rd.MISSING_DATA)
     return load()
 
@@ -148,9 +147,9 @@ def jd_skills(text: str, terms: Mapping[str, str]) -> Counter[str]:
 
 def recency_scores(companies: Mapping[str, Company]) -> dict[str, float]:
     """{bullet id: 0..1}: how recently the newest resume containing the bullet was modified (ledger mtime)."""
-    ledger = rd.load_ledger(DATA)
+    ledger = rd.load_ledger()
     mtimes = {k: v["mtime"] for k, v in ledger.items() if v["kind"] == "resume"}
-    low, high = min(mtimes.values()), max(mtimes.values())
+    low, high = (min(mtimes.values()), max(mtimes.values())) if mtimes else (0.0, 0.0)
     out: dict[str, float] = {}
     for company in companies.values():
         for bullet in company["bullets"]:
@@ -230,7 +229,7 @@ def analyze(text: str, extra_themes: Iterable[str] = (), include_review: bool = 
     need = jd_skills(text, vocabulary(skills))
     low = text.lower()
     angles = jd_angles(low)
-    profile: ResumeProfile = rd.load_profile(DATA)
+    profile: ResumeProfile = rd.load_profile()
     ctx = JdContext(need, words(text), infer_themes(low, extra_themes), recency_scores(companies), recency_weight)
     result = Analysis(need, ctx.themes, angles, rank_summaries(profile["summaries"], angles), [], skills=skills,
                       profile=profile)
@@ -341,7 +340,7 @@ def cmd_review(args: argparse.Namespace) -> None:
             print(f"  {group}: " + ", ".join(one))
     total = sum(len(c["bullets"]) for c in companies.values())
     live = [b for c in companies.values() for b in c["bullets"] if not b.get("ignored")]
-    orphans = rd.orphan_curation(companies, rd.load_profile(DATA), common.load_json(rd.THEMES_FILE, {}))
+    orphans = rd.orphan_curation(companies, rd.load_profile(), rd.load_themes_file())
     print("\nCuration entries (themes.json) that match no bullet or summary:" + ("" if orphans else " none"))
     for orphan in orphans:
         print(f"  {orphan}")
@@ -352,7 +351,7 @@ def cmd_review(args: argparse.Namespace) -> None:
 def cmd_stats(args: argparse.Namespace) -> None:
     """Counts per company and skill group."""
     companies, skills = load_or_fail()
-    ledger = rd.load_ledger(DATA)
+    ledger = rd.load_ledger()
     resumes = sum(1 for v in ledger.values() if v["kind"] == "resume")
     print(f"Resumes processed: {resumes} (+{len(ledger) - resumes} non-resume files skipped)")
     for company in newest_first(companies):

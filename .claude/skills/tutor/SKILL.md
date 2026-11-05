@@ -1,19 +1,19 @@
 ---
 name: tutor
-description: Tutor and readiness coach for interview prep. Use when the user wants to learn, be taught or have something explained (AWS services and decision pairs like ALB vs NLB, leadership answers like roadmapping, mentoring, conflict, prioritization, or how to build a STAR story), or asks how prepared they are, what to work on next, or for a readiness report. Teaches first, then checks understanding with a short quiz. For being quizzed or mock-interviewed use interview-prep instead.
+description: Tutor and readiness coach for interview prep. Use when the user wants to learn, be taught or have something explained (services and decision pairs like ALB vs NLB or Format A vs Format B, leadership answers like roadmapping, mentoring, conflict, prioritization, or how to build a STAR story), or asks how prepared they are, what to work on next, or for a readiness report. Teaches first, then checks understanding with a short quiz. For being quizzed or mock-interviewed use interview-prep instead.
 ---
 
 # Tutor and readiness
 
 ## First run (profile)
-Before anything else run `.venv/bin/profile status`. If there is no profile, or no resume data (`resume-data/json/` missing), set up first, asking one question at a time:
-1. Ask where the resume files are (pdf, docx, md or txt; any folder; files in its subfolders are found too, no particular layout needed; ask whether to limit the scan to some subfolders only if the folder also holds unrelated files). Optionally ask for the user's name (used only in the git-ignored `profile/`).
+Before anything else run `.venv/bin/jobkit status`; if it says there is no database, run `.venv/bin/jobkit init` once. Then run `.venv/bin/profile status`. If there is no profile, or no resume data (`process-resumes` has not run), set up first, asking one question at a time:
+1. Ask where the resume files are (pdf, docx, md or txt; any folder; files in its subfolders are found too, no particular layout needed; ask whether to limit the scan to some subfolders only if the folder also holds unrelated files). Optionally ask for the user's name (stored only in your local database).
 2. Run `profile init --resume-root <folder> [--resume-dir <subfolder> ...] [--name <name>]`.
-3. Run `process-resumes --survey`, then `process-resumes`. The first scan finds the employers in the resumes and saves them in `profile/companies.json`; tell the user which employers were found and merge or rename entries there if one employer shows up twice.
-4. Run `arch init`, `lead init` and `prep init`. Their seeds come from the scan: tier-1 AWS services are the ones the resumes mention (the user may pin their own list with `profile tier1 ...`), leadership themes are the ones found in the resumes, and stories come from the resume bullets.
-Never put the user's name, employers or folders in committed files; they live only in the git-ignored `profile/`, `resume-data/`, `prep/` and `output/`.
+3. Run `process-resumes --survey`, then `process-resumes`. The first scan finds the employers in the resumes and stores them; tell the user which employers were found (`profile companies`) and, if one employer shows up twice, fix it with `profile companies merge FROM INTO` or `rename ID NAME` (then `process-resumes --force`).
+4. Ask what the user is preparing for: one or several technologies (for example AWS, Acme Data, GCP) and the role. Each is a drill *track*. Run `lead init` and `prep init` (leadership themes and stories come from the resumes whatever the target), then set up every track the user named (see "Tracks" in `.claude/skills/interview-prep/architecture.md`): `arch init --track aws` for the bundled AWS example, and for any other technology build a seed, show it to the user, register it with `arch track add NAME --seed -`, then run `arch init --track NAME`. Tier-1 services are the ones the resumes mention (the user may pin their own list with `profile tier1 ...`). Later the user can add another track the same way; `arch tracks` shows what exists.
+Never put the user's name, employers or folders in committed files; they live only in the local database under `~/.jobkit`, outside the repository. To show the user their data, run `jobkit export` (never open the database directly).
 
-Three topics, all backed by the same git-ignored data under `prep/`. Never open `prep/**/*.json` directly; use the commands in `.venv/bin/` with `arch`, `lead`, `prep`, `sessions`, `readiness`. Interview drills (ask first, no hints, grade) belong to `interview-prep`; this skill explains first.
+Three topics, all backed by the same local database. Never open the database directly; use the commands in `.venv/bin/` with `arch`, `lead`, `prep`, `sessions`, `readiness`. Interview drills (ask first, no hints, grade) belong to `interview-prep`; this skill explains first.
 
 ## Sessions (always first)
 1. `sessions list`; ask whether to start a new tutor session or resume one. Never guess.
@@ -29,7 +29,7 @@ Run `readiness` (add `--jd jd.txt` for a specific job, `--days N` for the aging 
 - Use `--jd` to focus on a role; there is no way to mark items as not relevant, so just skip them when the user says so.
 
 ## Facts: never from memory
-For AWS cards: `arch show ID` first. If the card says NEVER verified or is older than about 6 months, check AWS docs (docs.aws.amazon.com, aws.amazon.com) before teaching limits, features, pricing or lifecycle, then record with `arch refresh ID --status active|maintenance|sunset --source URL [--note T] [--change "DATE|SUMMARY"]` (source = a specific aws.amazon.com or docs.aws.amazon.com page; dates YYYY-MM-DD, not in the future). The card stores only lifecycle and recent changes; limits, prices and feature details are looked up every time. A card marked "seeded lead, NOT verified" counts as unverified. If you cannot check, label the point "unverified". Lifecycle: maintenance = closed to new customers, no new features; sunset = has an end date.
+For architecture cards: `arch show ID` first. If the card says NEVER verified or is older than about 6 months, check the vendor's documentation (the hosts `arch tracks` lists for the card's track) before teaching limits, features, pricing or lifecycle, then record with `arch refresh ID --status active|maintenance|sunset --source URL [--note T] [--change "DATE|SUMMARY"]` (source = a specific page on one of the track's documentation hosts; dates YYYY-MM-DD, not in the future). The card stores only lifecycle and recent changes; limits, prices and feature details are looked up every time. A card marked "seeded lead, NOT verified" counts as unverified. If you cannot check, label the point "unverified". Lifecycle: maintenance = closed to new customers, no new features; sunset = has an end date.
 
 ## Lesson: architecture (one card at a time)
 1. `arch show ID` (lists resume bullets that mention the service). Ask in one line what the user already knows; skip what they know.

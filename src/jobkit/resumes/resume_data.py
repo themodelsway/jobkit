@@ -7,15 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Final, NotRequired, TypedDict
+from typing import Any, Final, NotRequired, TypedDict, cast
 
 from jobkit import common
+from jobkit.resumes import tables
 
-DATA_DIR: Final[Path] = common.REPO_ROOT / "resume-data" / "json"
-CURATED_FILE: Final[Path] = common.REPO_ROOT / "resume-data" / "curated.json"
-THEMES_FILE: Final[Path] = common.REPO_ROOT / "resume-data" / "themes.json"
-TEXT_DIR: Final[Path] = common.REPO_ROOT / "output"
-MISSING_DATA: Final[str] = "No resume data yet: run `src/resumes/process_resumes.py` first."
+TEXT_DIR: Final[Path] = common.output_dir()
+MISSING_DATA: Final[str] = "No resume data yet: run `process-resumes` first."
 
 
 class Bullet(TypedDict):
@@ -103,30 +101,34 @@ def empty_profile() -> ResumeProfile:
     return {"summaries": [], "profile_points": [], "education": [], "certifications": [], "projects": []}
 
 
-def load_companies(data_dir: Path | None = None) -> dict[str, Company]:
-    """{company id: company} from companies/*.json."""
-    folder = (data_dir or DATA_DIR) / "companies"
-    return {p.stem: common.load_json(p, None) for p in sorted(folder.glob("*.json"))}
+def load_companies() -> dict[str, Company]:
+    """{company id: company} with roles and bullets."""
+    return cast(dict[str, Company], tables.load_companies())
 
 
-def load_skills(data_dir: Path | None = None) -> Skills:
+def load_skills() -> Skills:
     """The skills vocabulary."""
-    return common.load_json((data_dir or DATA_DIR) / "skills.json", {"groups": {}})
+    return cast(Skills, tables.load_skills() or {"groups": {}})
 
 
-def load_profile(data_dir: Path | None = None) -> ResumeProfile:
+def load_profile() -> ResumeProfile:
     """Summaries, headlines, certifications and education."""
-    return common.load_json((data_dir or DATA_DIR) / "profile.json", empty_profile())
+    return cast(ResumeProfile, tables.load_profile() or empty_profile())
 
 
-def load_ledger(data_dir: Path | None = None) -> dict[str, dict[str, Any]]:
+def load_ledger() -> dict[str, dict[str, Any]]:
     """Which resume files were processed, with their size/mtime/hash."""
-    return common.load_json((data_dir or DATA_DIR) / "ledger.json", {})
+    return tables.load_ledger()
 
 
 def load_curated() -> dict[str, Any]:
-    """resume-data/curated.json (hand curation that survives rebuilds), or {}."""
-    return common.load_json(CURATED_FILE, {})
+    """The user's curation (certifications, skill rules, known-wrong figures ...) that survives rebuilds, or {}."""
+    return tables.load_curation("curated") or {}
+
+
+def load_themes_file() -> dict[str, Any]:
+    """The user's bullet themes, ignored fragments and summary angles, or empty ones."""
+    return tables.load_curation("themes") or {"themes": {}, "ignore": [], "summary_angles": {}}
 
 
 def orphan_curation(companies: Mapping[str, Company], profile: ResumeProfile, themes: Mapping[str, Any]) -> list[str]:

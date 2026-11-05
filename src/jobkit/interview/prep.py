@@ -2,42 +2,42 @@
 """Interview-prep stories and engagements, kept in prep/. Standard library only.
 
 Stories (STAR narratives)
-  python src/interview/prep.py init              # (alias: skeleton) create/extend prep/stories.json + prep/themes.json from resume data
-  python src/interview/prep.py status            # stories per company: how many are filled
-  python src/interview/prep.py list [--company <company-id>]    # every story: id, status, headline
-  python src/interview/prep.py next [--company <company-id>]   # next empty story to work on (prints it)
-  python src/interview/prep.py show STORY_ID
-  python src/interview/prep.py set STORY_ID FIELD VALUE
+  prep init              # (alias: skeleton) create/extend prep/stories.json + prep/themes.json from resume data
+  prep status            # stories per company: how many are filled
+  prep list [--company <company-id>]    # every story: id, status, headline
+  prep next [--company <company-id>]   # next empty story to work on (prints it)
+  prep show STORY_ID
+  prep set STORY_ID FIELD VALUE
         FIELD: situation task action result metric lessons notes status | spoken.60s spoken.2min
                follow_ups likely_questions never_say also_themes   (lists: separate items with ' | ')
-  python src/interview/prep.py new STORY_ID --company C --theme T [--headline H] [--engagement E]   # extra story beyond the skeleton
-  python src/interview/prep.py for-jd jd.txt     # ("-" = stdin) stories ranked for a job description (+ typical questions)
+  prep new STORY_ID --company C --theme T [--headline H] [--engagement E]   # extra story beyond the skeleton
+  prep for-jd jd.txt     # ("-" = stdin) stories ranked for a job description (+ typical questions)
 
 Engagements (one real project: facts with a basis, decisions, people), reusable by several stories
-  python src/interview/prep.py engagement add ID --company C --title T [--role R] [--period P] [--summary S]
-  python src/interview/prep.py engagement list|show ID
-  python src/interview/prep.py engagement set ID title|my_role|period|summary|notes VALUE
-  python src/interview/prep.py fact add ENG "text" --basis stated|estimate|unsure|verified-doc|proposed [--source URL] [--note N]
-  python src/interview/prep.py fact set ENG FACT_ID [--text T] [--basis B] [--source URL] [--note N]
-  python src/interview/prep.py fact rm ENG FACT_ID
-  python src/interview/prep.py decision add ENG --what W [--why Y] [--alternatives "a | b"] [--tradeoffs T] [--ownership mine|team|client|shared|unsure]
-  python src/interview/prep.py decision rm ENG DECISION_ID
-  python src/interview/prep.py person add ENG --role R [--note N]
+  prep engagement add ID --company C --title T [--role R] [--period P] [--summary S]
+  prep engagement list|show ID
+  prep engagement set ID title|my_role|period|summary|notes VALUE
+  prep fact add ENG "text" --basis stated|estimate|unsure|verified-doc|proposed [--source URL] [--note N]
+  prep fact set ENG FACT_ID [--text T] [--basis B] [--source URL] [--note N]
+  prep fact rm ENG FACT_ID
+  prep decision add ENG --what W [--why Y] [--alternatives "a | b"] [--tradeoffs T] [--ownership mine|team|client|shared|unsure]
+  prep decision rm ENG DECISION_ID
+  prep person add ENG --role R [--note N]
 
 Linking, numbers, follow-ups
-  python src/interview/prep.py link STORY ENG [--facts f1,f2]       # attach engagement and the facts the story relies on
-  python src/interview/prep.py unlink STORY [--facts f1,f2]         # no --facts: detach the engagement entirely
-  python src/interview/prep.py metric add STORY --name N --value V --basis measured|estimated|stated|unknown [--note N]
-  python src/interview/prep.py metric rm STORY NAME
-  python src/interview/prep.py followup add STORY "question"
-  python src/interview/prep.py followup resolve STORY INDEX_OR_TEXT --answer "what the user said"
+  prep link STORY ENG [--facts f1,f2]       # attach engagement and the facts the story relies on
+  prep unlink STORY [--facts f1,f2]         # no --facts: detach the engagement entirely
+  prep metric add STORY --name N --value V --basis measured|estimated|stated|unknown [--note N]
+  prep metric rm STORY NAME
+  prep followup add STORY "question"
+  prep followup resolve STORY INDEX_OR_TEXT --answer "what the user said"
 
 Reading and checking
-  python src/interview/prep.py search TEXT                           # across stories and engagements
-  python src/interview/prep.py validate [ID]                         # errors block 'done'; warnings are advice; exit 1 on errors
-  python src/interview/prep.py export [--story S | --engagement E] [--format json|md] [-o FILE]
-  python src/interview/prep.py evidence STORY                        # dates the story was practised in sessions (read-only)
-  python src/interview/prep.py migrate                               # rewrite stories.json in the v2 layout (idempotent; .bak kept)
+  prep search TEXT                           # across stories and engagements
+  prep validate [ID]                         # errors block 'done'; warnings are advice; exit 1 on errors
+  prep export [--story S | --engagement E] [--format json|md] [-o FILE]
+  prep evidence STORY                        # dates the story was practised in sessions (read-only)
+  prep migrate                               # bring stories and engagements to the current layout (idempotent)
 
 Fact basis: stated (user said it), estimate, unsure (user doubts it), verified-doc (needs a URL), proposed (an
 idea the assistant suggested; never the user's claim). Only stated, estimate and verified-doc may back a story.
@@ -56,15 +56,11 @@ from typing import Any, Final, TypedDict, cast
 from jobkit import common
 from jobkit.common import ToolError
 from jobkit.interview import story_model as sm
+from jobkit.interview import tables
 from jobkit.interview.story_model import Engagement, Story
 from jobkit.resumes import query_resume as qr
 from jobkit.resumes.resume_data import Bullet, Company, newest_start
 
-ROOT: Final[Path] = common.REPO_ROOT
-PREP: Path = ROOT / "prep"
-STORIES: Path = PREP / "stories.json"
-THEMES: Path = PREP / "themes.json"
-ENGS: Path = PREP / "engagements.json"
 FIELDS: Final[tuple[str, ...]] = sm.TEXT_FIELDS
 UMBRELLA: Final[frozenset[str]] = frozenset({"topic-12"})     # too broad to be a story on its own
 MIN_BULLETS: Final[int] = 4
@@ -72,7 +68,7 @@ CAP_RECENT: Final[int] = 12
 CAP_OLD: Final[int] = 3
 RECENT_YEARS: Final[int] = 5          # companies with a role starting within this many years are "recent"
 THEME_BONUS: Final[int] = 3
-NO_STORIES: Final[str] = "No prep/stories.json yet: run `prep.py init` first."
+NO_STORIES: Final[str] = "No stories yet: run `prep init` first."
 
 # Typical questions per theme (extend freely; unknown themes simply get none)
 QUESTIONS: Final[dict[str, list[str]]] = {
@@ -102,8 +98,6 @@ QUESTIONS: Final[dict[str, list[str]]] = {
     "topic-18": ["Tell me about improving a process with a colleague."],
 }
 
-load = common.load_json
-save = common.save_json
 touch_time = common.now
 
 
@@ -123,16 +117,16 @@ class Health(TypedDict):
 
 def load_story_data() -> dict[str, Any]:
     """prep/stories.json with every story normalized; fails when `init` has not run."""
-    if not STORIES.exists():
+    data = tables.load_stories()
+    if data is None:
         raise ToolError(NO_STORIES)
-    data = load(STORIES, None)
     data["stories"] = [sm.normalize_story(s) for s in data["stories"]]
     return cast(dict[str, Any], data)
 
 
 def load_eng_data() -> dict[str, Any]:
     """prep/engagements.json with every engagement normalized (empty before the first one)."""
-    data = load(ENGS, {"engagements": []})
+    data = tables.load_engagements()
     data["engagements"] = [sm.normalize_engagement(e) for e in data["engagements"]]
     return cast(dict[str, Any], data)
 
@@ -150,13 +144,13 @@ def engagements() -> list[Engagement]:
 def save_stories(data: dict[str, Any]) -> None:
     """Write stories.json with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
-    save(STORIES, data)
+    tables.save_stories(data)
 
 
 def save_engs(data: dict[str, Any]) -> None:
     """Write engagements.json with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
-    save(ENGS, data)
+    tables.save_engagements(data)
 
 
 def find[T: Mapping[str, object]](items: Iterable[T], ident: str, what: str) -> T:
@@ -275,7 +269,7 @@ def company_stories(company: Company, old: dict[str, Story], cutoff: str) -> tup
 def cmd_init(args: argparse.Namespace) -> None:
     """Create or extend stories.json and themes.json from the resume data."""
     companies, _ = qr.load()
-    old = {s["id"]: s for s in load(STORIES, {"stories": []})["stories"]}
+    old = {s["id"]: s for s in (tables.load_stories() or {"stories": []})["stories"]}
     out: list[Story] = []
     added = 0
     cutoff = recent_cutoff()
@@ -288,9 +282,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     themes: dict[str, dict[str, Any]] = {}
     for story in out:
         themes.setdefault(story["theme"], {"stories": [], "questions": QUESTIONS.get(story["theme"], [])})["stories"].append(story["id"])
-    save(THEMES, {"themes": dict(sorted(themes.items()))})
-    print(f"{len(out)} stories ({added} new) in {STORIES.relative_to(PREP.parent)}; "
-          f"{len(themes)} themes in {THEMES.relative_to(PREP.parent)}")
+    tables.save_themes(dict(sorted(themes.items())))
+    print(f"{len(out)} stories ({added} new); {len(themes)} themes")
 
 
 # ---- stories: read -------------------------------------------------------------------------------------------------
@@ -553,7 +546,7 @@ def show_eng(eng: Engagement) -> None:
               + (f" | trade-offs: {dec['tradeoffs']}" if "tradeoffs" in dec else ""))
     if eng["people"]:
         print("  people: " + "; ".join(p["role"] + (f" ({p['note']})" if p.get("note") else "") for p in eng["people"]))
-    used = [s["id"] for s in stories() if s["engagement"] == eng["id"]] if STORIES.exists() else []
+    used = [s["id"] for s in stories() if s["engagement"] == eng["id"]] if tables.has_stories() else []
     print("  stories: " + (", ".join(used) or "-"))
 
 
@@ -682,7 +675,7 @@ def cmd_person_add(args: argparse.Namespace) -> None:
 
 def stories_if_any() -> list[Story]:
     """All stories, or none before `init`."""
-    return stories() if STORIES.exists() else []
+    return stories() if tables.has_stories() else []
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -761,7 +754,7 @@ def cmd_migrate(args: argparse.Namespace) -> None:
     data = load_story_data()
     save_stories(data)
     eng_data = load_eng_data()
-    if eng_data["engagements"] or ENGS.exists():
+    if eng_data["engagements"] or tables.has_engagements():
         save_engs(eng_data)
     print(f"Migrated {len(data['stories'])} stories to schema v{sm.SCHEMA_VERSION}; "
           f"engagements: {len(eng_data['engagements'])}")
@@ -773,7 +766,7 @@ def cmd_for_jd(args: argparse.Namespace) -> None:
     """Rank stories for a job description and list the ones to finish."""
     analysis = qr.analyze(common.read_text_arg(args.jd))
     ranked = ranked_scores(analysis)
-    themes = load(THEMES, {"themes": {}})["themes"]
+    themes = tables.load_themes()
     rows = [(score, s) for s in stories() if (score := story_relevance(s, ranked, analysis.themes))]
     top = sorted(rows, key=lambda row: -row[0])[:args.top]
     for score, story in top:

@@ -1,49 +1,25 @@
-"""Tests for src/common.py. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+"""Tests for src/jobkit/common.py. Run: .venv/bin/python -m unittest discover -s tests -t ."""
 import argparse
 import contextlib
 import io
-import re
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 from jobkit import common
 
 
-class JsonTests(unittest.TestCase):
-    def setUp(self):
-        self.dir = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(self.dir))
-
-    def test_missing_file_returns_default(self):
-        self.assertEqual(common.load_json(self.dir / "nope.json", {"x": 1}), {"x": 1})
-
-    def test_save_creates_parents_and_round_trips(self):
-        f = self.dir / "a" / "b.json"
-        common.save_json(f, {"name": "é"})
-        self.assertEqual(common.load_json(f, None), {"name": "é"})
-        self.assertTrue(f.read_text().endswith("\n"))
-
-    def test_second_save_keeps_backup_and_no_temp_file(self):
-        f = self.dir / "d.json"
-        common.save_json(f, {"v": 1})
-        common.save_json(f, {"v": 2})
-        self.assertEqual(common.load_json(f.with_name("d.json.bak"), None), {"v": 1})
-        self.assertFalse(f.with_name("d.json.tmp").exists())
-
-    def test_invalid_json_names_backup(self):
-        f = self.dir / "bad.json"
-        common.save_json(f, {"v": 1})
-        common.save_json(f, {"v": 2})
-        f.write_text("{oops")
-        with self.assertRaisesRegex(common.ToolError, r"not valid JSON.*Previous copy"):
-            common.load_json(f, None)
-        g = self.dir / "worse.json"
-        g.write_text("{oops")
-        with self.assertRaisesRegex(common.ToolError, "No backup exists"):
-            common.load_json(g, None)
+class HomeTests(unittest.TestCase):
+    def test_default_and_override(self):
+        with mock.patch.dict("os.environ", {"JOBKIT_HOME": "/somewhere"}):
+            self.assertEqual(common.home(), Path("/somewhere"))
+            self.assertEqual(common.data_dir(), Path("/somewhere/data"))
+            self.assertEqual(common.header_file(), Path("/somewhere/profile/header.md"))
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(common.home(), Path.home() / ".jobkit")
 
 
 class TextTests(unittest.TestCase):
@@ -89,16 +65,6 @@ class RunTests(unittest.TestCase):
             raise KeyError("x")
         with self.assertRaises(KeyError):
             common.run(self.ns(boom))
-
-    def test_lock_wrapper_runs_handler(self):
-        lock = Path(tempfile.mkdtemp()) / "sub" / ".lock"
-        with common.locked(lock):
-            pass
-        self.assertTrue(lock.exists())
-
-    def test_repo_root_is_project_folder(self):
-        self.assertTrue((common.REPO_ROOT / "src" / "jobkit" / "common.py").exists())
-        self.assertTrue(re.match(r".*/prep/\.lock$", str(common.LOCK_FILE)))
 
 
 if __name__ == "__main__":

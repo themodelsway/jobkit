@@ -3,24 +3,26 @@ Everything happens in a temp directory; the real prep/ folder is never touched."
 import contextlib
 import io
 import json
-import tempfile
 import unittest
-from pathlib import Path
+from unittest import mock
 
 
-from jobkit import common
+from jobkit import common, store
+from jobkit.interview import tables
 from jobkit.interview import prep
 from jobkit.interview import story_model as sm
+from tests.support import HomeCase
 
 
 def run(*argv):
-    """Run one prep.py command; return (exit_code, stdout)."""
+    """Run one prep command; return (exit_code, stdout)."""
     out = io.StringIO()
     code = 0
     a = prep.build_parser().parse_args(list(argv))
     with contextlib.redirect_stdout(out):
         try:
-            code = a.fn(a) or 0
+            with store.transaction():
+                code = a.fn(a) or 0
         except common.ToolError as e:
             code = 1
             out.write(str(e))
@@ -31,22 +33,17 @@ def run(*argv):
     return code, out.getvalue()
 
 
-class PrepCase(unittest.TestCase):
+class PrepCase(HomeCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        base = Path(self.tmp.name)
-        self.saved = (prep.PREP, prep.STORIES, prep.THEMES, prep.ENGS, prep.qr.load)
-        prep.PREP, prep.STORIES, prep.THEMES, prep.ENGS = base, base / "stories.json", base / "themes.json", base / "engagements.json"
-        prep.qr.load = lambda: ({"acme": {"id": "acme", "name": "Acme Corp"}}, None)
+        super().setUp()
+        patcher = mock.patch.object(prep.qr, "load", return_value=({"acme": {"id": "acme", "name": "Acme Corp"}}, None))
+        patcher.start()
+        self.addCleanup(patcher.stop)
         v1 = {"stories": [{"id": "acme-topic-a", "company": "acme", "company_name": "Acme Corp", "theme": "topic-a",
                            "headline": "Led topic A", "metrics_on_resume": [], "anchor_bullets": ["b1"],
                            "situation": None, "task": None, "action": None, "result": None, "metric": None, "lessons": None,
                            "notes": None, "follow_ups": ["Batch size?"], "status": "empty"}]}
-        prep.STORIES.write_text(json.dumps(v1))
-
-    def tearDown(self):
-        prep.PREP, prep.STORIES, prep.THEMES, prep.ENGS, prep.qr.load = self.saved
-        self.tmp.cleanup()
+        tables.save_stories(v1)
 
     def story(self, sid="acme-topic-a"):
         return next(s for s in prep.stories() if s["id"] == sid)
@@ -67,10 +64,10 @@ class TestV1Compat(PrepCase):
     def test_migrate_is_idempotent_and_keeps_content(self):
         run("set", "acme-topic-a", "situation", "Hello")
         run("migrate")
-        first = prep.STORIES.read_text()
+        first = tables.load_stories()
         run("migrate")
-        self.assertEqual(prep.STORIES.read_text(), first)
-        data = json.loads(first)
+        self.assertEqual(tables.load_stories(), first)
+        data = first
         self.assertEqual(data["schema_version"], sm.SCHEMA_VERSION)
         self.assertEqual(data["stories"][0]["situation"], "Hello")
 
@@ -245,7 +242,7 @@ class TestFollowupsSearchExport(PrepCase):
         self.assertIn("Used a stream", md)
         self.assertIn("Queue", md)
         self.assertEqual(run("export", "--format", "md")[0], 1)
-        path = Path(self.tmp.name) / "out.json"
+        path = self.home / "out.json"
         run("export", "-o", str(path))
         self.assertEqual(len(json.loads(path.read_text())["stories"]), 1)
 
@@ -337,7 +334,7 @@ class TestInitFromResumeData(PrepCase):
         run("init")
         self.assertEqual(self.story("globex-topic-b")["situation"], "kept answer")
         self.assertEqual(self.story("acme-topic-a")["status"], "empty")        # not produced now, but kept
-        self.assertEqual(sorted(json.loads(prep.THEMES.read_text())["themes"]), ["topic-a", "topic-b"])
+        self.assertEqual(sorted(tables.load_themes()), ["topic-a", "topic-b"])
 
 
 if __name__ == "__main__":

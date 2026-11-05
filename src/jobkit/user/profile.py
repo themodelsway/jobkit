@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Per-user settings, kept in the git-ignored `profile/` folder (nothing personal lives in committed files).
+"""Per-user settings, kept in the database under the home folder (nothing personal lives in committed files).
 
-  profile/profile.json    resume_root, resume_dirs, name (optional), tier1_services (optional)
-  profile/companies.json  employers found by the first resume scan: {id: {"name", "regex"}}
-  profile/header.md       name and contact line printed at the top of generated resumes
+  settings    resume_root, resume_dirs, name (optional), tier1_services (optional)
+  employers   found by the first resume scan: {id: {"name", "regex"}}
+  profile/header.md (in the home folder)  name and contact line printed at the top of generated resumes
 
 Commands:
-  python src/user/profile.py status
-  python src/user/profile.py init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
-  python src/user/profile.py set KEY VALUE         # name, resume_root
-  python src/user/profile.py companies             # employers from the scan (edit companies.json to merge or rename)
-  python src/user/profile.py tier1 [SERVICE ...]   # pin your own tier-1 AWS services; no args shows the current list
-  python src/user/profile.py open [add TEXT | done ID]   # open items and data notes (profile/open_items.json)
+  profile status
+  profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
+  profile set KEY VALUE         # name, resume_root
+  profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
+  profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
+  profile open [add TEXT | done ID]   # open items and data notes 
 
-Standard library only. The module is `user.profile`; run it as a script, never as `import profile`.
+Standard library only. Run it as the `profile` command.
 """
 from __future__ import annotations
 
@@ -21,21 +21,19 @@ import argparse
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final, NotRequired, TypedDict
+from typing import Final, NotRequired, TypedDict, cast
 
 from jobkit import common
 from jobkit.common import ToolError
+from jobkit.user import tables
 
-DIR: Final[Path] = common.REPO_ROOT / "profile"
-PROFILE_FILE: Final[Path] = DIR / "profile.json"
-COMPANIES_FILE: Final[Path] = DIR / "companies.json"
+DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
-OPEN_ITEMS_FILE: Final[Path] = DIR / "open_items.json"
 SEP: Final[str] = r"\s*[–—-]\s*"
 SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root")
 NEEDS_PROFILE: Final[str] = (
     "No profile yet. Ask the user where their resume files are, then run:\n"
-    "  .venv/bin/python src/user/profile.py init --resume-root <folder> "
+    "  profile init --resume-root <folder> "
     "[--resume-dir <subfolder> ...] [--name <name>]")
 
 
@@ -58,17 +56,17 @@ class OpenItem(TypedDict):
 
 def load() -> Profile:
     """The saved profile, or an empty one."""
-    return common.load_json(PROFILE_FILE, {})
+    return cast(Profile, tables.load_settings())
 
 
 def save(profile: Profile) -> None:
-    """Write the profile atomically."""
-    common.save_json(PROFILE_FILE, profile)
+    """Store the profile."""
+    tables.save_settings(profile)
 
 
 def exists() -> bool:
-    """Whether profile/profile.json has been created."""
-    return PROFILE_FILE.exists()
+    """Whether the profile has been created."""
+    return tables.has_settings()
 
 
 def need() -> Profile:
@@ -91,13 +89,13 @@ def resume_dirs() -> list[Path]:
 
 
 def tier1_services() -> list[str]:
-    """AWS services the user pinned as tier 1 (empty: derive them from the resume scan)."""
+    """Services the user pinned as tier 1 (empty: derive them from the resume scan)."""
     return load().get("tier1_services") or []
 
 
 def company_registry() -> dict[str, tuple[str, str]]:
     """{id: (display name, header regex)} ready for parse_resume.set_companies. Empty before the first scan."""
-    stored = common.load_json(COMPANIES_FILE, {})
+    stored = tables.load_employers()
     return {cid: (entry["name"], entry["regex"]) for cid, entry in stored.items()}
 
 
@@ -106,12 +104,12 @@ def add_companies(found: dict[str, str]) -> list[str]:
 
     Returns the ids that were new.
     """
-    stored = common.load_json(COMPANIES_FILE, {})
+    stored = tables.load_employers()
     new = [cid for cid in found if cid not in stored]
     for cid in new:
         stored[cid] = {"name": found[cid], "regex": re.escape(found[cid]) + rf"(?:{SEP}(?P<t>.+))?"}
     if new:
-        common.save_json(COMPANIES_FILE, stored)
+        tables.save_employers(stored)
     return new
 
 
@@ -120,10 +118,21 @@ def header_path() -> Path:
     return HEADER_FILE
 
 
+def personal_terms() -> set[str]:
+    """Your name, resume folder and employer names, for the privacy checks. Empty without a profile."""
+    terms: set[str] = set()
+    stored = load()
+    terms |= {str(value).strip() for value in (stored.get("name"), stored.get("resume_root")) if value}
+    if HEADER_FILE.exists():
+        terms |= {re.sub(r"^#\s*", "", line).strip() for line in HEADER_FILE.read_text(encoding="utf-8").splitlines()[:1]}
+    terms |= {entry["name"] for entry in tables.load_employers().values()}
+    return {t for t in terms if len(t) >= 3 and t.lower() != "your name"}
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     """Show what the profile holds and what is still missing."""
     if not exists():
-        print("No profile. Run `src/user/profile.py init --resume-root PATH` "
+        print("No profile. Run `profile init --resume-root PATH` "
               "(the skills ask for the folder first).")
         return
     profile = load()
@@ -131,10 +140,10 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"resume_root: {profile['resume_root']}")
     print(f"resume_dirs: {', '.join(profile.get('resume_dirs') or ['(whole folder)'])}")
     print(f"name: {profile.get('name') or '(not set)'}")
-    print(f"employers: {len(common.load_json(COMPANIES_FILE, {}))} (run process_resumes.py to scan)"
-          if COMPANIES_FILE.exists() else "employers: not scanned yet (run process_resumes.py)")
-    print(f"tier-1 AWS services: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
-    print(f"header: {'present' if HEADER_FILE.exists() else 'missing (build_resume.py creates a template)'}")
+    print(f"employers: {len(tables.load_employers())} (run process-resumes to scan)"
+          if tables.has_employers() else "employers: not scanned yet (run process-resumes)")
+    print(f"tier-1 services: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
+    print(f"header: {'present' if HEADER_FILE.exists() else 'missing (build-resume creates a template)'}")
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -148,8 +157,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.name:
         profile["name"] = args.name
     save(profile)
-    print(f"Saved {PROFILE_FILE.relative_to(DIR.parent)}. "
-          "Next: .venv/bin/python src/resumes/process_resumes.py")
+    print("Saved the profile. Next: process-resumes")
 
 
 def cmd_set(args: argparse.Namespace) -> None:
@@ -164,16 +172,54 @@ def cmd_set(args: argparse.Namespace) -> None:
     save(profile)
 
 
+TITLE_SUFFIX: Final[str] = rf"(?:{SEP}(?P<t>.+))?"
+
+
+def rename_company(args: list[str]) -> None:
+    """`companies rename ID NAME`: change the name shown for an employer (its match pattern is unchanged)."""
+    if len(args) != 2:
+        raise ToolError("usage: companies rename ID NAME")
+    employers = tables.load_employers()
+    if args[0] not in employers:
+        raise ToolError(f"No employer {args[0]}. Run `companies` to list them.")
+    employers[args[0]]["name"] = args[1]
+    tables.save_employers(employers)
+    print(f"Renamed {args[0]} to {args[1]}. Run `process-resumes --force` to rebuild with the new name.")
+
+
+def merge_companies(args: list[str]) -> None:
+    """`companies merge FROM INTO`: treat two names as one employer; FROM is folded into INTO."""
+    if len(args) != 2 or args[0] == args[1]:
+        raise ToolError("usage: companies merge FROM INTO (two different employer ids)")
+    employers = tables.load_employers()
+    for cid in args:
+        if cid not in employers:
+            raise ToolError(f"No employer {cid}. Run `companies` to list them.")
+    source, target = employers.pop(args[0]), employers[args[1]]
+    heads = [e["regex"][:-len(TITLE_SUFFIX)] for e in (target, source) if e["regex"].endswith(TITLE_SUFFIX)]
+    if len(heads) != 2:
+        raise ToolError("These employers have a custom match pattern, so they cannot be merged automatically.")
+    target["regex"] = f"(?:{heads[0]}|{heads[1]}){TITLE_SUFFIX}"
+    target["aliases"] = sorted({*target.get("aliases", []), source["name"], *source.get("aliases", [])})
+    tables.save_employers(employers)
+    print(f"Merged {args[0]} into {args[1]}. Run `process-resumes --force` to rebuild.")
+
+
 def cmd_companies(args: argparse.Namespace) -> None:
-    """List the employers found by the resume scan."""
-    for cid, entry in common.load_json(COMPANIES_FILE, {}).items():
-        print(f"{cid:<24} {entry['name']}")
-    if not COMPANIES_FILE.exists():
-        print("No scan yet: run process_resumes.py")
+    """List the employers found by the resume scan, or rename / merge them."""
+    if args.action == "rename":
+        rename_company(args.args)
+    elif args.action == "merge":
+        merge_companies(args.args)
+    else:
+        for cid, entry in tables.load_employers().items():
+            print(f"{cid:<24} {entry['name']}")
+        if not tables.has_employers():
+            print("No scan yet: run process-resumes")
 
 
 def cmd_tier1(args: argparse.Namespace) -> None:
-    """Pin the tier-1 AWS services, or show the pinned list."""
+    """Pin the tier-1 services, or show the pinned list."""
     profile = need()
     if args.services:
         profile["tier1_services"] = args.services
@@ -185,7 +231,7 @@ def _add_open_item(items: list[OpenItem], text: str | None) -> None:
     if not text:
         raise ToolError("open add needs the text of the item")
     items.append({"id": max([item["id"] for item in items] + [0]) + 1, "text": text, "status": "open"})
-    common.save_json(OPEN_ITEMS_FILE, items)
+    tables.save_open_items(items)
 
 
 def _finish_open_item(items: list[OpenItem], item_id: str | None) -> None:
@@ -193,12 +239,12 @@ def _finish_open_item(items: list[OpenItem], item_id: str | None) -> None:
     if not match:
         raise ToolError(f"No open item {item_id}")
     match[0]["status"] = "done"
-    common.save_json(OPEN_ITEMS_FILE, items)
+    tables.save_open_items(items)
 
 
 def cmd_open(args: argparse.Namespace) -> None:
     """List open items, or add one / mark one done."""
-    items: list[OpenItem] = common.load_json(OPEN_ITEMS_FILE, [])
+    items = cast(list[OpenItem], tables.load_open_items())
     if args.action == "add":
         _add_open_item(items, args.arg)
     elif args.action == "done":
@@ -224,7 +270,10 @@ def build_parser() -> argparse.ArgumentParser:
     setter.add_argument("key")
     setter.add_argument("value")
     setter.set_defaults(fn=cmd_set)
-    sub.add_parser("companies").set_defaults(fn=cmd_companies)
+    companies = sub.add_parser("companies")
+    companies.add_argument("action", nargs="?", choices=["rename", "merge"])
+    companies.add_argument("args", nargs="*")
+    companies.set_defaults(fn=cmd_companies)
     tier1 = sub.add_parser("tier1")
     tier1.add_argument("services", nargs="*")
     tier1.set_defaults(fn=cmd_tier1)
@@ -237,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv))
+    return common.run(build_parser().parse_args(argv), lock=True)
 
 
 if __name__ == "__main__":

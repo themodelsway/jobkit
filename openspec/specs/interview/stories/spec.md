@@ -1,7 +1,7 @@
 # interview/stories Specification
 
 ## Purpose
-Hold STAR stories and the real engagements behind them in `prep/`, with every fact and number carrying a basis. Implemented in `src/jobkit/interview/prep.py` and `story_model.py` (pure rules).
+Hold STAR stories and the real engagements behind them in the database, with every fact and number carrying a basis. Implemented in `src/jobkit/interview/prep.py` and `story_model.py` (pure rules).
 
 ## Requirements
 
@@ -41,8 +41,12 @@ The system SHALL rank stories for a job description and include typical question
 - **THEN** stories are listed best match first
 
 ### Requirement: Safe storage
-The system SHALL write prep data atomically, keep a `.bak` of the previous file and serialise writers with a lock.
+The system SHALL store stories, engagements and their facts, decisions, people and metrics in the database, change them atomically, and let concurrent writers proceed without losing data.
 
 #### Scenario: Concurrent writers
 - **WHEN** two writes start together
-- **THEN** one waits for the lock and no data is lost
+- **THEN** both are stored and no data is lost
+
+#### Scenario: Failure part way
+- **WHEN** a command fails after changing a story and its engagement
+- **THEN** neither change is stored

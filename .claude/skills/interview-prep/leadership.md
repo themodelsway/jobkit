@@ -1,6 +1,6 @@
 # Leadership questionnaire
 
-Used by the `interview-prep` skill in leadership mode. Data lives in git-ignored `prep/leadership/` and is accessed only through `.venv/bin/lead`.
+Used by the `interview-prep` skill in leadership mode. Data lives in the local database and is accessed only through `.venv/bin/lead`.
 
 ## Shape of an answer
 Each question gets two parts:

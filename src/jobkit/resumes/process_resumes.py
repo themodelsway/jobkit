@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Build the resume experience data (JSON files) from every resume (pdf, docx, md, txt) under the resume folders.
+"""Build the resume experience data (stored in the database) from every resume (pdf, docx, md, txt) under the resume folders.
 
-  python process_resumes.py --survey   # read-only: show what each resume parses into, write nothing
-  python process_resumes.py            # parse new/changed resumes and merge into resume-data/json/
-  python process_resumes.py --force    # ignore the ledger and re-process everything
+  process-resumes --survey   # read-only: show what each resume parses into, write nothing
+  process-resumes            # parse new/changed resumes and merge into the resume data
+  process-resumes --force    # ignore the ledger and re-process everything
+  process-resumes curate list|add|rm KIND ...   # your curation (certifications, skill rules, bullet themes ...)
 
-Read-only on the resume folders; writes only under <project>/resume-data/json/ (and <project>/output/ for raw
-text). The resume folders and the employer list come from the profile (see user/profile.py).
+Read-only on the resume folders; writes only to the database (and the output/ folder under the home folder for raw text). The resume folders and the employer list come from the profile (see user/profile.py).
 """
 from __future__ import annotations
 
 import argparse
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
@@ -20,13 +20,12 @@ from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from jobkit import common
-from jobkit.resumes import extract
+from jobkit.resumes import curate, extract, tables
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import resume_data as rd
 from jobkit.resumes.resume_data import ResumeData
 from jobkit.user import profile as up
 
-DATA_DIR: Path = rd.DATA_DIR
 TEXT_DIR: Path = rd.TEXT_DIR
 NEW_VARIANT_RATIO: Final[float] = pr.SIMILAR_THRESHOLD
 Outcome = Literal["unchanged", "other", "parsed"]
@@ -314,11 +313,11 @@ def curate_skills(data: ResumeData) -> None:
 
 def apply_themes(data: ResumeData) -> None:
     """Themes, ignored fragments and summary angles from resume-data/themes.json."""
-    themes = common.load_json(rd.THEMES_FILE, {"themes": {}, "ignore": []})
+    themes = rd.load_themes_file()
     for company in data["companies"].values():
         for bullet in company["bullets"]:
             bullet["themes"] = themes["themes"].get(bullet["id"], bullet["themes"])
-            bullet["ignored"] = bullet["id"] in themes["ignore"]
+            bullet["ignored"] = bullet["id"] in themes.get("ignore", [])
     for summary in data["profile"]["summaries"]:
         summary["angles"] = themes.get("summary_angles", {}).get(summary["id"], summary.get("angles", []))
 
@@ -332,9 +331,7 @@ def flag_review(data: ResumeData, patterns: list[str]) -> None:
 
 
 def apply_curated(data: ResumeData) -> None:
-    """Hand-curated overrides in resume-data/curated.json survive rebuilds (--force)."""
-    if not rd.CURATED_FILE.exists():
-        return
+    """The user's curation (certifications, themes, known-wrong figures ...) survives rebuilds (--force)."""
     cur = rd.load_curated()
     for key in ("certifications", "education"):
         if key in cur:
@@ -360,22 +357,19 @@ def build_index(data: ResumeData, ledger: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_data(data: ResumeData, ledger: dict[str, Any], unparsed: dict[str, Any]) -> None:
-    """Write every JSON file under resume-data/json/."""
-    for stale in (DATA_DIR / "companies").glob("*.json"):
-        if stale.stem not in data["companies"]:
-            stale.unlink()                  # a company whose every resume is gone
-    for cid, company in data["companies"].items():
+    """Store the companies, skills, sections, index, ledger and unparsed report."""
+    for company in data["companies"].values():
         company["roles"].sort(key=lambda r: r["start"] or "", reverse=True)
         company["bullets"].sort(key=lambda b: (b.get("role_start") or "", b["id"]), reverse=True)
-        common.save_json(DATA_DIR / "companies" / f"{cid}.json", company, backup=False)
+    tables.save_companies(data["companies"])      # a company whose every resume is gone is removed
     for entries in data["skills"]["groups"].values():
         entries.sort(key=lambda x: x["name"].lower())
     skills = {"groups": dict(sorted(data["skills"]["groups"].items())), "tag_only": data["skills"].get("tag_only", [])}
-    common.save_json(DATA_DIR / "skills.json", skills, backup=False)
-    common.save_json(DATA_DIR / "profile.json", data["profile"], backup=False)
-    common.save_json(DATA_DIR / "index.json", build_index(data, ledger), backup=False)
-    common.save_json(DATA_DIR / "ledger.json", ledger, backup=False)
-    common.save_json(DATA_DIR / "_unparsed.json", unparsed, backup=False)
+    tables.save_skills(skills)
+    tables.save_profile(cast(Mapping[str, Sequence[Any]], data["profile"]))
+    tables.save_index(build_index(data, ledger))
+    tables.save_ledger(ledger)
+    tables.save_unparsed(unparsed)
 
 
 # ---------------------------------------------------------------- build
@@ -384,9 +378,8 @@ def load_state(force: bool) -> tuple[dict[str, Any], dict[str, Any], ResumeData]
     """(ledger, unparsed, data) from the files on disk, or empty ones with --force."""
     if force:
         return {}, {}, {"companies": {}, "skills": {"groups": {}}, "profile": rd.empty_profile()}
-    data: ResumeData = {"companies": rd.load_companies(DATA_DIR) if (DATA_DIR / "companies").is_dir() else {},
-                        "skills": rd.load_skills(DATA_DIR), "profile": rd.load_profile(DATA_DIR)}
-    return rd.load_ledger(DATA_DIR), common.load_json(DATA_DIR / "_unparsed.json", {}), data
+    data: ResumeData = {"companies": rd.load_companies(), "skills": rd.load_skills(), "profile": rd.load_profile()}
+    return rd.load_ledger(), tables.load_unparsed(), data
 
 
 def process_file(path: Path, root: Path, ledger: dict[str, Any], unparsed: dict[str, Any], data: ResumeData) -> Outcome:
@@ -431,10 +424,10 @@ def build(files: Iterable[Path], root: Path, force: bool) -> None:
     retag(data)
     apply_curated(data)
     write_data(data, ledger, unparsed)
-    orphans = rd.orphan_curation(data["companies"], data["profile"], common.load_json(rd.THEMES_FILE, {}))
+    orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file())
     if orphans:
         print(f"\nWARNING: {len(orphans)} entr(ies) in themes.json match no bullet or summary "
-              f"(run `query_resume.py review` to list them).")
+              f"(run `query-resume review` to list them).")
     bullets = sum(len(c["bullets"]) for c in data["companies"].values())
     print(f"\n{outcomes.count('parsed')} new/changed, {outcomes.count('unchanged')} unchanged, {len(pruned)} pruned. "
           f"Resume data: {len(data['companies'])} companies, {bullets} bullets. "
@@ -447,7 +440,7 @@ def cmd_process(args: argparse.Namespace) -> None:
     files = list_resumes(config.dirs)
     if not files:
         raise common.ToolError(f"No resumes ({', '.join(extract.supported_suffixes())}) found under "
-                               f"{', '.join(map(str, config.dirs))}. Check `src/user/profile.py status`.")
+                               f"{', '.join(map(str, config.dirs))}. Check `profile status`.")
     scan_companies(files, save=not args.survey)
     if args.survey:
         survey(files, config.root)
@@ -461,12 +454,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--survey", action="store_true", help="show parse results only; write nothing")
     parser.add_argument("--force", action="store_true", help="ignore ledger and rebuild")
     parser.set_defaults(fn=cmd_process)
+    sub = parser.add_subparsers(dest="cmd")
+    curate.add_parser(sub)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv))
+    return common.run(build_parser().parse_args(argv), lock=True)
 
 
 if __name__ == "__main__":

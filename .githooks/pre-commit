@@ -13,6 +13,11 @@ run() {
     shift
     "$@" || { echo "pre-commit: FAILED, commit aborted" >&2; exit 1; }
 }
-run "ruff"  "$PY" -m ruff check src tests
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-commit: gitleaks not found (secret scan). Install it: brew install gitleaks" >&2
+    exit 1
+fi
+run "gitleaks" gitleaks git --pre-commit --staged --redact --no-banner
+run "ruff"  "$PY" -m ruff check src tests .githooks
 run "pyright" "$PY" -m pyright
 run "tests" "$PY" -m unittest discover -s tests -t .

@@ -19,6 +19,7 @@ requires = ["uv_build>=0.9,<0.14"]
 build-backend = "uv_build"
 
 [project.scripts]
+jobkit = "jobkit.admin:main"
 profile = "jobkit.user.profile:main"
 process-resumes = "jobkit.resumes.process_resumes:main"
 query-resume = "jobkit.resumes.query_resume:main"

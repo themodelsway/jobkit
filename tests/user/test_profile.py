@@ -1,27 +1,20 @@
-"""Tests for src/user/profile.py in a temp folder. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+"""Tests for src/jobkit/user/profile.py in a temp folder. Run: .venv/bin/python -m unittest discover -s tests -t ."""
 import contextlib
 import io
-import tempfile
+import re
 import unittest
-from pathlib import Path
-from unittest import mock
-
 
 from jobkit.user import profile as up
+from jobkit.user import tables as utables
+from tests.support import HomeCase
 
 
-class ProfileTests(unittest.TestCase):
+class ProfileTests(HomeCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
+        super().setUp()
+        self.tmp = self.home
         self.resumes = self.tmp / "resumes"
         self.resumes.mkdir()
-        d = self.tmp / "profile"
-        for name, value in (("DIR", d), ("PROFILE_FILE", d / "profile.json"), ("COMPANIES_FILE", d / "companies.json"),
-                            ("HEADER_FILE", d / "header.md"), ("OPEN_ITEMS_FILE", d / "open_items.json")):
-            patcher = mock.patch.object(up, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp))
 
     def run_cli(self, *argv):
         out, err = io.StringIO(), io.StringIO()
@@ -71,6 +64,33 @@ class ProfileTests(unittest.TestCase):
         reg = up.company_registry()
         self.assertEqual(reg["acme"][0], "Acme Corp")
         self.assertTrue(reg["acme"][1].startswith("Acme\\ Corp"))
+
+    def test_rename_an_employer(self):
+        up.add_companies({"acme": "Acme Corp"})
+        self.assertEqual(self.run_cli("companies", "rename", "acme", "Acme Inc")[0], 0)
+        self.assertEqual(up.company_registry()["acme"][0], "Acme Inc")
+        self.assertIn("Acme Inc", self.run_cli("companies")[1])
+        self.assertEqual(self.run_cli("companies", "rename", "nope", "X")[0], 1)
+        self.assertEqual(self.run_cli("companies", "rename", "acme")[0], 1)
+
+    def test_merge_two_employers_into_one(self):
+        up.add_companies({"acme": "Acme Corp", "acme-ltd": "Acme Ltd"})
+        code, out, _ = self.run_cli("companies", "merge", "acme-ltd", "acme")
+        self.assertEqual(code, 0, out)
+        registry = up.company_registry()
+        self.assertEqual(list(registry), ["acme"])
+        pattern = re.compile(registry["acme"][1] + "$")
+        for line in ("Acme Corp", "Acme Ltd", "Acme Ltd - Lead Engineer"):
+            self.assertTrue(pattern.match(line), line)
+        self.assertEqual(self.run_cli("companies", "merge", "acme", "acme")[0], 1)
+        self.assertEqual(self.run_cli("companies", "merge", "acme", "gone")[0], 1)
+
+    def test_merge_refuses_a_custom_pattern(self):
+        up.add_companies({"a": "A Co", "b": "B Co"})
+        employers = utables.load_employers()
+        employers["b"]["regex"] = "B.*"
+        utables.save_employers(employers)
+        self.assertEqual(self.run_cli("companies", "merge", "b", "a")[0], 1)
 
     def test_open_items_add_done_and_errors(self):
         self.assertIn("No open items", self.run_cli("open")[1])

@@ -1,7 +1,7 @@
 # resumes/data-model Specification
 
 ## Purpose
-Define how parsed resumes are merged into the generated resume data in `resume-data/json/`, and how hand curation survives rebuilds. Implemented in `src/jobkit/resumes/process_resumes.py` and `resume_data.py`.
+Define how parsed resumes are merged into the generated resume data (stored in the database), and how the user's curation survives rebuilds. Implemented in `src/jobkit/resumes/process_resumes.py` and `resume_data.py`.
 
 ## Requirements
 
@@ -27,18 +27,22 @@ The system SHALL re-process only new or changed resume files, using the ledger, 
 - **THEN** no resume is re-parsed
 
 ### Requirement: Survey writes nothing
-The system SHALL show what each resume parses into with `--survey` and SHALL NOT write any file in that mode.
+The system SHALL show what each resume parses into with `--survey` and SHALL NOT change any stored data or write any file in that mode.
 
 #### Scenario: Survey run
 - **WHEN** `--survey` is used
-- **THEN** `resume-data/` is unchanged
+- **THEN** the database and `output/` are unchanged
 
 ### Requirement: Hand curation survives rebuilds
-The system SHALL apply `resume-data/curated.json` (certifications, skill merge/drop/group, tag-only skills, extra skills, known-wrong metrics) and `resume-data/themes.json` after every rebuild without overwriting them.
+The system SHALL keep curation (certifications, skill merge/drop/group, tag-only skills, extra skills, known-wrong metrics, bullet themes, ignored fragments and summary angles) in the database, apply it after every rebuild, and never overwrite it. Curation SHALL be changed only with commands that list, add and remove its entries.
 
 #### Scenario: Known-wrong metric
-- **WHEN** a bullet contains a figure listed in `review_if_metric_matches`
+- **WHEN** a bullet contains a figure listed as known-wrong
 - **THEN** the bullet is flagged `needs_review`
+
+#### Scenario: Add and remove curation
+- **WHEN** a curation entry is added and then removed with the curation commands
+- **THEN** it is applied on the next rebuild while present and has no effect after removal
 
 ### Requirement: Quality words are tags, not skills
 The system SHALL treat Security, Performance, Scalability, High Availability and Cost Efficiency as bullet tags only.
@@ -48,7 +52,7 @@ The system SHALL treat Security, Performance, Scalability, High Availability and
 - **THEN** none of those words appears as a skill
 
 ### Requirement: Resume folders are read-only
-The system SHALL NOT write into the resume folders; it SHALL write only under `resume-data/json/` and `output/`.
+The system SHALL NOT write into the resume folders; it SHALL write only to the database and to `output/` under the home folder.
 
 #### Scenario: Full run
 - **WHEN** processing completes
@@ -77,11 +81,11 @@ The system SHALL print the files whose contribution was removed and how many bul
 - **THEN** the system reports an error and the existing data is unchanged
 
 ### Requirement: Orphaned curation is reported
-The system SHALL list curation entries (themes, ignored fragments, summary angles) whose id matches no current bullet or summary, in `review` output and as a warning at the end of a rebuild. Reporting SHALL NOT modify any curation file.
+The system SHALL list curation entries (themes, ignored fragments, summary angles) whose id matches no current bullet or summary, in `review` output and as a warning at the end of a rebuild. Reporting SHALL NOT modify any curation entry.
 
 #### Scenario: Bullet text changed
 - **WHEN** a bullet's text changes so that its id changes
-- **THEN** its old id is listed as orphaned and the curation file is unchanged
+- **THEN** its old id is listed as orphaned and the curation entry is unchanged
 
 #### Scenario: No orphans
 - **WHEN** every curation id matches a current bullet or summary

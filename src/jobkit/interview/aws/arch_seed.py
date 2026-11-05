@@ -1,14 +1,14 @@
 """Seed topics for the architecture drill (generic, no personal data, no model answers).
 
-`arch.py init` merges this into prep/arch/catalog.json. Everything AWS-specific lives in
+`arch init` merges this into prep/arch/catalog.json. Everything AWS-specific lives in
 src/aws/. Lifecycle facts and recent changes are NOT seeded: they are looked up on AWS pages and stored
-with a source URL and a verified_on date by `arch.py refresh`.
+with a source URL and a verified_on date by `arch refresh`.
 """
 from __future__ import annotations
 
 from typing import Final, NamedTuple
 
-# Hosts accepted as a source for `arch.py refresh` (a specific page, not just the host)
+# Hosts accepted as a source for `arch refresh` (a specific page, not just the host)
 SOURCE_HOSTS: Final[tuple[str, ...]] = ("aws.amazon.com", "docs.aws.amazon.com")
 
 DIMENSIONS: Final[tuple[str, ...]] = (
@@ -53,8 +53,8 @@ class Pair(NamedTuple):
     members: tuple[str, ...]
 
 
-# Tier 1 is never seeded: `arch.py init` promotes the services your resume mentions
-# (or the list pinned with `src/user/profile.py tier1`).
+# Tier 1 is never seeded: `arch init` promotes the services your resume mentions
+# (or the list pinned with `profile tier1`).
 SERVICES: Final[tuple[Service, ...]] = (
     # Edge & Networking
     Service(AREA_EDGE_NETWORKING, "CloudFront", 2, ("CDN", "OAC", "Origin Access Control")),

@@ -1,7 +1,7 @@
 # interview/leadership Specification
 
 ## Purpose
-Keep leadership interview questions, the user's principle for each, and STAR examples per company in `prep/leadership/`. Implemented in `lead`.
+Keep leadership interview questions, the user's principle for each, and STAR examples per company stored in the database. Implemented in `lead`.
 
 ## Requirements
 

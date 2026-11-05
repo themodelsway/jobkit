@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""role knowledge drill data, kept in prep/arch/. Standard library only.
+"""Architecture-fundamentals drill data for one or more technologies (tracks), kept in prep/arch/.
+Standard library only.
 
-  python src/interview/arch.py init                  # create/extend catalog + progress from src/aws/arch_seed.py (never overwrites)
-  python src/interview/arch.py status                # per area: cards by confidence
-  python src/interview/arch.py next [--area A] [--tier N] [--kind service|pair|scenario] [--order default|random]
-  python src/interview/arch.py show ID
-  python src/interview/arch.py set ID confidence|notes VALUE     # confidence: 0 none, 1 some gaps, 2 solid
-  python src/interview/arch.py list [--area A] [--tier N] [--kind K]
-  python src/interview/arch.py for-jd jd.txt         # cards the JD mentions, weakest first ("-" = stdin)
-  python src/interview/arch.py stale [--months 6]    # cards whose facts are unverified or old
-  python src/interview/arch.py refresh ID --status active|maintenance|sunset|unverified [--date D] [--note T] --source URL
+  arch tracks                # tracks you can drill (aws is bundled; others you add) and which are enabled
+  arch track add NAME --seed FILE|-   # register another technology from a JSON seed (see the interview-prep skill)
+  arch init [--track NAME ...]   # create/extend catalog + progress for the tracks (default: enabled ones, else aws)
+  arch status                # per area: cards by confidence
+  arch next [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--order default|random]
+  arch show ID
+  arch set ID confidence|notes VALUE     # confidence: 0 none, 1 some gaps, 2 solid
+  arch list [--track T] [--area A] [--tier N] [--kind K]
+  arch for-jd jd.txt         # cards the JD mentions, weakest first ("-" = stdin)
+  arch stale [--months 6]    # cards whose facts are unverified or old
+  arch refresh ID --status active|maintenance|sunset|unverified [--date D] [--note T] --source URL
                                       [--change "DATE|SUMMARY"]...       # record researched facts (source required)
 
 Catalog (topics + sourced facts) and progress (your confidence/notes) are separate files, so refreshing facts
@@ -18,42 +21,32 @@ never touches your progress. Sessions live in sessions.py.
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
-from pathlib import Path
-from typing import Final, NotRequired, TypedDict
-from urllib.parse import urlparse
+from typing import Final, NotRequired, TypedDict, cast
 
 from jobkit import common
 from jobkit.common import ToolError
-from jobkit.interview.aws import arch_seed as seed
+from jobkit.interview import tables, tracks
 from jobkit.resumes import query_resume as qr
 from jobkit.resumes.resume_data import Company
 from jobkit.user import profile as up
 
-ROOT: Final[Path] = common.REPO_ROOT
-LOCK: Final[Path] = common.LOCK_FILE
-DIR: Path = ROOT / "prep" / "arch"
-CATALOG: Path = DIR / "catalog.json"
-PROGRESS: Path = DIR / "progress.json"
 STATUSES: Final[tuple[str, ...]] = ("active", "maintenance", "sunset", "unverified")
 KINDS: Final[tuple[str, ...]] = ("service", "pair", "scenario")
 CONF: Final[dict[int, str]] = {0: "not drilled", 1: "some gaps", 2: "solid"}
-SOURCE_HOSTS: Final[tuple[str, ...]] = seed.SOURCE_HOSTS
 MAX_LINKS_PER_COMPANY: Final[int] = 3
 
 # Shared helpers re-exported under the names the other interview tools already use.
 slug = common.slug
-load = common.load_json
-save = common.save_json
-locked = common.locked
 
 
 class Lifecycle(TypedDict):
-    """What the AWS pages say about a service's availability."""
+    """What the vendor's documentation says about a service's availability."""
 
     status: str
     date: NotRequired[str]
@@ -74,6 +67,7 @@ class Card(TypedDict):
     """A drill topic: a service, a decision pair or a design scenario."""
 
     id: str
+    track: NotRequired[str]
     kind: str
     area: str
     name: str
@@ -90,6 +84,7 @@ class Catalog(TypedDict):
 
     dimensions: list[str]
     scenarios_note: str
+    tracks: NotRequired[list[str]]
     cards: list[Card]
 
 
@@ -112,14 +107,15 @@ class ProgressFile(TypedDict):
 
 def catalog() -> Catalog:
     """The card catalog; fails when `init` has not run."""
-    if not CATALOG.exists():
-        raise ToolError("No prep/arch/catalog.json yet: run `arch.py init` first.")
-    return load(CATALOG, None)
+    cat = tables.load_catalog()
+    if cat is None:
+        raise ToolError("No architecture catalog yet: run `arch init` first.")
+    return cast(Catalog, cat)
 
 
 def progress() -> ProgressFile:
     """The user's progress per card (empty before the first change)."""
-    return load(PROGRESS, {"cards": {}})
+    return {"cards": cast(dict[str, Progress], tables.load_progress())}
 
 
 def blank_progress() -> Progress:
@@ -132,11 +128,21 @@ def progress_of(prog: dict[str, Progress], card_id: str) -> Progress:
     return prog.get(card_id) or blank_progress()
 
 
+def track_of(card: Card) -> str:
+    """The track a card belongs to (cards made before tracks existed are AWS)."""
+    return card.get("track", tracks.BUILTIN)
+
+
+def area_label(card: Card, several: bool) -> str:
+    """The card's area, prefixed with its track when more than one track is in use."""
+    return f"{track_of(card)}: {card['area']}" if several else card["area"]
+
+
 def new_card(kind: str, cid: str, name: str, area: str, tier: int,
-             aliases: Iterable[str] = (), members: Iterable[str] = ()) -> Card:
+             aliases: Iterable[str] = (), track: str = tracks.BUILTIN) -> Card:
     """A card with no sourced facts (lifecycle unverified)."""
-    return {"id": cid, "kind": kind, "area": area, "name": name, "tier": tier, "aliases": list(aliases),
-            "members": list(members), "lifecycle": {"status": "unverified"}, "recent_changes": [],
+    return {"id": cid, "track": track, "kind": kind, "area": area, "name": name, "tier": tier, "aliases": list(aliases),
+            "members": [], "lifecycle": {"status": "unverified"}, "recent_changes": [],
             "verified_on": None}
 
 
@@ -175,8 +181,10 @@ def matches(text: str, cat: Catalog) -> list[Card]:
 
 def flt(cards: Iterable[Card], args: argparse.Namespace) -> list[Card]:
     """Cards that pass the --area, --tier and --kind filters of `args`."""
+    wanted_track = getattr(args, "track", None)
     return [c for c in cards
-            if (not args.area or args.area.lower() in c["area"].lower())
+            if (not wanted_track or track_of(c) == wanted_track)
+            and (not args.area or args.area.lower() in c["area"].lower())
             and (not args.tier or c["tier"] <= args.tier)
             and (not args.kind or c["kind"] == args.kind)]
 
@@ -190,10 +198,10 @@ def valid_iso(text: str | None) -> bool:
         return False
 
 
-def valid_source(url: str | None) -> bool:
-    """Whether url is an https page (not just the host) on an accepted AWS documentation host."""
-    parsed = urlparse(url or "")
-    return parsed.scheme == "https" and (parsed.hostname or "") in SOURCE_HOSTS and len(parsed.path) > 1
+def valid_source(url: str | None, card: Card) -> bool:
+    """Whether url is an https page (not just the host) on a documentation host of the card's track."""
+    hosts = tracks.load_seed(track_of(card))["source_hosts"]
+    return tracks.source_ok(url, hosts)
 
 
 # ---------------------------------------------------------------- init
@@ -209,26 +217,37 @@ def load_resume_context() -> tuple[list[Company] | None, set[str]]:
     return list(companies.values()), names
 
 
-def _service_card(row: seed.Service, pinned: set[str], skill_names: set[str],
+def _service_card(row: tracks.ServiceSeed, track: str, pinned: set[str], skill_names: set[str],
                   companies: list[Company] | None) -> Card:
     """Card for one seeded service; tier 1 when pinned, or when the resumes mention it by name."""
-    card = new_card("service", slug(row.name), row.name, row.area, row.tier, row.aliases)
+    aliases = row.get("aliases", [])
+    card = new_card("service", tracks.prefix(track) + slug(row["name"]), row["name"], row["area"], row["tier"],
+                    aliases, track=track)
     if pinned:
-        card["tier"] = 1 if row.name.lower() in pinned else row.tier
+        card["tier"] = 1 if row["name"].lower() in pinned else row["tier"]
         return card
     name_only: Card = {**card, "aliases": []}      # aliases like 'metrics' are too loose to count
-    if row.name.lower() in skill_names or (companies is not None and resume_links(name_only, companies)):
+    if row["name"].lower() in skill_names or (companies is not None and resume_links(name_only, companies)):
         card["tier"] = 1
     return card
 
 
-def build_wanted_cards(companies: list[Company] | None, skill_names: set[str]) -> list[Card]:
-    """Every seeded card (services, decision pairs, scenarios) with tiers set from the user's profile."""
+def _pair_card(pair: tracks.PairSeed, track: str) -> Card:
+    """Card for one seeded decision pair."""
+    card = new_card("pair", f"{tracks.prefix(track)}pair-" + slug(pair["name"]), pair["name"], "Decision pairs", 1,
+                    track=track)
+    card["members"] = list(pair["members"])
+    return card
+
+
+def build_wanted_cards(seed: tracks.TrackSeed, companies: list[Company] | None, skill_names: set[str]) -> list[Card]:
+    """Every card of one track (services, decision pairs, scenarios) with tiers set from the user's profile."""
+    track, pre = seed["name"], tracks.prefix(seed["name"])
     pinned = {name.lower() for name in up.tier1_services()}
-    wanted = [_service_card(row, pinned, skill_names, companies) for row in seed.SERVICES]
-    wanted += [new_card("pair", "pair-" + slug(pair.name), pair.name, "Decision pairs", 1, [], pair.members)
-               for pair in seed.PAIRS]
-    wanted += [new_card("scenario", "scn-" + slug(text), text, "Scenarios", 1) for text in seed.SCENARIOS]
+    wanted = [_service_card(row, track, pinned, skill_names, companies) for row in seed["services"]]
+    wanted += [_pair_card(pair, track) for pair in seed["pairs"]]
+    wanted += [new_card("scenario", f"{pre}scn-" + slug(text), text, "Scenarios", 1, track=track)
+               for text in seed["scenarios"]]
     return wanted
 
 
@@ -244,7 +263,7 @@ def merge_cards(existing: list[Card], wanted: list[Card]) -> tuple[list[Card], i
             merged.append(card)
             continue
         old["name"], old["area"], old["tier"] = card["name"], card["area"], card["tier"]
-        old["aliases"], old["members"] = card["aliases"], card["members"]
+        old["aliases"], old["members"], old["track"] = card["aliases"], card["members"], track_of(card)
         merged.append(old)
     return merged + list(have.values()), added
 
@@ -258,17 +277,22 @@ def refresh_links(prog: ProgressFile, cards: list[Card], companies: list[Company
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create or extend the catalog and progress from the seed and the resume data."""
+    """Create or extend the catalog and progress for the chosen tracks and the resume data."""
     companies, skill_names = load_resume_context()
-    cat: Catalog = load(CATALOG, {"dimensions": [], "scenarios_note": "", "cards": []})
-    cat["dimensions"] = list(seed.DIMENSIONS)
-    cat["cards"], added = merge_cards(cat["cards"], build_wanted_cards(companies, skill_names))
-    save(CATALOG, cat)
+    cat = cast(Catalog, tables.load_catalog() or {"dimensions": [], "scenarios_note": "", "cards": []})
+    chosen = list(dict.fromkeys(args.track or cat.get("tracks") or [tracks.BUILTIN]))
+    seeds = [tracks.load_seed(name) for name in chosen]
+    cat["tracks"] = list(dict.fromkeys([*cat.get("tracks", []), *chosen]))
+    cat["dimensions"] = seeds[0].get("dimensions") or tracks.builtin_seed().get("dimensions", [])
+    added = 0
+    for seed in seeds:
+        cat["cards"], new = merge_cards(cat["cards"], build_wanted_cards(seed, companies, skill_names))
+        added += new
+    tables.save_catalog(cat)
     prog = progress()
     refresh_links(prog, cat["cards"], companies)
-    save(PROGRESS, prog)
-    print(f"{len(cat['cards'])} cards ({added} new) in {CATALOG.relative_to(ROOT)}; "
-          f"progress in {PROGRESS.relative_to(ROOT)}")
+    tables.save_progress(prog["cards"])
+    print(f"{len(cat['cards'])} cards ({added} new) stored")
 
 
 # ---------------------------------------------------------------- read commands
@@ -276,15 +300,15 @@ def cmd_init(args: argparse.Namespace) -> None:
 def show(card: Card, prog: Progress) -> None:
     """Print one card with its progress and sourced facts."""
     life = card["lifecycle"]
-    print(f"[{card['id']}] {card['name']} | {card['area']} | {card['kind']} tier {card['tier']}")
+    print(f"[{card['id']}] {card['name']} | {track_of(card)} | {card['area']} | {card['kind']} tier {card['tier']}")
     print(f"  confidence: {CONF[prog['confidence']]} | last drilled: {prog['last_drilled'] or '-'}")
     if card["members"]:
         print("  compare: " + ", ".join(card["members"]))
     print(f"  lifecycle: {life['status']}" + (f" ({life['date']})" if "date" in life else "")
           + (f" - {life['note']}" if "note" in life else ""))
     if life.get("seeded") and not card["verified_on"]:
-        print("  (seeded lead from the project, NOT verified: check the AWS source before stating it)")
-    print(f"  lifecycle/changes verified on: {card['verified_on'] or 'NEVER (check AWS docs before correcting the user)'}"
+        print("  (seeded lead from the project, NOT verified: check the vendor documentation before stating it)")
+    print(f"  lifecycle/changes verified on: {card['verified_on'] or 'NEVER (check the vendor docs before correcting the user)'}"
           "  [limits, prices and features are never stored: look them up each time]")
     for change in card["recent_changes"]:
         print(f"  change {change['date']}: {change['summary']}")
@@ -302,9 +326,10 @@ def cmd_show(args: argparse.Namespace) -> None:
 def cmd_status(args: argparse.Namespace) -> None:
     """Per area: how many cards are solid, have gaps, or are not drilled."""
     cat, prog = catalog(), progress()["cards"]
+    several = len({track_of(c) for c in cat["cards"]}) > 1
     by_area: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for card in cat["cards"]:
-        by_area[card["area"]][progress_of(prog, card["id"])["confidence"]] += 1
+        by_area[area_label(card, several)][progress_of(prog, card["id"])["confidence"]] += 1
     for area, n in by_area.items():
         print(f"  {area:<30} {n[2]} solid, {n[1]} some gaps, {n[0]} not drilled")
     unverified = sum(1 for c in cat["cards"] if not c["verified_on"])
@@ -372,7 +397,7 @@ def cmd_set(args: argparse.Namespace) -> None:
         entry["last_drilled"] = date.today().isoformat()
     else:
         entry["notes"] = args.value
-    save(PROGRESS, prog)
+    tables.save_progress(prog["cards"])
     print(f"Updated {args.id}.{args.field}")
 
 
@@ -387,11 +412,11 @@ def parse_changes(raw: Iterable[str]) -> list[tuple[str, str]]:
     return changes
 
 
-def check_refresh_args(args: argparse.Namespace) -> list[tuple[str, str]]:
+def check_refresh_args(args: argparse.Namespace, card: Card) -> list[tuple[str, str]]:
     """Validate the refresh arguments; returns the parsed changes."""
-    if not valid_source(args.source):
-        raise ToolError("--source must be an https URL on aws.amazon.com or docs.aws.amazon.com "
-                        "(a specific page, not just the host)")
+    if not valid_source(args.source, card):
+        hosts = ", ".join(tracks.load_seed(track_of(card))["source_hosts"])
+        raise ToolError(f"--source must be an https URL on one of: {hosts} (a specific page, not just the host)")
     if args.date and not valid_iso(args.date):
         raise ToolError("--date must be YYYY-MM-DD")
     changes = parse_changes(args.change)
@@ -408,7 +433,7 @@ def cmd_refresh(args: argparse.Namespace) -> None:
     """Record researched lifecycle facts for a card; a source URL is required."""
     cat = catalog()
     card = find(cat, args.id)
-    changes = check_refresh_args(args)
+    changes = check_refresh_args(args, card)
     lifecycle: Lifecycle = {"status": args.status, "source": args.source}
     if args.date:
         lifecycle["date"] = args.date
@@ -418,13 +443,38 @@ def cmd_refresh(args: argparse.Namespace) -> None:
     card["recent_changes"] += [Change(date=d, summary=s, source=args.source) for d, s in changes]
     card["recent_changes"].sort(key=lambda change: change["date"])
     card["verified_on"] = date.today().isoformat()
-    save(CATALOG, cat)
+    tables.save_catalog(cat)
     print(f"Refreshed {args.id} (verified {card['verified_on']}).")
 
 
 # ---------------------------------------------------------------- entry point
 
+def cmd_tracks(args: argparse.Namespace) -> None:
+    """List the known tracks, which are enabled, and how many cards each has."""
+    stored = tables.load_catalog() or {"cards": []}
+    cards = stored["cards"]
+    enabled = stored.get("tracks") or sorted({track_of(c) for c in cards})
+    for name in tracks.known_tracks():
+        seed = tracks.load_seed(name)
+        count = sum(1 for c in cards if track_of(c) == name)
+        print(f"  {name:<16} {'enabled' if name in enabled else 'not enabled':<12} {count:>4} cards   "
+              f"docs: {', '.join(seed['source_hosts'])}")
+
+
+def cmd_track_add(args: argparse.Namespace) -> None:
+    """Validate a JSON seed and keep it as a custom track (replaces an earlier seed of that name)."""
+    try:
+        raw = json.loads(common.read_text_arg(args.seed))
+    except json.JSONDecodeError as exc:
+        raise ToolError(f"The seed is not valid JSON: {exc}") from exc
+    seed = tracks.validate_seed(raw, args.name)
+    tracks.save_track(seed)
+    print(f"Saved track {args.name}: {len(seed['services'])} services, {len(seed['pairs'])} pairs, "
+          f"{len(seed['scenarios'])} scenarios. Run `arch init --track {args.name}`.")
+
+
 def _add_filters(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--track")
     parser.add_argument("--area")
     parser.add_argument("--tier", type=int)
     parser.add_argument("--kind", choices=KINDS)
@@ -434,7 +484,15 @@ def build_parser() -> argparse.ArgumentParser:
     """The command-line parser."""
     parser = common.make_parser(__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("init").set_defaults(fn=cmd_init)
+    init = sub.add_parser("init")
+    init.add_argument("--track", action="append", default=[])
+    init.set_defaults(fn=cmd_init)
+    sub.add_parser("tracks").set_defaults(fn=cmd_tracks)
+    track = sub.add_parser("track").add_subparsers(dest="track_cmd", required=True)
+    add = track.add_parser("add")
+    add.add_argument("name")
+    add.add_argument("--seed", required=True, help="JSON seed file, or - for stdin")
+    add.set_defaults(fn=cmd_track_add)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     nxt = sub.add_parser("next")
     _add_filters(nxt)

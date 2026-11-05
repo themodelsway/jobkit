@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Readiness report across architecture cards, leadership questions and STAR stories. Read-only, stdlib only.
 
-  python src/interview/readiness.py                 # summary per area / category / company, plus gaps to work on
-  python src/interview/readiness.py --jd jd.txt     # same, limited to what that job description touches (architecture + stories)
-  python src/interview/readiness.py --days 30       # a "solid" answer older than this many days counts as aging (default 30)
+  readiness                 # summary per area / category / company, plus gaps to work on
+  readiness --jd jd.txt     # same, limited to what that job description touches (architecture + stories)
+  readiness --days 30       # a "solid" answer older than this many days counts as aging (default 30)
 
 This is evidence, not a score. Each item gets one label from your own logged drills:
   untested        never drilled
@@ -20,19 +20,17 @@ There is deliberately no single percentage: it would hide thin evidence and the 
 from __future__ import annotations
 
 import argparse
-import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import date
-from pathlib import Path
-from typing import Final, TypedDict
+from typing import Final, TypedDict, cast
 
 from jobkit import common
 from jobkit.common import ToolError
 from jobkit.interview import arch
 from jobkit.interview import lead
 from jobkit.interview import prep
-from jobkit.interview import sessions
+from jobkit.interview import tables
 from jobkit.interview.story_model import Engagement, Story
 from jobkit.resumes import query_resume as qr
 
@@ -55,23 +53,8 @@ class Evidence(TypedDict):
 
 
 def attempts() -> dict[str, Evidence]:
-    """item id -> evidence, from the sessions that count as practice."""
-    out: dict[str, Evidence] = defaultdict(lambda: {"graded2": set(), "answered": set()})
-
-    def warn(file: Path) -> None:
-        print(f"Warning: {file.name} is unreadable (see {file.name}.bak); its answers are not counted.",
-              file=sys.stderr)
-
-    for _, session in sessions.iter_sessions(warn):
-        for entry in session.get("log", []):
-            if not (entry.get("answer") or "").strip():
-                continue
-            if entry.get("tutor") and not entry.get("quiz"):
-                continue       # a lesson is not a test
-            out[entry["item"]]["answered"].add(entry["at"][:10])
-            if entry.get("confidence_after") == 2:
-                out[entry["item"]]["graded2"].add(entry["at"][:10])
-    return out
+    """item id -> evidence, from the answers logged in sessions that count as practice."""
+    return cast(dict[str, Evidence], tables.evidence())
 
 
 def label(conf: int, last: str | None, evidence: Evidence | None, max_age: int) -> str:
@@ -114,11 +97,12 @@ def arch_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -
     cat = arch.catalog()
     cards = jd_cards(jd_text, cat) if jd_text is not None else cat["cards"]
     prog = arch.progress()["cards"]
+    several = len({arch.track_of(c) for c in cat["cards"]}) > 1
     by_area: dict[str, list[str]] = defaultdict(list)
     weak: list[tuple[int, str, str]] = []
     for card in cards:
         lab = card_label(card, prog, hist, days)
-        by_area[card["area"]].append(lab)
+        by_area[arch.area_label(card, several)].append(lab)
         if card["tier"] == 1 and lab in WEAK_LABELS:
             weak.append((ORDER.index(lab), card["name"], lab))
     print("ARCHITECTURE" + (" (cards matching the JD)" if jd_text is not None else ""))
@@ -128,7 +112,7 @@ def arch_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -
                [card_label(c, prog, hist, days) for c in cards if c["tier"] == 1 and c["kind"] == "service"]))
     services = [c for c in cards if c["kind"] == "service"]
     unchecked = sum(1 for c in services if c.get("verified_on") is None)
-    print(f"  Lifecycle facts not yet checked against AWS docs: {unchecked} of {len(services)} services "
+    print(f"  Lifecycle facts not yet checked against the vendor docs: {unchecked} of {len(services)} services "
           "(checked on first drill)")
     if jd_text is not None:
         print("  (design scenarios are not matched to a JD; run without --jd to see them)")
@@ -142,8 +126,8 @@ def lead_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -
     if jd_text is not None:
         print("\nLEADERSHIP: not filtered by a JD; run without --jd for the full view.")
         return []
-    if not lead.QUESTIONS.exists():
-        print("\nLEADERSHIP: not set up (run lead.py init).")
+    if not tables.has_questions():
+        print("\nLEADERSHIP: not set up (run lead init).")
         return []
     questions, progress = lead.cards(), lead.prog()["questions"]
     by_category: dict[str, list[str]] = defaultdict(list)
@@ -160,7 +144,7 @@ def lead_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -
         print(line(category, labels))
     filled = sum(len(progress.get(q["id"], lead.blank())["examples"]) for q in questions)
     print(f"  STAR examples filled: {filled} of {len(questions) * lead.TOP_N} (question x top-{lead.TOP_N} company)")
-    companies = arch.load(lead.PROFILE, {"companies": {}})["companies"]
+    companies = tables.load_company_facts()
     recorded = [c for c, facts in companies.items() if any(facts.values())]
     print(f"  Scope facts (team size, budget...) recorded for {len(recorded)} of {len(companies)} companies")
     return sorted(gaps)[:MAX_GAPS]
@@ -195,9 +179,9 @@ def story_notes(story: Story, engagements: Sequence[Engagement]) -> list[str]:
 
 def story_section(jd_text: str | None, hist: Mapping[str, Evidence]) -> list[tuple[str, str, str]]:
     """Print the story summary; returns the stories still to write (company, theme, label)."""
-    stories = prep.stories() if prep.STORIES.exists() else []
+    stories = prep.stories() if tables.has_stories() else []
     if not stories:
-        print("\nSTAR STORIES: none yet (run prep.py init).")
+        print("\nSTAR STORIES: none yet (run prep init).")
         return []
     if jd_text is not None:
         themes = qr.analyze(jd_text).themes
@@ -220,7 +204,7 @@ def story_section(jd_text: str | None, hist: Mapping[str, Evidence]) -> list[tup
         print(f"  {company:<30} {len(labels):>3} stories | "
               + "  ".join(f"{k} {counts[k]}" for k in STORY_LABELS if counts[k]))
     if quality:
-        print("  Story quality (from prep.py validate; not a grade of your answers):")
+        print("  Story quality (from prep validate; not a grade of your answers):")
         for sid, lab, notes in quality:
             print(f"    {sid} [{lab}]: " + "; ".join(notes))
     return todo[:MAX_GAPS]
@@ -244,8 +228,8 @@ def cmd_report(args: argparse.Namespace) -> None:
     """Print the readiness report."""
     jd_text = common.read_text_arg(args.jd) if args.jd else None
     hist = attempts()
-    if not arch.CATALOG.exists():
-        raise ToolError("No architecture catalog yet: run arch.py init.")
+    if not tables.has_catalog():
+        raise ToolError("No architecture catalog yet: run arch init.")
     weak = arch_section(jd_text, hist, args.days)
     gaps = lead_section(jd_text, hist, args.days)
     todo = story_section(jd_text, hist)
