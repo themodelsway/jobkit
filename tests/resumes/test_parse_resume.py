@@ -1,0 +1,159 @@
+"""Characterization tests for parse_resume.py and the merge step in process_resumes.py.
+Fixtures in tests/fixtures are synthetic (no real names or employers). Golden files record current behaviour:
+regenerate them only when a behaviour change is intended. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+import copy
+import json
+import unittest
+from pathlib import Path
+
+
+from jobkit.resumes import parse_resume as pr
+from jobkit.resumes import process_resumes as proc
+
+FIX = Path(__file__).resolve().parents[1] / "fixtures"
+REGISTRY = {
+    "acme-corp": ("Acme Corp", r"Acme Corp(?:" + pr.SEP + r"(?P<t>.+))?"),
+    "globex": ("Globex Inc", r"Globex Inc"),
+    "initech": ("Initech", r"Initech(?:" + pr.SEP + r"(?P<t>.+))?"),
+}
+
+
+def parse(name, layout=None):
+    text = (FIX / f"{name}.txt").read_text()
+    lay = (FIX / f"{layout}.txt").read_text() if layout else text
+    return pr.parse_resume(text, lay)
+
+
+def empty_data():
+    return {"companies": {}, "skills": {"groups": {}},
+            "profile": {"summaries": [], "profile_points": [], "education": [], "certifications": [], "projects": []}}
+
+
+class ParserTests(unittest.TestCase):
+    def setUp(self):
+        self._saved = (dict(pr.COMPANIES), dict(pr.COMPANY_RES))
+        pr.set_companies(REGISTRY)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        pr.set_companies(self._saved[0])
+
+    def test_layout_a_matches_golden(self):
+        got = parse("layout_a", "layout_a.layout")
+        want = json.loads((FIX / "layout_a.expected.json").read_text())
+        self.assertEqual(json.loads(json.dumps(got)), want)
+
+    def test_layout_b_matches_golden(self):
+        got = parse("layout_b")
+        want = json.loads((FIX / "layout_b.expected.json").read_text())
+        self.assertEqual(json.loads(json.dumps(got)), want)
+
+    def test_gen_ai_label_goes_to_ai_ml(self):
+        for label in ("Gen AI", "GenAI"):
+            skills, problems = pr.parse_skills({"skills": [f"• {label}: Topic One, Topic Two"]})
+            self.assertEqual(problems, [], label)
+            self.assertEqual([i["name"] for i in skills["AI/ML"]], ["Topic One", "Topic Two"], label)
+
+    def test_not_a_resume(self):
+        r = pr.parse_resume("just some text\nwith no work heading")
+        self.assertEqual(r, {"is_resume": False, "problems": ["no work-experience heading found"]})
+
+    def test_discover_companies(self):
+        self.assertEqual(pr.discover_companies((FIX / "layout_a.layout.txt").read_text()),
+                         {"acme-corp": "Acme Corp", "globex-inc": "Globex Inc"})
+        self.assertEqual(pr.discover_companies((FIX / "layout_b.txt").read_text()),
+                         {"initech": "Initech", "acme-corp": "Acme Corp"})
+        self.assertEqual(pr.discover_companies("no sections here"), {})
+
+    def test_registry_is_replaced_not_merged(self):
+        pr.set_companies({})
+        self.assertEqual(pr.COMPANIES, {})
+        entries, _ = pr.parse_work(["Acme Corp", "03/2021 - Present", "• x"])
+        self.assertEqual(entries, [])
+
+
+class HelperTests(unittest.TestCase):
+    def test_clean(self):
+        self.assertEqual(pr.clean("Cross- functional  ( AWS )\xa0team"), "Cross-functional (AWS) team")
+
+    def test_join_lines_hyphen_break(self):
+        self.assertEqual(pr.join_lines(["multi-", "cloud design", "", "next"]), "multi-cloud design next")
+
+    def test_norm_date(self):
+        self.assertEqual(pr.norm_date("03/2021"), "2021-03")
+        self.assertIsNone(pr.norm_date("Present"))
+        self.assertIsNone(pr.norm_date("current"))
+
+    def test_split_items(self):
+        self.assertEqual(pr.split_items("AWS (Amazon Web Services), Lambda; Go and Python"),
+                         ["AWS (Amazon Web Services)", "Lambda", "Go", "Python"])
+        self.assertEqual(pr.split_items("NoSQL – DynamoDB, ."), ["DynamoDB"])
+
+    def test_find_metrics(self):
+        self.assertEqual(pr.find_metrics("Saved $4M and 15% on 7 million orders; 15% again"),
+                         ["$4M", "15%", "7 million"])
+
+    def test_bullet_identity(self):
+        a, b = "Cut page load time by 30%.", "cut page load time by 30"
+        self.assertEqual(pr.bullet_id("acme-corp", a), pr.bullet_id("acme-corp", b))
+        self.assertTrue(pr.bullet_id("acme-corp", a).startswith("acme-"))
+        self.assertGreater(pr.similar(a, b), 0.92)
+        self.assertLess(pr.similar(a, "Mentored six engineers"), 0.5)
+
+    def test_tag_skills(self):
+        terms = pr.skill_terms({"Cloud": [{"name": "Lambda", "aliases": ["AWS Lambda"]},
+                                           {"name": "Go", "aliases": []}]})
+        self.assertNotIn("Go", terms)                     # 1-2 letter terms are skipped
+        self.assertEqual(pr.tag_skills("Built on aws lambda and Lambda", terms), ["Lambda"])
+        self.assertEqual(pr.tag_skills("Lambdas", terms), [])
+
+
+class MergeTests(unittest.TestCase):
+    def setUp(self):
+        self._saved = dict(pr.COMPANIES)
+        pr.set_companies(REGISTRY)
+        self.addCleanup(lambda: pr.set_companies(self._saved))
+
+    def merged(self, *sources):
+        data = empty_data()
+        for src, name, layout in sources:
+            proc.merge_resume(data, src, parse(name, layout))
+        return data
+
+    def test_merge_is_idempotent(self):
+        once = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
+        twice = copy.deepcopy(once)
+        proc.merge_resume(twice, "a.pdf", parse("layout_a", "layout_a.layout"))
+        self.assertEqual(once, twice)
+
+    def test_second_source_accumulates_sources_and_roles(self):
+        data = self.merged(("a.pdf", "layout_a", "layout_a.layout"), ("b.pdf", "layout_b", None))
+        acme = data["companies"]["acme-corp"]
+        self.assertEqual(len(acme["roles"]), 1)           # same (start, end) -> one role
+        self.assertEqual(sorted(acme["roles"][0]["sources"]), ["a.pdf", "b.pdf"])
+        self.assertEqual(sorted(acme["roles"][0]["titles"]), ["Lead Engineer", "Staff Engineer"])
+        self.assertEqual(len(data["companies"]["initech"]["roles"]), 1)
+        self.assertEqual(data["companies"]["initech"]["roles"][0]["clients"], ["Hooli"])
+
+    def test_near_duplicate_becomes_variant(self):
+        data = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
+        first = data["companies"]["acme-corp"]["bullets"][0]
+        r = parse("layout_a", "layout_a.layout")
+        r["work"][0]["bullets"] = [first["text"].rstrip(".") + " today."]
+        proc.merge_resume(data, "c.pdf", r)
+        self.assertEqual(len(data["companies"]["acme-corp"]["bullets"]), 2)
+        self.assertEqual(first["variants"], [first["text"].rstrip(".") + " today."])
+        self.assertIn("c.pdf", first["sources"])
+
+    def test_skills_and_summary_merge(self):
+        data = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
+        names = {g: [s["name"] for s in v] for g, v in data["skills"]["groups"].items()}
+        self.assertIn("SQL", names["Unsorted"])
+        sql = next(s for s in data["skills"]["groups"]["Unsorted"] if s["name"] == "SQL")
+        self.assertEqual(sql["aliases"], ["Structured Query Language"])
+        self.assertEqual(len(data["profile"]["summaries"]), 1)
+        self.assertEqual(data["profile"]["headlines"], ["Senior Software Engineer"])
+
+
+if __name__ == "__main__":
+    unittest.main()

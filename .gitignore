@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Raw extracted resume text: contains contact details (phone, email, LinkedIn)
+/output/
+
+# Source resumes / PDFs must never be committed
+*.pdf
+
+# Claude Code local-only files
+.claude/settings.local.json
+.claude/scratchpad/
+
+# Personal name/contact header for generated resumes
+*.local.md
+
+# Personal resume data (work history, curation)
+/resume-data/
+
+# Interview prep stories (personal)
+/prep/
+/profile/

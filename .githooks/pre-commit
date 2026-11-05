@@ -1,0 +1,18 @@
+#!/bin/sh
+# Runs the project checks before each commit. Enable once per clone:
+#   git config core.hooksPath .githooks
+# Skip in an emergency with: git commit --no-verify
+cd "$(git rev-parse --show-toplevel)" || exit 1
+PY=.venv/bin/python
+if [ ! -x "$PY" ]; then
+    echo "pre-commit: .venv not found. Create it with: uv sync" >&2
+    exit 1
+fi
+run() {
+    echo "pre-commit: $1"
+    shift
+    "$@" || { echo "pre-commit: FAILED, commit aborted" >&2; exit 1; }
+}
+run "ruff"  "$PY" -m ruff check src tests
+run "pyright" "$PY" -m pyright
+run "tests" "$PY" -m unittest discover -s tests -t .

@@ -1,0 +1,61 @@
+{
+ "certifications": [
+  "Example Certified Engineer"
+ ],
+ "education": [],
+ "headline": "",
+ "is_resume": true,
+ "problems": [
+  "unknown skill group label: Databases"
+ ],
+ "profile_points": [
+  "Hands-on engineer with 10+ years of experience."
+ ],
+ "projects": [],
+ "skills": {
+  "Unsorted": [
+   {
+    "aliases": [],
+    "name": "MySQL"
+   },
+   {
+    "aliases": [
+     "data platform"
+    ],
+    "name": "Spark"
+   },
+   {
+    "aliases": [],
+    "name": "Kafka"
+   }
+  ]
+ },
+ "summary": "",
+ "work": [
+  {
+   "bullets": [
+    "Designed an order pipeline processing 2 million orders per day.",
+    "Reduced deploy time by 45% with automated pipelines."
+   ],
+   "client": "Hooli",
+   "company_id": "initech",
+   "dated": true,
+   "end": "2020-12",
+   "start": "2018-06",
+   "subtitle": "Backend Developer",
+   "title": "Lead Developer"
+  },
+  {
+   "bullets": [
+    "Mentored 6 engineers."
+   ],
+   "client": "",
+   "company_id": "acme-corp",
+   "dated": true,
+   "end": null,
+   "start": "2021-03",
+   "subtitle": "",
+   "title": "Staff Engineer"
+  }
+ ]
+}

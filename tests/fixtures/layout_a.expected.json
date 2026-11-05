@@ -1,0 +1,93 @@
+{
+ "certifications": [
+  "Example Certified Engineer"
+ ],
+ "education": [
+  "BS Computer Science, Example University"
+ ],
+ "headline": "Senior Software Engineer",
+ "is_resume": true,
+ "problems": [
+  "unknown skill group label: Databases"
+ ],
+ "profile_points": [],
+ "projects": [],
+ "skills": {
+  "Languages": [
+   {
+    "aliases": [],
+    "name": "Python"
+   },
+   {
+    "aliases": [],
+    "name": "TypeScript"
+   },
+   {
+    "aliases": [],
+    "name": "Go"
+   }
+  ],
+  "Leadership": [
+   {
+    "aliases": [],
+    "name": "Roadmapping"
+   },
+   {
+    "aliases": [],
+    "name": "Mentoring"
+   },
+   {
+    "aliases": [],
+    "name": "Stakeholder Management"
+   }
+  ],
+  "Unsorted": [
+   {
+    "aliases": [
+     "Structured Query Language"
+    ],
+    "name": "SQL"
+   },
+   {
+    "aliases": [],
+    "name": "PostgreSQL"
+   },
+   {
+    "aliases": [],
+    "name": "Performance Tuning"
+   },
+   {
+    "aliases": [],
+    "name": "Example Certified Designer"
+   }
+  ]
+ },
+ "summary": "Engineer with deep experience in web services and data pipelines. Leads teams and ships on time.",
+ "work": [
+  {
+   "bullets": [
+    "Cut page load time by 30% across 12 services using caching and query tuning.",
+    "Built a search service on PostgreSQL serving 5,000 users. Added monitoring and a test harness."
+   ],
+   "client": "",
+   "company_id": "acme-corp",
+   "dated": true,
+   "end": null,
+   "start": "2021-03",
+   "subtitle": "",
+   "title": "Lead Engineer"
+  },
+  {
+   "bullets": [
+    "Moved 40 services to a shared build system."
+   ],
+   "client": "",
+   "company_id": "globex",
+   "dated": true,
+   "end": "2021-02",
+   "start": "2015-01",
+   "subtitle": "",
+   "title": "Senior Engineer"
+  }
+ ]
+}

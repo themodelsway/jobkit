@@ -1,0 +1,26 @@
+Jane Example
+Example City | portfolio on request
+Senior Software Engineer
+Engineer with deep experience in web services and data pipelines.
+Leads teams and ships on time.
+SKILLS
+• Leadership Skills: Roadmapping, Mentoring, Stakeholder Management
+• Databases: SQL (Structured Query Language), PostgreSQL, Performance Tuning
+• Languages: Python, TypeScript and Go
+• Example Certified Designer
+WORK EXPERIENCE
+Acme Corp
+03/2021 - Present
+Lead Engineer
+• Cut page load time by 30% across 12 services using
+caching and query tuning.
+• Built a search service on PostgreSQL serving 5,000 users.
+o Added monitoring and a test harness.
+Globex Inc
+01/2015 - 02/2021
+Senior Engineer
+• Moved 40 services to a shared build system.
+CERTIFICATIONS
+• Example Certified Engineer
+EDUCATION
+BS Computer Science, Example University

@@ -1,0 +1,17 @@
+Jane Example
+Work History
+Initech – Lead Developer
+Role: Backend Developer
+Client: Hooli
+06/2018 – 12/2020
+● Designed an order pipeline processing 2 million orders per day.
+● Reduced deploy time by 45% with automated pipelines.
+Acme Corp – Staff Engineer
+03/2021 – Current
+● Mentored 6 engineers.
+Profile
+§ Hands-on engineer with 10+ years of experience.
+Technical Skills
+● Databases: MySQL, Spark (data platform), Kafka
+Certifications
+● Example Certified Engineer

@@ -1,0 +1,7 @@
+target-version = "py314"
+src = ["src", "tests"]
+
+[lint]
+# Errors, pyflakes, pyupgrade, bugbear. E402 is off for tests that import after setup.
+select = ["E4", "E7", "E9", "F", "UP", "B"]
+ignore = ["E402"]
