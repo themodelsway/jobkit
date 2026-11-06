@@ -4,6 +4,7 @@
 # Skip in an emergency with: git commit --no-verify
 cd "$(git rev-parse --show-toplevel)" || exit 1
 PY=.venv/bin/python
+[ -x "$PY" ] || PY=.venv/Scripts/python.exe     # Windows (Git for Windows runs this hook)
 if [ ! -x "$PY" ]; then
     echo "pre-commit: .venv not found. Create it with: uv sync" >&2
     exit 1

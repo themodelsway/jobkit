@@ -23,7 +23,7 @@ def jd_from_bullets(data: dict) -> str:
 class QueryOptionTests(PipelineCase):
     def jd_file(self):
         jd = self.tmp / "jd-opts.txt"
-        jd.write_text(jd_from_bullets(self.data))
+        jd.write_text(jd_from_bullets(self.data), encoding="utf-8")
         return str(jd)
 
     def test_for_jd_top_limits_bullets_per_company(self):
@@ -64,11 +64,11 @@ class QueryOptionTests(PipelineCase):
 class BuildOptionTests(PipelineCase):
     def build(self, *extra):
         jd, out = self.tmp / "jd3.txt", self.tmp / "out" / f"r{len(extra)}.md"
-        jd.write_text(jd_from_bullets(self.data))
+        jd.write_text(jd_from_bullets(self.data), encoding="utf-8")
         with mock.patch.object(br, "header_file", return_value=self.tmp / "header.md"):
             code, _, err = self.cli(br.main, str(jd), "--output", str(out), *extra)
         self.assertEqual(code, 0, err)
-        return out.read_text()
+        return out.read_text(encoding="utf-8")
 
     def test_top_limits_bullets_and_title_overrides(self):
         many, few = self.build("--top", "4"), self.build("--top", "1")
@@ -86,7 +86,7 @@ class ProcessResumesTests(HomeCase):
         self.tmp = self.home
         self.root = self.tmp / "resumes"
         self.root.mkdir()
-        (self.root / "a.txt").write_text((FIX / "layout_b.txt").read_text())
+        (self.root / "a.txt").write_text((FIX / "layout_b.txt").read_text(encoding="utf-8"))
         saved = dict(pr.COMPANIES)
         self.addCleanup(pr.set_companies, saved)
         pr.set_companies(REGISTRY)

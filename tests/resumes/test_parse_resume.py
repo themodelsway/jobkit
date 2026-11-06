@@ -19,8 +19,8 @@ REGISTRY = {
 
 
 def parse(name, layout=None):
-    text = (FIX / f"{name}.txt").read_text()
-    lay = (FIX / f"{layout}.txt").read_text() if layout else text
+    text = (FIX / f"{name}.txt").read_text(encoding="utf-8")
+    lay = (FIX / f"{layout}.txt").read_text(encoding="utf-8") if layout else text
     return pr.parse_resume(text, lay)
 
 
@@ -40,12 +40,12 @@ class ParserTests(unittest.TestCase):
 
     def test_layout_a_matches_golden(self):
         got = parse("layout_a", "layout_a.layout")
-        want = json.loads((FIX / "layout_a.expected.json").read_text())
+        want = json.loads((FIX / "layout_a.expected.json").read_text(encoding="utf-8"))
         self.assertEqual(json.loads(json.dumps(got)), want)
 
     def test_layout_b_matches_golden(self):
         got = parse("layout_b")
-        want = json.loads((FIX / "layout_b.expected.json").read_text())
+        want = json.loads((FIX / "layout_b.expected.json").read_text(encoding="utf-8"))
         self.assertEqual(json.loads(json.dumps(got)), want)
 
     def test_gen_ai_label_goes_to_ai_ml(self):
@@ -59,9 +59,9 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(r, {"is_resume": False, "problems": ["no work-experience heading found"]})
 
     def test_discover_companies(self):
-        self.assertEqual(pr.discover_companies((FIX / "layout_a.layout.txt").read_text()),
+        self.assertEqual(pr.discover_companies((FIX / "layout_a.layout.txt").read_text(encoding="utf-8")),
                          {"acme-corp": "Acme Corp", "globex-inc": "Globex Inc"})
-        self.assertEqual(pr.discover_companies((FIX / "layout_b.txt").read_text()),
+        self.assertEqual(pr.discover_companies((FIX / "layout_b.txt").read_text(encoding="utf-8")),
                          {"initech": "Initech", "acme-corp": "Acme Corp"})
         self.assertEqual(pr.discover_companies("no sections here"), {})
 

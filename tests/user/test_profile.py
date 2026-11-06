@@ -41,6 +41,13 @@ class ProfileTests(HomeCase):
         self.assertIn("name: Pat", status)
         self.assertIn("from your resume scan", status)
 
+    def test_folder_with_spaces_is_stored_as_given(self):
+        spaced = self.tmp / "My Resumes 2026"
+        spaced.mkdir()
+        code, _, _ = self.run_cli("init", "--resume-root", str(spaced))
+        self.assertEqual(code, 0)
+        self.assertEqual(up.resume_root(), spaced)
+
     def test_init_rejects_missing_folder(self):
         code, _, err = self.run_cli("init", "--resume-root", str(self.tmp / "nope"))
         self.assertEqual(code, 1)

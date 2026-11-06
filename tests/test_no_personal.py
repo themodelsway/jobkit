@@ -31,7 +31,7 @@ class TestNoPersonalData(unittest.TestCase):
     def test_generic_leaks(self):
         bad = []
         for f in committable():
-            for n, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):
+            for n, line in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
                 if HOME_PATH.search(line) or EMAIL.search(line) or PHONE.search(line):
                     bad.append(f"{f.relative_to(ROOT)}:{n}")
         self.assertEqual(bad, [], "home path, email or phone number in committable files")
@@ -42,7 +42,7 @@ class TestNoPersonalData(unittest.TestCase):
             self.skipTest("no profile terms (name, resume folder, employers) in the real home: only the generic checks ran")
         bad = []
         for f in committable():
-            low = f.read_text(errors="ignore").lower()
+            low = f.read_text(encoding="utf-8", errors="ignore").lower()
             bad += [f"{f.relative_to(ROOT)}: {t}" for t in terms if t.lower() in low]
         self.assertEqual(bad, [], "values from your profile found in committable files")
 

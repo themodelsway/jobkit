@@ -69,7 +69,7 @@ class StoryOptionTests(PrepCase):
         for story_id in ("acme-first", "acme-second"):
             run("new", story_id, "--company", "acme", "--theme", "mentoring")
         jd = self.home / "jd.txt"
-        jd.write_text("Mentor engineers and review their designs.")
+        jd.write_text("Mentor engineers and review their designs.", encoding="utf-8")
         _, both = run("for-jd", str(jd))
         code, one = run("for-jd", str(jd), "--top", "1")
         self.assertEqual(code, 0, one)
@@ -83,10 +83,10 @@ class StoryOptionTests(PrepCase):
         target = self.home / "eng.json"
         code, out = run("export", "--engagement", "acme-project", "-o", str(target))
         self.assertEqual(code, 0, out)
-        self.assertIn("acme-project", target.read_text())
+        self.assertIn("acme-project", target.read_text(encoding="utf-8"))
         md = self.home / "story.md"
         self.assertEqual(run("export", "--story", "acme-topic-a", "--format", "md", "--output", str(md))[0], 0)
-        self.assertIn("topic-a", md.read_text())
+        self.assertIn("topic-a", md.read_text(encoding="utf-8"))
 
     def test_evidence_without_and_with_practice(self):
         self.assertIn("no practice answer", run("evidence", "acme-topic-a")[1])

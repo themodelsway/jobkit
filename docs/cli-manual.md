@@ -1,13 +1,13 @@
 # jobkit command-line manual
 
-Ten commands, installed into `.venv/bin/` by `uv sync`. Run them from the project folder (`.venv/bin/<command>`), or as `.venv/bin/python -m jobkit.<group>.<tool>`. `--help` works on every command and subcommand.
+Ten commands, installed into `.venv/bin/` by `uv sync` (`.venv\Scripts\` on Windows). Run them from the project folder (`.venv/bin/<command>`, or `.venv\Scripts\<command>` on Windows), or as `.venv/bin/python -m jobkit.<group>.<tool>`. `--help` works on every command and subcommand.
 
 Conventions shared by all commands:
 
 - Messages go to stdout; problems go to stderr with exit status 1. Usage errors (bad choice, missing argument) exit with status 2.
 - A file argument written as `-` reads stdin (job descriptions, seeds, long answers).
 - Verbs are the same everywhere: `init`, `status`, `list`, `show ID`, `next`, `set ID FIELD VALUE`, `for-jd JD`.
-- All data lives in one database, `data/jobkit.db` under the home folder (`~/.jobkit`, or the folder named by `JOBKIT_HOME`). It is read and written only through these commands. Each command's changes are stored together or not at all, and several commands can run at once. Run `jobkit init` once before anything else.
+- All data lives in one database, `data/jobkit.db` under the home folder (`~/.jobkit`, which is `.jobkit` in your user folder on Windows, or the folder named by `JOBKIT_HOME`). Text files are read and written as UTF-8 on every platform. It is read and written only through these commands. Each command's changes are stored together or not at all, and several commands can run at once. Run `jobkit init` once before anything else.
 - `[x]` means optional, `x...` means repeatable, `A|B` means one of.
 - The shape of the files these commands read and write is in [data-structures.md](data-structures.md).
 

@@ -83,7 +83,7 @@ class ImportTests(MigrateCase):
 
     def test_header_is_copied_as_a_file(self):
         self.migrate()
-        self.assertIn("Jane Example", (self.home / "profile" / "header.md").read_text())
+        self.assertIn("Jane Example", (self.home / "profile" / "header.md").read_text(encoding="utf-8"))
 
     def test_repeat_run_adds_nothing(self):
         self.migrate()
@@ -101,6 +101,21 @@ class ImportTests(MigrateCase):
         self.assertIn("before replacing", out)
         self.assertEqual(len(list((self.home / "backup").glob("jobkit-before-replace-*.db"))), 1)
         self.assertEqual(records.counts()["stories"], 1)
+
+    def test_start_over_closes_the_database_before_deleting_its_files(self):
+        self.migrate()
+        store.connect()                                   # this process now holds the database open
+        seen = []
+        real = Path.unlink
+
+        def watch(path, *args, **kwargs):
+            seen.append(store._STATE.conn is None)       # Windows refuses to delete a file that is open
+            return real(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", watch):
+            legacy.start_over()
+        self.assertEqual(seen, [True, True, True])
+        self.assertTrue(store.db_path().is_file())
 
     def test_nothing_to_import_is_an_error(self):
         empty = Path(tempfile.mkdtemp())
@@ -134,7 +149,7 @@ class SafetyTests(MigrateCase):
         self.assertEqual(records.counts()["stories"], 0)
 
     def test_unreadable_json_names_the_file_and_changes_nothing(self):
-        (self.old / "prep" / "stories.json").write_text("{oops")
+        (self.old / "prep" / "stories.json").write_text("{oops", encoding="utf-8")
         code, _, err = self.migrate()
         self.assertEqual(code, 1)
         self.assertIn("stories.json", err)
@@ -144,7 +159,7 @@ class SafetyTests(MigrateCase):
     def test_progress_for_a_missing_card_is_reported_not_dropped(self):
         path = self.old / "prep" / "arch" / "progress.json"
         path.write_text(json.dumps({"cards": {"vpc": FILES["prep/arch/progress.json"]["cards"]["vpc"],
-                                              "ghost": {"confidence": 1}}}))
+                                              "ghost": {"confidence": 1}}}), encoding="utf-8")
         code, _, err = self.migrate()
         self.assertEqual(code, 1)
         self.assertIn("ghost", err)
@@ -276,7 +291,7 @@ class BackupTests(MigrateCase):
 
     def test_restore_refuses_other_files_and_leaves_the_database_alone(self):
         junk = self.home / "junk.db"
-        junk.write_text("not a database")
+        junk.write_text("not a database", encoding="utf-8")
         code, _, err = jobkit("backup", "--restore", str(junk))
         self.assertEqual(code, 1)
         self.assertIn("not a jobkit database", err)

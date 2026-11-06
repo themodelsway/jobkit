@@ -31,7 +31,7 @@ class TextTests(unittest.TestCase):
         self.assertRegex(common.now(), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$")
 
     def test_read_text_arg(self):
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as f:
             f.write("jd text")
         self.addCleanup(lambda: Path(f.name).unlink())
         self.assertEqual(common.read_text_arg(f.name), "jd text")
@@ -69,3 +69,20 @@ class RunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Utf8OutputTests(unittest.TestCase):
+    def test_a_legacy_code_page_console_can_print_a_long_dash(self):
+        raw = io.BytesIO()
+        console = io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
+        with mock.patch.object(sys, "stdout", console), mock.patch.object(sys, "stderr", io.StringIO()):
+            common.use_utf8_output()
+            print("one \u2014 two \u2192 three")
+            console.flush()
+        self.assertEqual(raw.getvalue().decode("utf-8"), "one \u2014 two \u2192 three\n")
+
+    def test_a_utf8_stream_is_left_alone(self):
+        console = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with mock.patch.object(sys, "stdout", console):
+            common.use_utf8_output()
+            self.assertEqual(console.errors, "strict")

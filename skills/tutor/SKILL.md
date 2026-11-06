@@ -8,24 +8,29 @@ description: Tutor and readiness coach for interview prep. Use when the user wan
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`.
-1. Run `sh "${CLAUDE_PLUGIN_ROOT}/setup/install" --check`. It prints one line:
+1. Check the helper. The session's environment says which kind of computer this is:
+   - macOS or Linux: run `sh "${CLAUDE_PLUGIN_ROOT}/setup/install" --check`.
+   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
+     > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
+
+   The command prints one line:
    - `ok:FOLDER`: the helper is ready. Remember FOLDER.
    - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer:
      > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute, downloads one standard tool from astral.sh, and everything stays on your computer. Is that OK?
-     - Yes: run `sh "${CLAUDE_PLUGIN_ROOT}/setup/install"`. It prints `ok:FOLDER` when it worked. If it fails, say the next line and stop:
+     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails, say the next line and stop:
        > Setup did not finish. Please check that you are online and ask me to try again. Nothing was changed on your computer.
      - No: install nothing, say the next line and stop:
        > No problem. I can't help with your resumes or practice without that helper, so I'll stop here. Ask me again whenever you're ready.
    - `unsupported`: say the next line and stop:
-     > Sorry, this isn't available on Windows yet.
-2. Run every jobkit command with FOLDER first on the path, for example `PATH="FOLDER:$PATH" arch next` (macOS has its own `arch` program; this makes sure the right one runs). The commands in this skill are shown without that prefix.
+     > Sorry, this isn't available on this kind of computer yet.
+2. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
 3. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
 4. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
    1. Ask:
       > Where do you keep your resumes? You can drag the folder here or tell me its name.
    2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
       > I see some files that don't look like resumes. Should I skip any part of that folder?
-   3. Run `profile init --resume-root FOLDER [--resume-dir SUBFOLDER ...]`, then `process-resumes --survey`, then `process-resumes`.
+   3. Run `profile init --resume-root "FOLDER" [--resume-dir SUBFOLDER ...]`, then `process-resumes --survey`, then `process-resumes`.
    4. Report what was found and ask:
       > I found N resumes from M employers: A, B, C. Does that look right?
    5. If one employer shows up under two names, ask for each pair:

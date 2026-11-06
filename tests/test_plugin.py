@@ -9,6 +9,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -136,8 +138,34 @@ class SharedTextTests(unittest.TestCase):
 
     def test_preflight_asks_before_installing(self):
         text = shared_block(skill_text("tutor"), "preflight")
-        self.assertLess(text.index("Is that OK?"), text.index('setup/install"`'))
+        for line in text.splitlines():
+            if "setup/install" in line:
+                self.assertIn("--check", line, "only the read-only check may be named before the user agrees")
+        self.assertLess(text.index("Is that OK?"), text.index("without `--check`"))
         self.assertIn("install nothing", text)
+
+    def test_preflight_picks_the_helper_by_platform(self):
+        text = shared_block(skill_text("tutor"), "preflight")
+        self.assertIn('sh "${CLAUDE_PLUGIN_ROOT}/setup/install" --check', text)
+        self.assertIn('powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
+                      '"${CLAUDE_PLUGIN_ROOT}/setup/install.ps1" --check', text)
+        self.assertNotIn("Set-ExecutionPolicy", text)
+
+    def test_preflight_explains_git_for_windows_in_plain_words(self):
+        said = [x for x in shared_block(skill_text("tutor"), "preflight").splitlines() if x.strip().startswith(">")]
+        self.assertTrue(any("Git for Windows" in x and "git-scm.com" in x for x in said))
+
+    def test_commands_run_by_full_path_not_by_editing_the_search_path(self):
+        for name in SHIPPED:
+            text = skill_text(name)
+            self.assertNotIn('PATH="', text, name)
+            self.assertIn('"FOLDER/arch" next', text, name)
+
+    def test_folders_are_quoted_because_they_may_have_spaces(self):
+        for name in SHIPPED:
+            text = skill_text(name)
+            self.assertIn('--resume-root "FOLDER"', text, name)
+            self.assertIn("in quotes", text, name)
 
 
 class PlainLanguageTests(unittest.TestCase):
@@ -155,25 +183,75 @@ class PlainLanguageTests(unittest.TestCase):
             self.assertGreaterEqual(len(said), 8, name)
 
 
+ON_WINDOWS = sys.platform == "win32"
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
+
+
 class SetupScriptTests(unittest.TestCase):
     def test_install_script_is_present_and_strict(self):
         script = ROOT / "setup" / "install"
         self.assertTrue(script.is_file())
-        self.assertTrue(os.access(script, os.X_OK))
+        if not ON_WINDOWS:                                # Windows checkouts have no executable bit
+            self.assertTrue(os.access(script, os.X_OK))
         text = script.read_text(encoding="utf-8")
         self.assertTrue(text.startswith("#!/bin/sh"))
         self.assertIn("set -eu", text)
         self.assertIn("UV_NO_MODIFY_PATH=1", text)
 
+    @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_install_script_syntax(self):
         result = subprocess.run(["sh", "-n", str(ROOT / "setup" / "install")], capture_output=True, text=True,
                                 check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_check_reports_a_known_state(self):
         result = subprocess.run(["sh", str(ROOT / "setup" / "install"), "--check"], capture_output=True, text=True,
                                 timeout=60, check=False)
         self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|missing|unsupported)$")
+
+    @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
+    def test_shell_script_refuses_windows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / "uname"
+            stub.write_text("#!/bin/sh\necho MINGW64_NT-10.0\n", encoding="utf-8")
+            stub.chmod(0o755)
+            result = subprocess.run(["sh", str(ROOT / "setup" / "install"), "--check"], capture_output=True,
+                                    text=True, timeout=60, check=False, env={**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"})
+        self.assertEqual((result.stdout.strip(), result.returncode), ("unsupported", 2))
+
+
+class WindowsInstallScriptTests(unittest.TestCase):
+    SCRIPT = ROOT / "setup" / "install.ps1"
+
+    def test_script_is_ascii_only(self):
+        data = self.SCRIPT.read_bytes()
+        self.assertEqual(data.decode("ascii"), data.decode("utf-8"))
+
+    def test_script_downloads_to_a_file_and_leaves_settings_alone(self):
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        for needed in ("UV_NO_MODIFY_PATH", "https://astral.sh/uv/install.ps1", "-OutFile", "--check",
+                       "tool install --force", "$ErrorActionPreference = 'Stop'", "Remove-Item"):
+            self.assertIn(needed, text)
+        for forbidden in ("Read-Host", "Set-ExecutionPolicy", "| iex", "Invoke-Expression", "SetEnvironmentVariable"):
+            self.assertNotIn(forbidden, text)
+
+    def test_same_check_answers_as_the_shell_script(self):
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        for form in ("ok:", "older:", "missing"):
+            self.assertIn(form, text)
+
+    @unittest.skipUnless(POWERSHELL, "PowerShell is not installed")
+    def test_script_parses_and_answers_check(self):
+        assert POWERSHELL
+        parse = subprocess.run([POWERSHELL, "-NoProfile", "-Command",
+                                "$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile("
+                                f"'{self.SCRIPT}',[ref]$null,[ref]$e);if($e){{$e;exit 1}}"],
+                               capture_output=True, text=True, timeout=60, check=False)
+        self.assertEqual(parse.returncode, 0, parse.stdout + parse.stderr)
+        result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.SCRIPT),
+                                 "--check"], capture_output=True, text=True, timeout=60, check=False)
+        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|missing)$")
 
 
 if __name__ == "__main__":

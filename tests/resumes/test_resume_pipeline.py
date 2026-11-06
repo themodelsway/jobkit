@@ -32,8 +32,8 @@ class PipelineCase(HomeClassCase):
         saved = dict(pr.COMPANIES)
         pr.set_companies(REGISTRY)
         data = {"companies": {}, "skills": {"groups": {}}, "profile": rd.empty_profile()}
-        text_a, lay_a = (FIX / "layout_a.txt").read_text(), (FIX / "layout_a.layout.txt").read_text()
-        text_b = (FIX / "layout_b.txt").read_text()
+        text_a, lay_a = (FIX / "layout_a.txt").read_text(encoding="utf-8"), (FIX / "layout_a.layout.txt").read_text(encoding="utf-8")
+        text_b = (FIX / "layout_b.txt").read_text(encoding="utf-8")
         proc.merge_resume(data, "a.pdf", pr.parse_resume(text_a, lay_a))
         proc.merge_resume(data, "b.pdf", pr.parse_resume(text_b, text_b))
         proc.curate_skills(data)
@@ -94,7 +94,7 @@ class QueryTests(PipelineCase):
 
     def test_for_jd_and_match_alias_print_the_same(self):
         jd = self.tmp / "jd.txt"
-        jd.write_text(JD)
+        jd.write_text(JD, encoding="utf-8")
         a = self.cli(qr.main, "for-jd", str(jd))
         b = self.cli(qr.main, "match", str(jd))
         self.assertEqual(a[0], 0)
@@ -157,12 +157,12 @@ class BuildTests(PipelineCase):
 
     def test_cli_writes_file_and_creates_header_template(self):
         jd, out = self.tmp / "jd2.txt", self.tmp / "out" / "r.md"
-        jd.write_text(JD)
+        jd.write_text(JD, encoding="utf-8")
         header = self.tmp / "header.md"
         with mock.patch.object(br, "header_file", return_value=header):
             code, text, _ = self.cli(br.main, str(jd), "-o", str(out))
         self.assertEqual(code, 0)
-        self.assertTrue(out.read_text().startswith("# Your Name"))
+        self.assertTrue(out.read_text(encoding="utf-8").startswith("# Your Name"))
         self.assertTrue(header.exists())
         self.assertIn("Created header.md template", text)
         self.assertIn("Opening summary:", text)

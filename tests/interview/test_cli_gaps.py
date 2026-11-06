@@ -116,7 +116,7 @@ class SessionOptionTests(SessionCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         jd = self.tmp / "jd.txt"
-        jd.write_text("We need VPC experience.")
+        jd.write_text("We need VPC experience.", encoding="utf-8")
         code, out, err = self.cli(sessions.main, "new", "For JD", "--mode", "jd", "--jd", str(jd))
         self.assertEqual(code, 0, err)
         sid = out.split("Started session ")[1].split(" ")[0]

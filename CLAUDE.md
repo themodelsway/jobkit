@@ -15,7 +15,7 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - Build a resume for a job description, or add a resume file: `resume-workflows` skill.
 - Quiz or mock interview: `interview-prep` skill. Teach, explain or readiness: `tutor` skill.
 - Read personal open items at the start of resume work with `profile open`; add with `profile open add TEXT`.
-- Run tools as `.venv/bin/<command>` from the project folder (`uv sync` installs them).
+- Run tools as `.venv/bin/<command>` from the project folder (`uv sync` installs them; on Windows the folder is `.venv\Scripts\`, and the skills and hooks run in Git Bash, which is a prerequisite).
 - `query-resume for-jd` output is keyword and tag based; make the final picks yourself.
 
 ## Code conventions
@@ -25,6 +25,7 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - Format readers live in `resumes/extract.py`: a new format is one `@register` class.
 - Checks (all need `uv sync`): `.venv/bin/python -m unittest discover -s tests -t .`, `.venv/bin/pyright`, `.venv/bin/ruff check src tests`, `.venv/bin/pylint src` (for tests add `--disable=missing-function-docstring,missing-class-docstring,protected-access,consider-using-with`). The pre-commit hook runs gitleaks, ruff, pyright and the tests (not pylint); enable with `git config core.hooksPath .githooks`.
 - Skill text (`skills/`): what the user reads is plain English, in lines that start with `>`, with no commands, file names or technical words; commands and rules are for Claude. The preflight, talking and rules blocks are identical in all three skills (`<!-- shared:... -->`); edit one and copy it to the others. `tests/test_plugin.py` enforces this, and `setup/install` is the only place that installs software, and only after the user says yes.
+- Windows: every text file is read and written with `encoding="utf-8"` (ruff `PLW1514` enforces it); stored resume keys use forward slashes; `.gitattributes` keeps LF line endings; skills run commands by full path, not by editing the search path. `setup/install` is macOS and Linux only, `setup/install.ps1` is Windows only, and the skills choose by platform. The Windows installer can only be fully tested on Windows.
 - A behaviour change updates the matching spec in `openspec/specs/` and the docs in the same change.
 
 ## Interview data

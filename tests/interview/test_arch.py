@@ -116,7 +116,7 @@ class CommandTests(ArchTestCase):
         self.assertIn("vpc", self.cli("list", "--kind", "service", "--area", "edge")[1])
         self.assertIn("not drilled", self.cli("status")[1])
         jd = self.tmp / "jd.txt"
-        jd.write_text("We use CloudFront and Lambda daily.")
+        jd.write_text("We use CloudFront and Lambda daily.", encoding="utf-8")
         out = self.cli("for-jd", str(jd))[1]
         self.assertIn("cloudfront", out)
         self.assertIn("services from the catalog appear in the JD", out)

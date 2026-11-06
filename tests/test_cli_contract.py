@@ -27,7 +27,7 @@ class HelpTests(unittest.TestCase):
                 self.assertTrue(p.stdout.startswith("usage:"))
 
     def test_entry_points_name_each_tool_main(self):
-        scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
+        scripts = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["scripts"]
         self.assertEqual(sorted(v.split(":")[0] for v in scripts.values()), sorted(TOOLS))
         for target in scripts.values():
             module, func = target.split(":")

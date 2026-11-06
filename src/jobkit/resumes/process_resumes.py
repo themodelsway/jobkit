@@ -77,8 +77,8 @@ def list_resumes(dirs: Iterable[Path]) -> list[Path]:
 
 
 def rel(path: Path, root: Path) -> str:
-    """The file's path relative to the resume root (its key in the ledger)."""
-    return str(path.relative_to(root))
+    """The file's path relative to the resume root, with forward slashes on every platform (its key in the ledger)."""
+    return path.relative_to(root).as_posix()
 
 
 def file_sha(path: Path) -> str:
@@ -88,8 +88,9 @@ def file_sha(path: Path) -> str:
 
 def text_name(key: str) -> str:
     """File name for the raw extracted text of a ledger key (`a/b c.pdf` -> `a__b_c.txt`; other formats keep their
-    suffix, `a/b.docx` -> `a__b.docx.txt`, so two formats of one resume never collide)."""
-    return key.replace("/", "__").replace(" ", "_").removesuffix(".pdf") + ".txt"
+    suffix, `a/b.docx` -> `a__b.docx.txt`, so two formats of one resume never collide). The name never holds a
+    path separator or a colon, which Windows does not allow in a file name."""
+    return re.sub(r"[/\\:]", "__", key).replace(" ", "_").removesuffix(".pdf") + ".txt"
 
 
 def now() -> str:

@@ -169,7 +169,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     """Build the resume, write it, and report gaps."""
     text = common.read_text_arg(args.jd)
     header_path = header_file()
-    header = header_path.read_text() if header_path.exists() else None
+    header = header_path.read_text(encoding="utf-8") if header_path.exists() else None
     options = BuildOptions(args.top, dict(t.split("=", 1) for t in args.title), args.include_review, args.recency)
     markdown, notes = build(text, options, header)
 
@@ -179,7 +179,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     out.write_text(markdown, encoding="utf-8")
 
     if notes.header_missing:
-        header_path.write_text(HEADER_TEMPLATE)
+        header_path.write_text(HEADER_TEMPLATE, encoding="utf-8")
         print(f"Created {header_path.name} template: put your name and contact line there, then re-run.")
     print(f"Wrote {out}")
     print(f"Opening summary: {notes.used_summary}")

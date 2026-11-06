@@ -20,7 +20,7 @@ Rules that hold for all data:
 
 ## The database (`~/.jobkit/data/jobkit.db`)
 
-All data lives in one SQLite database under the home folder (`~/.jobkit`, or `JOBKIT_HOME`). It is changed only by the commands, and you look at it with `jobkit export`. Each command's changes are stored together or not at all.
+All data lives in one SQLite database under the home folder (`~/.jobkit`, or `.jobkit` in your user folder on Windows, or `JOBKIT_HOME`). It is changed only by the commands, and you look at it with `jobkit export`. Each command's changes are stored together or not at all.
 
 A record table keeps the whole record as JSON in `body` (the shapes below are what `body` holds) and repeats the fields that are keys, links or queried as real columns, written from the body in one place, so they cannot disagree. The schema version is in `PRAGMA user_version`; `jobkit status` shows it.
 

@@ -244,7 +244,7 @@ class TestFollowupsSearchExport(PrepCase):
         self.assertEqual(run("export", "--format", "md")[0], 1)
         path = self.home / "out.json"
         run("export", "-o", str(path))
-        self.assertEqual(len(json.loads(path.read_text())["stories"]), 1)
+        self.assertEqual(len(json.loads(path.read_text(encoding="utf-8"))["stories"]), 1)
 
     def test_new_story_checks_company_and_id(self):
         self.assertEqual(run("new", "acme-x", "--company", "nope", "--theme", "budget-financial")[0], 1)

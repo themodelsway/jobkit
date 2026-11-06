@@ -153,7 +153,7 @@ class ReadinessTests(SessionCase):
         for text in ("ARCHITECTURE", "LEADERSHIP", "STAR STORIES: none yet", "WORK ON NEXT", "Note: labels come from"):
             self.assertIn(text, out)
         jd = self.tmp / "jd.txt"
-        jd.write_text("We need VPC expertise.")
+        jd.write_text("We need VPC expertise.", encoding="utf-8")
         out = self.cli(readiness.main, "--jd", str(jd))[1]
         self.assertIn("(cards matching the JD)", out)
         self.assertIn("LEADERSHIP: not filtered by a JD", out)

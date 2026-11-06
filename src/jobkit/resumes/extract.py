@@ -8,7 +8,7 @@ One extractor per file format, found by suffix (strategy + registry). The rest o
   parse_resume(doc.text, doc.layout_text)
 
 To support a new format, write a class with `suffixes` and `extract()` and decorate it with `@register`.
-Standard library only; PDF needs poppler's `pdftotext` (or `pypdf` as a fallback).
+Standard library only; PDF uses poppler's `pdftotext` when it is installed and `pypdf` otherwise.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Final, Protocol
+from typing import Any, ClassVar, Final, Protocol
 from xml.etree import ElementTree
 
 from jobkit import common
@@ -157,27 +157,35 @@ def read_text_file(path: Path) -> str:
 
 # ---------------------------------------------------------------- pdf
 
+def _pypdf_pages(path: Path) -> list[Any]:
+    """The pages of a PDF read with pypdf, whose chatter about slightly damaged files is kept off the screen."""
+    import logging  # pylint: disable=import-outside-toplevel
+    from pypdf import PdfReader  # pylint: disable=import-outside-toplevel  # only needed without poppler
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
+    return list(PdfReader(path).pages)
+
+
 @register
 class PdfExtractor:
-    """PDF via poppler: `pdftotext` for reading order, `pdftotext -layout` for positions; pypdf if poppler is missing."""
+    """PDF via poppler: `pdftotext` for reading order, `pdftotext -layout` for positions; pypdf (reading order and
+    its own layout mode) when poppler is missing, as on most Windows computers."""
 
     suffixes: ClassVar[tuple[str, ...]] = (".pdf",)
 
     def extract(self, path: Path) -> ExtractedDocument:
-        """Reading-order text plus layout text (empty without poppler)."""
+        """Reading-order text plus layout text (from pypdf's layout mode without poppler)."""
         return ExtractedDocument(self._reading_order(path), self._layout(path), "pdf")
 
     @staticmethod
     def _reading_order(path: Path) -> str:
         if shutil.which("pdftotext"):
             return subprocess.run(["pdftotext", str(path), "-"], capture_output=True, text=True, check=True).stdout
-        from pypdf import PdfReader  # pylint: disable=import-outside-toplevel  # optional: only needed without poppler
-        return "\n\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+        return "\n\n".join(page.extract_text() or "" for page in _pypdf_pages(path))
 
     @staticmethod
     def _layout(path: Path) -> str:
         if not shutil.which("pdftotext"):
-            return ""
+            return "\n\n".join(page.extract_text(extraction_mode="layout") or "" for page in _pypdf_pages(path))
         return subprocess.run(["pdftotext", "-layout", str(path), "-"], capture_output=True, text=True,
                               check=True).stdout
 
