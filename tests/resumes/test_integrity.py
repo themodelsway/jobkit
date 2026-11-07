@@ -133,6 +133,45 @@ class PruneTests(RebuildCase):
         self.assertEqual(tables.stored_texts(), before)
 
 
+class UnavailableFolderTests(RebuildCase):
+    """A configured folder that is missing or has emptied stops the run before anything is pruned."""
+
+    def setUp(self):
+        super().setUp()
+        for sub in ("a", "b"):
+            (self.resumes / sub).mkdir()
+            self.write(f"{sub}/one.txt", as_txt())
+        self.dirs = [self.resumes / "a", self.resumes / "b"]
+
+    def run_main(self, *argv):
+        err = io.StringIO()
+        config = proc.Config(self.resumes, self.dirs)
+        with mock.patch.object(proc, "load_config", return_value=config), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            code = proc.main(list(argv))
+        return code, err.getvalue()
+
+    def test_missing_folder_is_named_and_nothing_changes(self):
+        self.assertEqual(self.run_main()[0], 0)
+        before = tables.stored_texts()
+        self.dirs.append(self.resumes / "gone")
+        code, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.resumes / "gone"), err)
+        self.assertEqual(tables.stored_texts(), before)
+
+    def test_emptied_folder_stops_unless_forced(self):
+        self.run_main()
+        before = tables.stored_texts()
+        (self.resumes / "b" / "one.txt").unlink()
+        code, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.resumes / "b"), err)
+        self.assertEqual(tables.stored_texts(), before)
+        self.assertEqual(self.run_main("--force")[0], 0)
+        self.assertEqual(sorted(rd.load_ledger()), ["a/one.txt"])
+
+
 class OrphanTests(RebuildCase):
     def test_stale_ids_are_listed_and_the_file_is_untouched(self):
         self.write("one.txt", as_txt())

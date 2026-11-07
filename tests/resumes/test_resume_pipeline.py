@@ -119,7 +119,7 @@ class BuildTests(PipelineCase):
     def test_build_sections_and_notes(self):
         md, notes = br.build(JD, br.BuildOptions(top=2), header=None)
         self.assertTrue(md.startswith("# Your Name"))
-        for section in ("## Summary", "## Experience", "### Acme Corp |", "## Skills"):
+        for section in ("## Summary", "## Experience", "### Acme Corp\n", "#### Lead Engineer | 03/2021 - Present", "## Skills"):
             self.assertIn(section, md)
         self.assertTrue(notes.header_missing)
         self.assertIsNotNone(notes.used_summary)
@@ -127,7 +127,7 @@ class BuildTests(PipelineCase):
     def test_header_and_title_override(self):
         md, notes = br.build(JD, br.BuildOptions(titles={"acme-corp": "Chief Cloud Wizard"}), header="# Pat Example\nSomewhere")
         self.assertTrue(md.startswith("# Pat Example\nSomewhere"))
-        self.assertIn("### Acme Corp | Chief Cloud Wizard | 03/2021 - Present", md)
+        self.assertIn("#### Chief Cloud Wizard | 03/2021 - Present", md)
         self.assertFalse(notes.header_missing)
 
     def test_old_companies_get_at_most_two_bullets(self):
@@ -153,7 +153,7 @@ class BuildTests(PipelineCase):
     def test_helpers(self):
         self.assertEqual(br.fmt_date(None), "Present")
         self.assertEqual(br.fmt_date("2021-03"), "03/2021")
-        self.assertEqual(br.clean_education({"education": ["● BS Computer Science, 2001 - 2005", "BS"]}), "BS Computer Science")
+        self.assertEqual(br.clean_education({"education": ["● BS Computer Science, 2001 - 2005", "BS"]}), ["BS Computer Science", "BS"])
 
     def test_cli_writes_file_and_creates_header_template(self):
         jd, out = self.tmp / "jd2.txt", self.tmp / "out" / "r.md"

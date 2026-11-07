@@ -22,6 +22,10 @@ A job description SHALL be a positional file (`-` for stdin) when it is the subj
 ### Requirement: Output channels and exit status
 Messages for the user SHALL go to stdout and problems to stderr with exit status 1; `validate` SHALL also exit 1 when it finds errors; bad arguments SHALL exit 2.
 
+#### Scenario: Unreadable input file
+- **WHEN** a JD or other input file is missing, is a folder, cannot be read, or is not UTF-8 text
+- **THEN** a one-line message with the path goes to stderr, the exit status is 1, and no traceback is shown
+
 #### Scenario: Missing record
 - **WHEN** `show` is given an unknown id
 - **THEN** a message goes to stderr and the exit status is 1

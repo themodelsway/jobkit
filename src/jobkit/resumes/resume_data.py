@@ -28,6 +28,7 @@ class Bullet(TypedDict):
     metrics: list[str]
     sources: list[str]
     variants: NotRequired[list[str]]
+    wordings: NotRequired[dict[str, list[str]]]
     needs_review: NotRequired[bool]
     ignored: NotRequired[bool]
 
@@ -41,6 +42,8 @@ class Role(TypedDict):
     subtitles: list[str]
     clients: list[str]
     sources: list[str]
+    ends: NotRequired[dict[str, str | None]]
+    field_sources: NotRequired[dict[str, dict[str, list[str]]]]
 
 
 class Company(TypedDict):
@@ -77,6 +80,14 @@ class Summary(TypedDict):
     sources: list[str]
 
 
+class ItemSource(TypedDict):
+    """The resume files that state one profile item (a headline, a certification ...)."""
+
+    section: str
+    text: str
+    sources: list[str]
+
+
 class ResumeProfile(TypedDict):
     """The resume profile sections (contain no contact details)."""
 
@@ -86,6 +97,7 @@ class ResumeProfile(TypedDict):
     education: list[str]
     certifications: list[Any]
     projects: list[str]
+    item_sources: NotRequired[list[ItemSource]]
 
 
 class ResumeData(TypedDict):
@@ -98,7 +110,8 @@ class ResumeData(TypedDict):
 
 def empty_profile() -> ResumeProfile:
     """A profile with every list present and empty."""
-    return {"summaries": [], "profile_points": [], "education": [], "certifications": [], "projects": []}
+    return {"summaries": [], "profile_points": [], "education": [], "certifications": [], "projects": [],
+            "item_sources": []}
 
 
 def load_companies() -> dict[str, Company]:

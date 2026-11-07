@@ -4,6 +4,8 @@
 Handles the two layouts seen so far:
   * layout A: "WORK EXPERIENCE" heading, "Company" / "Title" / "MM/YYYY - Present", "•" bullets
   * layout B: "Work History" heading, "Company – Title" / ["Role:" / "Client:"] / dates, "●" bullets
+Employer discovery also accepts "Company" / "Title" / dates on three lines, when the middle line holds a
+job-title word and the line above it could be a company name.
 
 Library module (no command line). Pure functions, no file or network access, except that the employer
 registry is module state: `set_companies` installs {id: (name, header regex)} from
@@ -17,10 +19,13 @@ from difflib import SequenceMatcher
 from hashlib import sha1
 from typing import Any, Final, Literal, TypedDict
 
+from jobkit.resumes.extract import is_contact_line
+
 BULLETS: Final[str] = "•●§▪◦"
 ZERO_WIDTH: Final[dict[int, None]] = dict.fromkeys(map(ord, "\u200b‌‍﻿"))
 SUB_MARK: Final[str] = "\x00SUB"          # prefix for 'o' sub-points, folded into the bullet above them
-SEP: Final[str] = r"\s*[–—-]\s*"
+# A dash between employer and title: an en/em dash, or a hyphen with spaces around it (not Acme-Labs).
+SEP: Final[str] = r"(?:\s*[–—]\s*|\s+-\s+)"
 SIMILAR_THRESHOLD: Final[float] = 0.92   # used by the merge step: near-identical bullets become variants
 MAX_COMPANY_WORDS: Final[int] = 7
 MAX_HEADLINE_CHARS: Final[int] = 60
@@ -195,13 +200,34 @@ def layout_work_lines(lines: Iterable[str]) -> list[str]:
     return out
 
 
+TITLE_WORDS: Final = re.compile(
+    r"\b(?:engineer|developer|manager|director|architect|consultant|analyst|lead|head|officer|president"
+    r"|administrator|specialist|programmer|scientist|designer|owner|supervisor|vp)\b", re.I)
+
+
+def _is_title_line(line: str) -> bool:
+    """True for a line that reads as a job title on its own: a title word and no employer-title dash."""
+    return bool(TITLE_WORDS.search(line)) and not re.search(SEP, line)
+
+
+def _can_be_company_line(line: str) -> bool:
+    """True when a line could be an employer name sitting above a title line."""
+    return (line[0] not in BULLETS and not line.startswith(SUB_MARK) and not DATE_RE.match(line)
+            and not HEADER_PREFIX.match(line) and not line.endswith(".")
+            and _plausible_company(clean(line).strip(" ,")))
+
+
 def _header_line_index(lines: list[str], date_index: int) -> int | None:
-    """Index of the company header above a date line, skipping Role:/Client: lines; None if there is none."""
+    """Index of the company header above a date line, skipping Role:/Client: lines; None if there is none.
+    When the line above the dates is a job title and the line above that could be a company name
+    ("Company" / "Title" / dates), the header is that company line."""
     j = date_index - 1
     while j >= 0 and HEADER_PREFIX.match(lines[j]):
         j -= 1
     if j < 0 or lines[j][0] in BULLETS or lines[j].startswith(SUB_MARK) or DATE_RE.match(lines[j]):
         return None
+    if j == date_index - 1 and j > 0 and _is_title_line(lines[j]) and _can_be_company_line(lines[j - 1]):
+        return j - 1
     return j
 
 
@@ -433,18 +459,19 @@ def parse_skills(sections: Mapping[str, list[str]]) -> tuple[dict[str, list[Skil
 
 def _work_lines(sections: Mapping[str, list[str]], layout_text: str) -> list[str]:
     """Lines of the work history: from the layout text when it has them (it keeps each bullet next to its marker)."""
+    lines = sections["work"]
     if layout_text:
         layout_work = split_sections(layout_text.splitlines()).get("work")
         if layout_work:
-            return layout_work_lines(layout_work)
-    return sections["work"]
+            lines = layout_work_lines(layout_work)
+    return [line for line in lines if not is_contact_line(line)]    # PDFs are not cleaned on extraction
 
 
 def _summary_and_headline(sections: Mapping[str, list[str]]) -> tuple[str, str]:
     """(summary text, headline). Layout A has no summary heading: skip the name and contact lines, and treat a
     short first line without a full stop as a headline."""
     header = [line for line in sections.get("header", []) if line.strip()]
-    summary_lines = sections.get("summary") or header[2:]
+    summary_lines = [line for line in sections.get("summary") or header[2:] if not is_contact_line(line)]
     headline = ""
     if not sections.get("summary") and summary_lines:
         first = summary_lines[0].strip()
@@ -462,6 +489,8 @@ def parse_resume(text: str, layout_text: str = "",
     if "work" not in sections:
         return {"is_resume": False, "problems": ["no work-experience heading found"]}
     work, work_problems = parse_work(_work_lines(sections, layout_text), company_res)
+    if not work:
+        work_problems.append("work-experience section found, but no known employer in it")
     skills, skill_problems = parse_skills(sections)
     summary, headline = _summary_and_headline(sections)
     return {
@@ -508,23 +537,80 @@ def find_metrics(text: str) -> list[str]:
 
 
 def skill_terms(skills_by_group: Mapping[str, Iterable[Mapping[str, Any]]]) -> dict[str, str]:
-    """Flat {term: canonical_name} from the skills vocabulary, skipping 1-2 letter terms."""
+    """Flat {term: canonical_name} from the skills vocabulary (every name and alias, including one- and
+    two-letter ones such as R and Go)."""
     terms: dict[str, str] = {}
     for items in skills_by_group.values():
         for item in items:
             name = str(item["name"])
             aliases: Iterable[str] = item.get("aliases") or []
             for term in [name, *aliases]:
-                if len(term) >= 3:
+                if term.strip():
                     terms[term] = name
     return terms
+
+
+AMBIGUOUS: Final[frozenset[str]] = frozenset({"go", "make", "rust", "ruby", "dart", "ant", "pig", "chef", "swift",
+                                              "spring", "puppet", "julia"})   # skill names that are also ordinary words
+SENTENCE_START: Final[re.Pattern[str]] = re.compile(r"(?:^|[.!?]\s+|\n)[ \t]*[-*\u2022]?[ \t]*$")
+LIST_ITEM_END: Final[re.Pattern[str]] = re.compile(r"[ \t]*(?:[,;/)]|$|\n)")
+
+
+def is_ambiguous(term: str) -> bool:
+    """True for a skill name that is also an ordinary word (Go, Make, Rust ...)."""
+    return term.lower() in AMBIGUOUS
+
+
+def term_pattern(term: str) -> re.Pattern[str]:
+    """The pattern that finds a skill name as a whole word. One- and two-character names (R, Go, HR) and names that
+    are also ordinary words (Make, Rust) must match capitalisation exactly and may not touch a letter, digit, hyphen
+    or ampersand ("Go-to-market", "R&D"); other names ignore capitalisation."""
+    if len(term) <= 2 or is_ambiguous(term):
+        return re.compile(rf"(?<![\w\-&]){re.escape(term)}(?![\w\-&])")
+    return re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.I)
+
+
+def _matches(term: str, text: str) -> list[re.Match[str]]:
+    """Where the skill name occurs as itself. An ordinary-word name at the start of a sentence ("Go to market")
+    counts only when it stands alone, as a list item does; otherwise it is only a possible match."""
+    found = term_pattern(term).finditer(text)
+    if not is_ambiguous(term):
+        return list(found)
+    return [m for m in found if not SENTENCE_START.search(text[:m.start()])
+            or LIST_ITEM_END.match(text, m.end())]
+
+
+def term_found(term: str, text: str) -> bool:
+    """True when the skill name occurs in the text as the skill (see `term_pattern` and `_matches`)."""
+    return bool(_matches(term, text))
+
+
+def term_count(term: str, text: str) -> int:
+    """How many times the skill name occurs in the text as the skill."""
+    return len(_matches(term, text))
+
+
+def possible_matches(text: str, terms: Mapping[str, str]) -> list[tuple[str, str]]:
+    """(skill, sentence) for ordinary-word skill names the text uses with the right capitalisation but only at the
+    start of a sentence, where it cannot be told from the plain word ("Go to market"). A skill that is found
+    properly elsewhere in the text is not listed. The caller shows these for a person to confirm."""
+    sure = {name for term, name in terms.items() if term_found(term, text)}
+    out: list[tuple[str, str]] = []
+    for term, name in terms.items():
+        if not is_ambiguous(term) or name in sure or any(n == name for n, _ in out):
+            continue
+        pattern = re.compile(rf"(?<![\w\-&]){re.escape(term)}(?![\w\-&])")
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+            if pattern.search(sentence):
+                out.append((name, sentence.strip()[:160]))
+                break
+    return out
 
 
 def tag_skills(text: str, terms: Mapping[str, str]) -> list[str]:
     """Canonical names of the skills mentioned in the text, sorted."""
     found: list[str] = []
     for term, name in terms.items():
-        flags = re.I if len(term) >= 5 else 0
-        if re.search(rf"(?<![\w]){re.escape(term)}(?![\w])", text, flags) and name not in found:
+        if name not in found and term_found(term, text):
             found.append(name)
     return sorted(found)

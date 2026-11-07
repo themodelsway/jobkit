@@ -73,7 +73,12 @@ Stories, answers and progress are personal data kept on the user's computer. Rea
 Every practice run belongs to a session, so the user can start fresh or go back to an old one.
 1. Run `sessions list`. Ask whether to start a new session or continue one. Never guess which:
    > Do you want to start a new practice session, or pick up one you did before?
-2. New: `sessions new "title" [--mode architecture|stories|jd|leadership] [--order default|random] [--jd FILE] [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--category C] [--count N]`. (`--mode tutor --topic ...` belongs to the tutor skill.) Pick a short plain title yourself. A closed session continues with `sessions reopen ID`.
+2. Before a new session, run `profile status`. If the retest window says it is the default (not set), ask once, and save the answer with `profile set reassess_days N` (a whole number of days, 1 to 365; if the user has no preference, keep the default and do not ask again):
+   > How many days should pass before I offer to re-check an answer you did well on? Most people pick 30.
+   Then run `readiness --due`. If it lists items, say how many and how old the oldest is, and ask:
+   > N of your good answers are older than D days. Do you want to re-check those first?
+   On yes, start the session with `--due` added to the command below. On no, start as usual and do not ask again in this conversation. Never start a retest without a yes.
+   New: `sessions new "title" [--mode architecture|stories|jd|leadership] [--order default|random] [--jd FILE] [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--category C] [--count N] [--only-open] [--due]`. Finished stories and solid cards follow the unfinished and weak ones in the queue, so strong material is still rehearsed; `--only-open` leaves them out. (`--mode tutor --topic ...` belongs to the tutor skill.) Pick a short plain title yourself. A closed session continues with `sessions reopen ID`.
 3. Continue: `sessions resume ID` prints what was covered, the last answers and the next item.
 4. After each answer: `sessions log ID ITEM --question "..." --answer - --grade "..." --confidence N` (answer on stdin; keep the user's FULL answer). End with `sessions close ID` when the user says they are done. The command rejects unknown items, empty answers, closed sessions and `--confidence` on stories; fix the command rather than working around it.
 Commands: `sessions list|new|resume|log|close`.

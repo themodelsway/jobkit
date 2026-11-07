@@ -30,7 +30,9 @@ from jobkit.user import tables
 DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
-SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root")
+SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days")
+DEFAULT_REASSESS_DAYS: Final[int] = 30   # a good answer older than this is offered for a retest
+REASSESS_RANGE: Final[tuple[int, int]] = (1, 365)
 NEEDS_PROFILE: Final[str] = (
     "No profile yet. Ask the user where their resume files are, then run:\n"
     "  profile init --resume-root <folder> "
@@ -44,6 +46,7 @@ class Profile(TypedDict):
     resume_dirs: NotRequired[list[str]]
     name: NotRequired[str]
     tier1_services: NotRequired[list[str]]
+    reassess_days: NotRequired[int]
 
 
 class OpenItem(TypedDict):
@@ -67,6 +70,26 @@ def save(profile: Profile) -> None:
 def exists() -> bool:
     """Whether the profile has been created."""
     return tables.has_settings()
+
+
+def reassess_days() -> int:
+    """The retest window in days: the stored value, or 30 when none is stored."""
+    value = tables.load_settings().get("reassess_days")
+    low, high = REASSESS_RANGE
+    return value if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high \
+        else DEFAULT_REASSESS_DAYS
+
+
+def parse_window(text: str) -> int:
+    """A retest window from text: a whole number of days from 1 to 365, else a `ToolError`."""
+    low, high = REASSESS_RANGE
+    try:
+        days = int(text)
+    except ValueError:
+        days = low - 1
+    if not low <= days <= high:
+        raise ToolError(f"reassess_days must be a whole number of days from {low} to {high}, not {text!r}.")
+    return days
 
 
 def need() -> Profile:
@@ -143,20 +166,26 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"employers: {len(tables.load_employers())} (run process-resumes to scan)"
           if tables.has_employers() else "employers: not scanned yet (run process-resumes)")
     print(f"tier-1 services: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
+    stored = profile.get("reassess_days")
+    print(f"retest window: {reassess_days()} days" + ("" if stored is not None else " (default, not set)"))
     print(f"header: {'present' if HEADER_FILE.exists() else 'missing (build-resume creates a template)'}")
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create or update the profile."""
+    """Create the profile, or fill in what is still unset; an existing answer is never overwritten (use `set`)."""
     root = Path(args.resume_root).expanduser()
     if not root.is_dir():
         raise ToolError(f"{root} is not a folder")
     profile = load()
-    profile["resume_root"] = str(args.resume_root)
-    profile["resume_dirs"] = args.resume_dir or profile.get("resume_dirs") or []
-    if args.name:
+    kept = [key for key, given in (("resume_root", args.resume_root), ("name", args.name), ("resume_dirs", args.resume_dir))
+            if given and profile.get(key) and profile[key] != given]
+    profile.setdefault("resume_root", str(args.resume_root))
+    profile["resume_dirs"] = profile.get("resume_dirs") or args.resume_dir or []
+    if args.name and not profile.get("name"):
         profile["name"] = args.name
     save(profile)
+    if kept:
+        print(f"Kept the existing {', '.join(kept)} (init never overwrites an answer; `profile set` changes name or resume_root).")
     print("Saved the profile. Next: process-resumes")
 
 
@@ -165,7 +194,9 @@ def cmd_set(args: argparse.Namespace) -> None:
     if args.key not in SETTABLE_KEYS:
         raise ToolError("keys: " + ", ".join(SETTABLE_KEYS))
     profile = need()
-    if args.key == "name":
+    if args.key == "reassess_days":
+        profile["reassess_days"] = parse_window(args.value)
+    elif args.key == "name":
         profile["name"] = args.value
     else:
         profile["resume_root"] = args.value

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
 from typing import Any
 
 from jobkit import store
@@ -210,6 +211,24 @@ def save_curation(file: str, data: Mapping[str, Any]) -> None:
             else:
                 rows.append((file, kind, "", 0, dump(value)))
         conn.executemany("INSERT OR REPLACE INTO curation(file, kind, key, position, body) VALUES(?,?,?,?,?)", rows)
+
+
+def curation_digest() -> str:
+    """A fingerprint of the whole curation (both files), to tell whether it changed since the last build."""
+    texts = [dump(load_curation(file)) for file in CURATION_FILES]
+    return sha256("\n".join(texts).encode("utf-8")).hexdigest()
+
+
+def load_built_curation() -> str | None:
+    """The curation fingerprint the stored resume data was built with, or None."""
+    with store.transaction(write=False) as conn:
+        return meta_get(conn, "resume.curation_digest", None)
+
+
+def save_built_curation(digest: str) -> None:
+    """Remember which curation the stored resume data was built with."""
+    with store.transaction() as conn:
+        meta_put(conn, "resume.curation_digest", digest)
 
 
 def stored_texts() -> dict[str, str]:

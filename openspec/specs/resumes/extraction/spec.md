@@ -55,8 +55,8 @@ The system SHALL convert markdown (including pandoc output: grid tables, pipe ta
 - **WHEN** a docx is converted to markdown with pandoc
 - **THEN** it parses to the same work history as the original docx
 
-### Requirement: Contact and address lines are dropped from non-PDF text
-The system SHALL remove lines that contain only an email, phone, LinkedIn URL or postal address from txt, md and docx text, and SHALL drop a table row's short cells when the row holds a contact block.
+### Requirement: Contact and address lines are dropped
+The system SHALL remove lines that contain only an email, phone, LinkedIn URL or postal address, or several of these separated by `|`, `·` or `•`, from txt, md and docx text, and SHALL drop a table row's short cells when the row holds a contact block. The parser SHALL also skip such lines in the summary, headline and work history of every format, PDF included, so a stray contact line never becomes a headline, summary or bullet text. A line that mixes contact details with other text is kept.
 
 #### Scenario: Address after the last bullet
 - **WHEN** the final bullet is followed by a street/city/ZIP line
@@ -68,6 +68,10 @@ The system SHALL record an unreadable file in the ledger and in the unparsed lis
 #### Scenario: Corrupt docx
 - **WHEN** one file in a folder cannot be opened
 - **THEN** processing continues and the file is reported as unreadable
+
+#### Scenario: Corrupt PDF
+- **WHEN** a PDF is damaged, whether read with poppler or pypdf
+- **THEN** it is reported as unreadable with the reader's message and the other files are still processed
 
 ### Requirement: Empty extractions name their cause
 When extraction yields no usable text, the system SHALL fail that file with a message naming the likely cause, instead of reporting a generic "not a resume". For a PDF with no text layer the message SHALL say it looks like a scanned image and that OCR is not supported. For a docx with no body text but text in a header or footer the message SHALL say the text is in a part that is not read.

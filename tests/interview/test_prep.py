@@ -61,16 +61,6 @@ class TestV1Compat(PrepCase):
         self.assertEqual(s["spoken"], {"60s": None, "2min": None})
         self.assertEqual(s["follow_ups"], ["Batch size?"])
 
-    def test_migrate_is_idempotent_and_keeps_content(self):
-        run("set", "acme-topic-a", "situation", "Hello")
-        run("migrate")
-        first = tables.load_stories()
-        run("migrate")
-        self.assertEqual(tables.load_stories(), first)
-        data = first
-        self.assertEqual(data["schema_version"], sm.SCHEMA_VERSION)
-        self.assertEqual(data["stories"][0]["situation"], "Hello")
-
     def test_old_fields_still_set_and_status_moves_to_draft(self):
         run("set", "acme-topic-a", "situation", "x")
         self.assertEqual(self.story()["status"], "draft")

@@ -15,7 +15,7 @@ from jobkit import store
 from jobkit.base import ToolError, backup_dir, data_dir, header_file, home, now, output_dir
 
 SLUG_MAX: Final[int] = 60
-__all__ = ["SLUG_MAX", "ToolError", "backup_dir", "data_dir", "header_file", "home", "make_parser", "now",
+__all__ = ["SLUG_MAX", "ToolError", "backup_dir", "data_dir", "emit", "header_file", "home", "make_parser", "now",
            "output_dir", "read_text_arg", "run", "slug", "use_utf8_output"]
 
 
@@ -24,9 +24,29 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:SLUG_MAX]
 
 
+def emit(text: str, output: str | None) -> None:
+    """Print the text, or write it to the `-o/--output` file and say so."""
+    if output:
+        Path(output).write_text(text, encoding="utf-8")
+        print(f"Wrote {output}")
+    else:
+        print(text, end="")
+
+
 def read_text_arg(arg: str) -> str:
-    """Contents of the file named by `arg`, or standard input when `arg` is "-"."""
-    return sys.stdin.read() if arg == "-" else Path(arg).read_text(encoding="utf-8")
+    """Contents of the file named by `arg`, or standard input when `arg` is "-".
+
+    Raises:
+        ToolError: the file is missing, unreadable, a folder, or not UTF-8 text.
+    """
+    if arg == "-":
+        return sys.stdin.read()
+    try:
+        return Path(arg).read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ToolError(f"{arg} is not a UTF-8 text file.") from exc
+    except OSError as exc:
+        raise ToolError(f"cannot read {arg}: {exc.strerror or exc}") from exc
 
 
 def make_parser(doc: str | None) -> argparse.ArgumentParser:

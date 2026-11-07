@@ -137,6 +137,20 @@ class AppliesOnRebuildTests(CurateCase):
         self.curate("rm", "certification", "Cert One")
         self.assertEqual(tables.load_curation("curated")["certifications"], [])
 
+    def test_empty_curated_list_leaves_the_parsed_one(self):
+        self.curate("add", "education", "BSc Example")
+        self.curate("rm", "education", "BSc Example")
+        data = {"companies": {}, "skills": {"groups": {}},
+                "profile": {**rd.empty_profile(), "education": ["Parsed degree"]}}
+        proc.apply_curated(data)
+        self.assertEqual(data["profile"]["education"], ["Parsed degree"])
+
+    def test_add_says_the_curated_list_replaces_the_parsed_one(self):
+        for argv in (("education", "BSc Example"), ("certification", "Cert One")):
+            note = self.curate("add", *argv)[1]
+            self.assertIn("replaces the list parsed from your resumes", note)
+        self.assertNotIn("replaces the list", self.curate("add", "tag-only", "Leadership")[1])
+
     def test_summary_angle(self):
         data = {"companies": {}, "skills": {"groups": {}}, "profile": {**rd.empty_profile(),
                 "summaries": [{"id": "sum-1", "text": "Engineer.", "angles": []}]}}

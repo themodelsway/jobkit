@@ -1,6 +1,6 @@
 ---
 name: resume-workflows
-description: Use when building a tailored resume for a job posting or adding a new resume file (pdf, docx, md, txt) to the user's resume data (scan, tag, check).
+description: Use when building a tailored resume for a job posting, rating how well the resume matches a posting, or adding a new resume file (pdf, docx, md, txt) to the user's resume data (scan, tag, check).
 ---
 
 # Resume help
@@ -59,16 +59,40 @@ Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. T
 ## Building a resume for a job posting
 1. Ask:
    > Please paste the job posting here.
-2. Run `build-resume -` with the posting on stdin. It picks the best-fitting opening summary, the best non-duplicate lines per company (same scoring as `query-resume for-jd`), the skills the posting asks for grouped, certifications and education, and writes a Markdown file under the jobkit home folder's `output/resumes/`.
-3. Read the result and tell the user, in plain words: that the resume is ready and where it is (this is the one place a folder name is shown), which skills the posting asks for that nothing on their resumes backs up, and, if lines were left out because they carry numbers that may be off, say so and offer to go through them:
+2. Read the posting and list every skill, tool or duty it asks for. Run `build-resume -` with the posting on stdin and one `--requirement "NAME"` for each item in that list, including ones the user may not have (a missing one is reported as a gap; leaving the flag out means such skills are not checked). If the output lists possible matches (a skill name that is also an ordinary word, with its sentence), read each sentence and, for the ones that really mean the skill, run the command again with `--requirement NAME`. It picks the best-fitting opening summary, the best non-duplicate lines per company, grouped under each role with its own title and dates (same scoring as `query-resume for-jd`), the skills the posting asks for grouped, certifications and education, and writes a Markdown file under the jobkit home folder's `output/resumes/`.
+3. Read the result and tell the user, in plain words: that the resume is a draft and where it is (this is the one place a folder name is shown), which skills the posting asks for that nothing on their resumes backs up (including ones outside their stored skills), which skills they have evidence for that this draft does not show (the command prints both), and, if lines were left out because they carry numbers that may be off, say so and offer to go through them:
    > A few lines were left out because their numbers may be off. Want to go through them now?
    Never invent resume lines; suggest wording and let the user decide.
+   If the output lists lines it set aside or capped, say in plain words which skill each concerns. For a line that reads like training, ask one at a time:
+   > Your line "TEXT" sounds like training. Did you also use this skill at work?
+   If yes, suggest wording and let the user decide; never change a stored line. For a line that says the skill was not used at work, say it is not shown in your profile and leave it out.
 4. If a company shows the wrong job title, rerun with `--title COMPANY-ID="Title"`.
 5. The name and contact lines at the top come from `header.md` in the jobkit home folder (`~/.jobkit/profile/header.md`). `build-resume` creates a template on first run and reports when it is missing. If it is a template, ask:
    > What name and contact line should go at the top of your resumes?
-   Write the answer to `header.md` yourself. Never copy it into the stored resume data.
+   Write the answer to `header.md` yourself. Never copy it into the stored resume data. Then run `build-resume -` again with the same posting, so the draft carries the real header.
+   When the user has looked it over (job titles and dates, every line is theirs and still true, the name and contact lines, how it looks when opened) and says it is ready, run `build-resume --approve FILE`. Never approve on your own; `build-resume --status FILE` shows draft, approved, or changed (edited after approval).
 6. Years of experience: use the figure the user gave in their open items (`profile open`). If the stored summaries disagree, ask which number is right before using one:
    > Your resumes say different numbers of years of experience. Which one should I use?
+
+## Rating how well the resume matches a job posting (experimental)
+Use this when the user asks how well their resume matches a posting or wants a score. The result is a match estimate, never an employer's applicant tracking score, and the user must not be told otherwise. Do every technical step yourself, and never ask the user anything from the first step to the end of the report: settle every doubt with the rules in `${CLAUDE_SKILL_DIR}/match-rubric.md` (read it before step 3; it also gives the request format) and report what you assumed. Flags: `match-score --help`.
+1. If the posting is not already in the conversation, say:
+   > Please paste the job posting here.
+   Write the posting to `output/match/posting.txt` under the jobkit home folder (create the folder if needed).
+2. Run `match-score extract --jd FILE`. If the answer says `cached: true`, give the user that stored report in plain words (step 6) and stop: neither the posting, the resume lines nor the date changed. Otherwise note the requirements it returned that code already rated.
+3. Pass 1, following the rubric: choose the level of the role, split the posting into requirements, rate each against the user's lines, cite the lines, and write the request file `output/match/requests.json` next to the posting. Never invent a line.
+4. Run `match-score check REQUESTS --jd FILE`. If it lists problems, fix the request file and run it again; do not ask the user. Note its assumptions.
+5. Run `match-score run REQUESTS --jd FILE`.
+6. Tell the user in plain words, in this order: what their profile does not show yet (must-haves first), what it shows well, then the range:
+   > Your profile matches this posting about LOW to HIGH out of 100. The lower number counts only what your lines clearly show; the higher number is what it would be if every close call went your way.
+   Then each thing you assumed, one short line each (lines the report lists as reading like training, or as not shown in the profile, are among them: say them the same way and ask nothing); if the report says the posting was vague, say it was hard to judge in places. End with:
+   > This is only an estimate of how well your lines match this posting. It is not the score any employer's tracking software gives, and it does not tell you whether you will be hired.
+   > This feature is experimental, so the numbers and the way they are worked out may still change.
+   Say "level of the role" for the band, and never show file names, commands, ids or the words band, preset, fallback or flag. Say "not shown in your profile yet", never that the user lacks a skill.
+7. If the report lists a people-leadership item as not or only partly shown, run `lead profile show` and add one statement, never a question. If it holds a team size or number of reports for an employer, offer one line of wording built only from those facts, say it is only a suggestion and that nothing was changed. If it holds none, say:
+   > If you tell me how many people you led and for how long, I can suggest a line for your resume.
+   Only if the user later accepts wording, save it with `profile open add TEXT` so they can put it in their resume file themselves. Never change the resume folder or a stored line.
+Earlier results: `match-score list`, then `match-score show KEY`.
 
 ## Adding a resume
 1. Run `process-resumes --survey`, then `process-resumes`.
@@ -77,7 +101,10 @@ Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. T
 4. Resolve new skill spellings and groups with `curate add skill-merge`, `skill-group` or `skill-drop` (one name at a time); mark conflicting figures with `curate add wrong-metric FIGURE` after the user confirms the figure is wrong. Then run `process-resumes` to apply.
 5. New employers are found by the scan (`profile companies`). If one employer appears under two names, ask whether they are the same company and, on yes, `profile companies merge FROM INTO`; to change a name, `profile companies rename ID NAME`; then `process-resumes --force`. A new resume layout needs a parser change, which is a developer task: tell the user the file could not be read.
 6. Verify: `query-resume stats` and `review`; run `process-resumes` again and expect 0 new or changed; check that no phone, email or LinkedIn is stored: `jobkit export --only resume-companies | grep -Ei '@|[0-9]{3}[ -][0-9]{3,4}'` shows any hit to review.
-7. Tell the user, in plain words, how many resumes were added and anything that needs their decision.
+7. Contact details: only for the newest resume added (by file date), compare the name, phone, email and LinkedIn at the top of its raw text (`~/.jobkit/output`) with `~/.jobkit/profile/header.md`. Compare by meaning, not spelling: a number with brackets and dashes and the same digits with dots are the same number, and email case and a trailing slash in a link do not matter. Say nothing when they match, when the header is still the template, or for older resumes (they keep old details). When one really differs, ask, showing both values:
+   > Your new resume shows PHONE, but your saved header has OLD. Should I update the header?
+   On yes, change only that line of `header.md` yourself. Never copy contact details into the stored data. On no, leave it and do not ask about that detail again in this conversation.
+8. Tell the user, in plain words, how many resumes were added and anything that needs their decision.
 
 ## Extra rules for this skill
 - Resume numbers are only accurate where the user confirms them.

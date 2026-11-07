@@ -34,6 +34,7 @@ CONTACT_LINE_RE: Final = re.compile(
     r"|(?:https?://)?(?:www\.)?(?i:linkedin)\.com/\S*"                              # LinkedIn
     r"|\d{5}(?:-\d{4})?,\s*[A-Za-z .]+,\s*[A-Z]{2}\b.*"                      # "30024, City, ST ..."
     r"|.*,\s*[A-Z]{2}[ ,]+\d{5}(?:-\d{4})?)\s*$")                           # "... City, ST 30024"
+CONTACT_SPLIT_RE: Final = re.compile(r"\s*[|·•]\s*")
 MAX_CONTACT_BLOCK: Final[int] = 6
 TRAILING_DATE_RE: Final = re.compile(r"(?<=\S)[ ]+(\d{2}/\d{4}\s*[–—-]\s*(?:\d{2}/\d{4}|Present|Current))\s*$", re.I)
 W: Final[str] = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -105,6 +106,13 @@ def extract(path: Path) -> ExtractedDocument:
 
 # ---------------------------------------------------------------- shared text clean-up
 
+def is_contact_line(line: str) -> bool:
+    """True for a line that holds only contact details: an email, phone, LinkedIn or postal address, or several
+    of them separated by `|`, `·` or `•`. A line with any other text is not one."""
+    parts = [part for part in CONTACT_SPLIT_RE.split(line) if part.strip()]
+    return bool(parts) and all(CONTACT_LINE_RE.match(part) for part in parts)
+
+
 def normalize(text: str) -> str:
     """Common clean-up for non-PDF text: newlines, zero-width characters, non-breaking spaces, bullet glyphs.
 
@@ -114,7 +122,7 @@ def normalize(text: str) -> str:
     """
     text = text.translate(ZERO_WIDTH).replace("\xa0", " ").replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]*\t[ \t]*", GAP, text)
-    text = "\n".join(line for line in text.split("\n") if not CONTACT_LINE_RE.match(line))
+    text = "\n".join(line for line in text.split("\n") if not is_contact_line(line))
     lines = [_gap_before_date(LIST_MARKER_RE.sub(lambda m: f"{m[1]}{BULLET} ", line.rstrip()))
              for line in text.split("\n")]
     return "\n".join(lines).strip("\n") + "\n"
@@ -161,8 +169,12 @@ def _pypdf_pages(path: Path) -> list[Any]:
     """The pages of a PDF read with pypdf, whose chatter about slightly damaged files is kept off the screen."""
     import logging  # pylint: disable=import-outside-toplevel
     from pypdf import PdfReader  # pylint: disable=import-outside-toplevel  # only needed without poppler
+    from pypdf.errors import PyPdfError  # pylint: disable=import-outside-toplevel
     logging.getLogger("pypdf").setLevel(logging.ERROR)
-    return list(PdfReader(path).pages)
+    try:
+        return list(PdfReader(path).pages)
+    except PyPdfError as exc:
+        raise common.ToolError(f"{path.name} could not be read as a PDF ({exc}).") from exc
 
 
 @register
@@ -174,7 +186,14 @@ class PdfExtractor:
 
     def extract(self, path: Path) -> ExtractedDocument:
         """Reading-order text plus layout text (from pypdf's layout mode without poppler)."""
-        return ExtractedDocument(self._reading_order(path), self._layout(path), "pdf")
+        try:
+            return ExtractedDocument(self._reading_order(path), self._layout(path), "pdf")
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or "").strip().splitlines()
+            raise common.ToolError(f"{path.name} could not be read as a PDF"
+                                   f"{': ' + detail[0] if detail else ''}.") from exc
+        except (OSError, ValueError, KeyError) as exc:
+            raise common.ToolError(f"{path.name} could not be read as a PDF ({exc}).") from exc
 
     @staticmethod
     def _reading_order(path: Path) -> str:

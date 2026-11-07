@@ -4,14 +4,18 @@
   lead init                      # create/extend questions + progress (never overwrites answers)
   lead status                    # per category: confidence counts; profile gaps
   lead next [--category C] [--order default|random]
-  lead show ID                   # question, profile facts, candidate stories for the top 3 companies, saved answers
+  lead show ID                   # question, profile facts, candidate stories for the 3 newest companies, saved answers
   lead list [--category C]
   lead set ID principle|notes|confidence VALUE      # principle = "how I handle this" in your own words
   lead example ID COMPANY FIELD VALUE               # FIELD: situation task action result metric
+  lead skip ID COMPANY [REASON]                     # no real example there (never had that role, say): not a gap
+  lead unskip ID COMPANY
   lead profile show
   lead profile set COMPANY FIELD VALUE              # factual scope: team sizes, reports, budget, cadence...
 
-Every question can hold a principle plus one STAR example per company (the most recent three: see TOP_N).
+Every question can hold a principle plus a STAR example for any employer in the resume data. The coverage target
+is up to three examples (see TOP_N), or fewer when there are fewer employers; blank examples do not count.
+An employer marked with `skip` (a reason, in your words) counts as covered but is shown as not applicable.
 Candidate stories come from prep.py (resume-based stories whose themes match); a finished story there can be reused.
 """
 from __future__ import annotations
@@ -36,6 +40,7 @@ TOP_N: Final[int] = 3
 STAR: Final[tuple[str, ...]] = ("situation", "task", "action", "result", "metric")
 PROFILE_FIELDS: Final[tuple[str, ...]] = ("title", "direct_reports", "indirect_team", "team_composition", "budget",
                                           "stakeholders", "reporting_to", "cadence", "notes")
+SCOPE_FIELDS: Final[tuple[str, ...]] = ("direct_reports", "indirect_team", "budget")
 SETTABLE: Final[tuple[str, ...]] = ("principle", "notes", "confidence")
 
 
@@ -123,6 +128,45 @@ def top_company_ids() -> list[str]:
     return [c["id"] for c in top_companies()]
 
 
+def example_target() -> int:
+    """How many examples a question should have: TOP_N, or the number of employers when that is fewer."""
+    try:
+        return max(1, min(TOP_N, len(qr.load()[0])))
+    except ToolError:
+        return TOP_N
+
+
+def has_content(fields: dict[str, str]) -> bool:
+    """Whether an example has some real STAR content (blank or whitespace-only fields and the skip mark do not count)."""
+    return any(str(v).strip() for k, v in fields.items() if k in STAR)
+
+
+def filled_examples(entry: QuestionProgress) -> int:
+    """How many companies have an example with some real content."""
+    return sum(1 for fields in entry["examples"].values() if has_content(fields))
+
+
+def skipped_examples(entry: QuestionProgress) -> int:
+    """How many companies are marked not applicable (and have no example of their own)."""
+    return sum(1 for fields in entry["examples"].values() if fields.get("skipped") and not has_content(fields))
+
+
+def examples_text(entry: QuestionProgress) -> str:
+    """`2/3 examples` or `2/3 examples, 1 not applicable`."""
+    skipped = skipped_examples(entry)
+    return f"{filled_examples(entry)}/{example_target()} examples" + (f", {skipped} not applicable" if skipped else "")
+
+
+def example_gap(entry: QuestionProgress) -> bool:
+    """Whether the question still lacks examples: not applicable employers count as covered."""
+    return filled_examples(entry) + skipped_examples(entry) < example_target()
+
+
+def missing_scope(facts: dict[str, Any] | None) -> list[str]:
+    """The scope facts (team size, budget) still unset for a company; an entered 0 counts as set."""
+    return [f for f in SCOPE_FIELDS if not str((facts or {}).get(f) or "").strip()]
+
+
 def cards() -> list[Question]:
     """All questions; fails when `init` has not run."""
     if not tables.has_questions():
@@ -151,9 +195,9 @@ def user_themes() -> set[str] | None:
         return None
 
 
-def require_top_company(company: str) -> None:
-    """Fail unless the company is one of the top companies."""
-    ids = top_company_ids()
+def require_company(company: str) -> None:
+    """Fail unless the company is an employer in the resume data."""
+    ids = [c["id"] for c in qr.newest_first(qr.load()[0])]
     if company not in ids:
         raise ToolError("COMPANY must be one of " + ", ".join(ids))
 
@@ -259,17 +303,21 @@ def cmd_list(args: argparse.Namespace) -> None:
         if in_category(question, args.category):
             p = progress.get(question["id"], blank())
             print(f"  {question['id']:<24} {question['category']:<28} {arch.CONF[p['confidence']]:<12} "
-                  f"{len(p['examples'])}/{TOP_N} examples")
+                  f"{examples_text(p)}")
 
 
-def ordered(args: argparse.Namespace) -> list[Question]:
-    """Questions not yet solid: weakest and least recently drilled first (or random)."""
+def ordered(args: argparse.Namespace, include_solid: bool = False) -> list[Question]:
+    """Questions not yet solid: weakest and least recently drilled first (or random). With `include_solid`, solid
+    questions follow, the least recently drilled first."""
     progress = prog()["questions"]
-    todo = [q for q in cards() if in_category(q, args.category) and progress.get(q["id"], blank())["confidence"] < 2]
+    todo = [q for q in cards() if in_category(q, args.category)
+            and (include_solid or progress.get(q["id"], blank())["confidence"] < 2)]
     if getattr(args, "order", "default") == "random":
         random.shuffle(todo)
+        todo.sort(key=lambda q: progress.get(q["id"], blank())["confidence"] >= 2)
     else:
-        todo.sort(key=lambda q: (progress.get(q["id"], blank())["confidence"],
+        todo.sort(key=lambda q: (progress.get(q["id"], blank())["confidence"] >= 2,
+                                 progress.get(q["id"], blank())["confidence"],
                                  progress.get(q["id"], blank())["last_drilled"] or ""))
     return todo
 
@@ -292,8 +340,8 @@ def cmd_status(args: argparse.Namespace) -> None:
     for category, n in by_category.items():
         print(f"  {category:<30} {n[2]} solid, {n[1]} some gaps, {n[0]} not drilled")
     profile = tables.load_company_facts()
-    gaps = [cid for cid, facts in profile.items() if not any(facts.values())]
-    print("\nProfile facts missing for: " + (", ".join(gaps) or "none"))
+    gaps = [f"{cid} ({', '.join(m)})" for cid in (profile or {}) if (m := missing_scope(profile[cid]))]
+    print("\nScope facts missing for: " + (", ".join(gaps) or "none"))
 
 
 def cmd_set(args: argparse.Namespace) -> None:
@@ -314,14 +362,33 @@ def cmd_set(args: argparse.Namespace) -> None:
 def cmd_example(args: argparse.Namespace) -> None:
     """Save one STAR field of the user's example for a question and company."""
     find(args.id)
-    require_top_company(args.company)
+    require_company(args.company)
     if args.field not in STAR:
         raise ToolError("FIELD must be one of " + ", ".join(STAR))
     progress = prog()
     entry = progress["questions"].setdefault(args.id, blank())
-    entry["examples"].setdefault(args.company, {})[args.field] = args.value
+    fields = entry["examples"].setdefault(args.company, {})
+    fields[args.field] = args.value
+    fields.pop("skipped", None)                      # a real example replaces a not-applicable mark
     tables.save_lead_progress(progress["questions"])
     print(f"Updated {args.id} example for {args.company}.{args.field}")
+
+
+def cmd_skip(args: argparse.Namespace) -> None:
+    """Mark an employer as not applicable for a question (or clear the mark with `unskip`)."""
+    find(args.id)
+    require_company(args.company)
+    progress = prog()
+    entry = progress["questions"].setdefault(args.id, blank())
+    fields = entry["examples"].setdefault(args.company, {})
+    if args.cmd == "unskip":
+        fields.pop("skipped", None)
+    elif has_content(fields):
+        raise ToolError(f"{args.id} already has an example for {args.company}; it is not 'not applicable'.")
+    else:
+        fields["skipped"] = (args.reason or "").strip() or "not applicable"
+    tables.save_lead_progress(progress["questions"])
+    print(f"{'Cleared' if args.cmd == 'unskip' else 'Marked not applicable:'} {args.id} for {args.company}.")
 
 
 def cmd_profile(args: argparse.Namespace) -> None:
@@ -331,7 +398,7 @@ def cmd_profile(args: argparse.Namespace) -> None:
         return
     if args.company is None or args.field not in PROFILE_FIELDS:
         raise ToolError("usage: profile set COMPANY FIELD VALUE; FIELD in " + ", ".join(PROFILE_FIELDS))
-    require_top_company(args.company)
+    require_company(args.company)
     facts = tables.load_company_facts()
     facts.setdefault(args.company, blank_profile())[args.field] = args.value
     tables.save_company_facts(facts)
@@ -365,6 +432,13 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("id", "company", "field", "value"):
         example.add_argument(name)
     example.set_defaults(fn=cmd_example)
+    for name in ("skip", "unskip"):
+        skip = sub.add_parser(name)
+        skip.add_argument("id")
+        skip.add_argument("company")
+        if name == "skip":
+            skip.add_argument("reason", nargs="?")
+        skip.set_defaults(fn=cmd_skip)
     profile = sub.add_parser("profile")
     profile.add_argument("action", choices=["show", "set"])
     for name in ("company", "field", "value"):

@@ -108,6 +108,34 @@ class ProfileTests(HomeCase):
         self.assertEqual((code, err.strip()), (1, "No open item 99"))
         self.assertEqual(self.run_cli("open", "add")[0], 1)
 
+class RetestWindowTests(ProfileTests):
+    def test_default_is_thirty_and_status_says_so(self):
+        self.assertEqual(up.reassess_days(), 30)
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(up.reassess_days(), 30)
+        self.assertIn("retest window: 30 days (default, not set)", self.run_cli("status")[1])
+
+    def test_set_stores_the_window_and_status_shows_it(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(self.run_cli("set", "reassess_days", "45")[0], 0)
+        self.assertEqual(up.reassess_days(), 45)
+        self.assertIn("retest window: 45 days\n", self.run_cli("status")[1])
+
+    def test_invalid_values_are_rejected_and_change_nothing(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.run_cli("set", "reassess_days", "45")
+        for bad in ("0", "366", "-3", "soon", "4.5", ""):
+            code, _, err = self.run_cli("set", "reassess_days", bad)
+            self.assertEqual(code, 1, bad)
+            self.assertIn("from 1 to 365", err)
+            self.assertEqual(up.reassess_days(), 45, bad)
+
+    def test_edges_are_accepted(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        for good in ("1", "365"):
+            self.assertEqual(self.run_cli("set", "reassess_days", good)[0], 0)
+            self.assertEqual(up.reassess_days(), int(good))
+
 
 if __name__ == "__main__":
     unittest.main()

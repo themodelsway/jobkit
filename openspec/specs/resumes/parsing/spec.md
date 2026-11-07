@@ -33,8 +33,19 @@ The system SHALL match employers using the registry stored in the profile (the e
 - **WHEN** no employers are installed
 - **THEN** work history is not attributed to any company
 
+### Requirement: Employer and title are split on a dash
+The system SHALL split an employer from a title on an en or em dash, or on a hyphen with a space on each side, and SHALL NOT split inside a hyphenated name.
+
+#### Scenario: Hyphenated employer
+- **WHEN** a heading reads `Acme-Labs` or `Acme-Works – Principal Engineer`
+- **THEN** the employers are `Acme-Labs` and `Acme-Works`
+
 ### Requirement: Unparseable resumes are reported
-The system SHALL report a file that yields no work history as unparsed with a reason, instead of dropping it silently.
+The system SHALL report a file that yields no work history as unparsed with a reason, instead of dropping it silently. A file with a work-experience heading but no known employer under it SHALL be reported too.
+
+#### Scenario: Work heading, no known employer
+- **WHEN** a file has a work-experience heading and none of its employers is known
+- **THEN** it appears in the unparsed list with that reason
 
 #### Scenario: Plain essay text
 - **WHEN** a text file has no recognisable work history

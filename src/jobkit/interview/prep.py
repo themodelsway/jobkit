@@ -37,7 +37,6 @@ Reading and checking
   prep validate [ID]                         # errors block 'done'; warnings are advice; exit 1 on errors
   prep export [--story S | --engagement E] [--format json|md] [-o FILE]
   prep evidence STORY                        # dates the story was practised in sessions (read-only)
-  prep migrate                               # bring stories and engagements to the current layout (idempotent)
 
 Fact basis: stated (user said it), estimate, unsure (user doubts it), verified-doc (needs a URL), proposed (an
 idea the assistant suggested; never the user's claim). Only stated, estimate and verified-doc may back a story.
@@ -671,7 +670,7 @@ def cmd_person_add(args: argparse.Namespace) -> None:
     finish_eng(data, eng, f"{eng['id']}: {len(eng['people'])} people recorded")
 
 
-# ---- search, validate, export, evidence, migrate -------------------------------------------------------------------
+# ---- search, validate, export, evidence -------------------------------------------------------------------
 
 def stories_if_any() -> list[Story]:
     """All stories, or none before `init`."""
@@ -749,17 +748,6 @@ def cmd_evidence(args: argparse.Namespace) -> None:
           f"graded solid on {', '.join(sorted(evidence['graded2'])) or 'no day'}")
 
 
-def cmd_migrate(args: argparse.Namespace) -> None:
-    """Rewrite the stores in the current schema (idempotent)."""
-    data = load_story_data()
-    save_stories(data)
-    eng_data = load_eng_data()
-    if eng_data["engagements"] or tables.has_engagements():
-        save_engs(eng_data)
-    print(f"Migrated {len(data['stories'])} stories to schema v{sm.SCHEMA_VERSION}; "
-          f"engagements: {len(eng_data['engagements'])}")
-
-
 # ---- for-jd --------------------------------------------------------------------------------------------------------
 
 def cmd_for_jd(args: argparse.Namespace) -> None:
@@ -787,7 +775,6 @@ def _actions(sub: Any, name: str) -> Any:
 def _add_story_parsers(sub: Any) -> None:
     sub.add_parser("init", aliases=["skeleton"]).set_defaults(fn=cmd_init)
     sub.add_parser("status").set_defaults(fn=cmd_status)
-    sub.add_parser("migrate").set_defaults(fn=cmd_migrate)
     listing = sub.add_parser("list")
     listing.add_argument("--company")
     listing.set_defaults(fn=cmd_list)

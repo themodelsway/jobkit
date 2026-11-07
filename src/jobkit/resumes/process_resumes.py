@@ -131,17 +131,68 @@ def add_unique(items: list[str], value: str) -> None:
         items.append(value)
 
 
+ROLE_FIELDS: Final = (("titles", "title"), ("subtitles", "subtitle"), ("clients", "client"))
+
+
+def find_role(roles: list[dict[str, Any]], start: str | None, end: str | None) -> dict[str, Any] | None:
+    """The stored role an entry belongs to: the same start and end, else the same start where one side is still
+    open (a resume that says Present and one that gives the end date describe one job)."""
+    same = [r for r in roles if r["start"] == start]
+    exact = next((r for r in same if r["end"] == end), None)
+    if exact or start is None:
+        return exact
+    if end is None:
+        return max(same, key=lambda r: r["end"] or "", default=None)
+    return next((r for r in same if r["end"] is None), None)
+
+
+def latest_end(ends: Mapping[str, str | None]) -> str | None:
+    """The role's end: the latest real end date any resume gives; None (current) only when none gives one."""
+    return max((e for e in ends.values() if e), default=None)
+
+
 def merge_role(company: dict[str, Any], entry: pr.WorkEntry, source: str) -> None:
-    """One role per (start, end); titles/subtitles/clients seen in tailored resumes are kept as variants."""
-    role = next((r for r in company["roles"] if r["start"] == entry["start"] and r["end"] == entry["end"]), None)
+    """One role per job (see find_role); titles/subtitles/clients seen in tailored resumes are kept as variants,
+    each with the files that state it, and so is the end date each file gives."""
+    role = find_role(company["roles"], entry["start"], entry["end"])
     if role is None:
         role = {"start": entry["start"], "end": entry["end"], "titles": [], "subtitles": [], "clients": [],
-                "sources": []}
+                "sources": [], "ends": {}, "field_sources": {}}
         company["roles"].append(role)
-    add_unique(role["titles"], entry["title"])
-    add_unique(role["subtitles"], entry["subtitle"])
-    add_unique(role["clients"], entry["client"])
+    role["ends"][source] = entry["end"]
+    role["end"] = latest_end(role["ends"])
+    for field, key in ROLE_FIELDS:
+        add_unique(role[field], entry[key])
+        if entry[key]:
+            by_value = role["field_sources"].setdefault(field, {})
+            add_unique(by_value.setdefault(entry[key], []), source)
     add_unique(role["sources"], source)
+
+
+def strip_role(role: dict[str, Any], key: str) -> bool:
+    """Take resume file `key` out of a role: its end date and the titles only it stated. False when no file is left."""
+    if key not in role["sources"]:
+        return True
+    role["sources"].remove(key)
+    if "ends" in role:
+        role["ends"].pop(key, None)
+        role["end"] = latest_end(role["ends"])
+    for field, by_value in role.get("field_sources", {}).items():
+        for value, files in list(by_value.items()):
+            if key in files:
+                files.remove(key)
+            if not files:
+                del by_value[value]
+                role[field].remove(value)
+    return bool(role["sources"])
+
+
+NUMBER_RE: Final = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def same_figures(a: str, b: str) -> bool:
+    """Whether two lines state the same numbers; a near-duplicate with different figures is a different claim."""
+    return sorted(NUMBER_RE.findall(a)) == sorted(NUMBER_RE.findall(b))
 
 
 def merge_bullet(company: dict[str, Any], text: str, role_start: str | None, source: str) -> None:
@@ -149,7 +200,8 @@ def merge_bullet(company: dict[str, Any], text: str, role_start: str | None, sou
     bullet_id = pr.bullet_id(company["id"], text)
     hit = next((b for b in company["bullets"] if b["id"] == bullet_id), None)
     if hit is None:
-        hit = next((b for b in company["bullets"] if pr.similar(b["text"], text) >= NEW_VARIANT_RATIO), None)
+        hit = next((b for b in company["bullets"] if pr.similar(b["text"], text) >= NEW_VARIANT_RATIO
+                                                    and same_figures(b["text"], text)), None)
         if hit is not None and text != hit["text"] and text not in hit["variants"]:
             hit["variants"].append(text)
     if hit is None:
@@ -158,6 +210,50 @@ def merge_bullet(company: dict[str, Any], text: str, role_start: str | None, sou
                "ignored": False}
         company["bullets"].append(hit)
     add_unique(hit["sources"], source)
+    add_unique(hit.setdefault("wordings", {}).setdefault(source, []), text)
+
+
+def _wordings(bullet: Mapping[str, Any]) -> set[str]:
+    """Every wording a bullet is known by: its text, its variants and the wording each file used."""
+    texts = {bullet["text"], *bullet.get("variants", [])}
+    for words in bullet.get("wordings", {}).values():
+        texts.update(words)
+    return texts
+
+
+def _continues(new: Mapping[str, Any], old: Mapping[str, Any], pass_no: int) -> bool:
+    """Whether `new` continues the stored bullet `old`: same id (1), a shared wording (2), or 0.92 similar
+    text with the same numbers (3)."""
+    if pass_no == 1:
+        return new["id"] == old["id"]
+    if pass_no == 2:
+        return bool(_wordings(new) & _wordings(old))
+    return any(pr.similar(n, o) >= NEW_VARIANT_RATIO and same_figures(n, o)
+               for n in (new["text"], *new.get("variants", [])) for o in (old["text"], *old.get("variants", [])))
+
+
+def _carry_company(new: Sequence[Any], old: Sequence[Any], curated: set[str]) -> None:
+    """Give each bullet of `new` the id of the stored bullet it continues, using each old id once. Of several
+    candidates a curated one wins, then the lowest id."""
+    free = {b["id"]: b for b in old}
+    taken: set[int] = set()
+    for pass_no in (1, 2, 3):
+        for bullet in sorted(new, key=lambda b: b["id"]):
+            if id(bullet) in taken:
+                continue
+            found = sorted((o for o in free.values() if _continues(bullet, o, pass_no)),
+                           key=lambda o: (o["id"] not in curated, o["id"]))
+            if found:
+                bullet["id"] = found[0]["id"]
+                taken.add(id(bullet))
+                del free[bullet["id"]]
+
+
+def carry_ids(data: ResumeData, stored: Mapping[str, Any], curated: set[str]) -> None:
+    """Keep each bullet's stored id through a rebuild while the bullet continues (see `_carry_company`)."""
+    for cid, company in data["companies"].items():
+        if cid in stored:
+            _carry_company(company["bullets"], stored[cid]["bullets"], curated)
 
 
 def merge_work(companies: dict[str, Any], source: str, work: Iterable[pr.WorkEntry]) -> None:
@@ -186,7 +282,8 @@ def merge_skills(skills: dict[str, Any], parsed: dict[str, list[pr.SkillItem]], 
 
 
 def merge_profile(profile: dict[str, Any], parsed: pr.Resume, source: str) -> None:
-    """Merge summary, headline and the plain lists (profile points, education, certifications, projects)."""
+    """Merge summary and the plain lists (headlines, profile points, education, certifications, projects), noting
+    which file stated each item so that it can go when the file does."""
     if parsed["summary"]:
         sid = "sum-" + pr.bullet_id("s", parsed["summary"]).split("-")[1]
         existing = next((x for x in profile["summaries"] if x["id"] == sid), None)
@@ -194,12 +291,32 @@ def merge_profile(profile: dict[str, Any], parsed: pr.Resume, source: str) -> No
             existing = {"id": sid, "text": parsed["summary"], "angles": [], "sources": []}
             profile["summaries"].append(existing)
         add_unique(existing["sources"], source)
-    if parsed.get("headline"):
-        add_unique(profile.setdefault("headlines", []), parsed["headline"])
-    bucket_keys = ("profile_points", "education", "certifications", "projects")
-    for key in bucket_keys:
-        for text in cast(list[str], parsed[key]):
-            add_unique(profile[key], text)
+    items = {"headlines": [parsed["headline"]] if parsed.get("headline") else []}
+    items.update({key: cast(list[str], parsed[key]) for key in ("profile_points", "education", "certifications",
+                                                                 "projects")})
+    noted = profile.setdefault("item_sources", [])
+    for section, texts in items.items():
+        for text in texts:
+            add_unique(profile.setdefault(section, []), text)
+            entry = next((x for x in noted if x["section"] == section and x["text"] == text), None)
+            if entry is None:
+                entry = {"section": section, "text": text, "sources": []}
+                noted.append(entry)
+            add_unique(entry["sources"], source)
+
+
+def strip_items(profile: dict[str, Any], key: str) -> None:
+    """Take resume file `key` out of the profile items; an item no other file states is removed."""
+    kept = []
+    for item in profile.get("item_sources", []):
+        if key in item["sources"]:
+            item["sources"].remove(key)
+            if not item["sources"]:
+                if item["text"] in profile.get(item["section"], []):
+                    profile[item["section"]].remove(item["text"])
+                continue
+        kept.append(item)
+    profile["item_sources"] = kept
 
 
 def _strip(items: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
@@ -214,20 +331,47 @@ def _strip(items: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     return kept
 
 
+def recompute_bullet(bullet: dict[str, Any], key: str) -> bool:
+    """Take resume file `key` out of a bullet and rebuild its wording from the files that remain.
+
+    The text stays when a remaining file still says it; otherwise it becomes the first remaining file's
+    wording (the figures follow), and the other wordings are its variants. A flag set from the old figures is
+    cleared so curation can set it again. Returns False when no file is left (the bullet goes).
+    """
+    wordings = bullet.setdefault("wordings", {s: [bullet["text"]] for s in bullet["sources"]})
+    wordings.pop(key, None)
+    if key in bullet["sources"]:
+        bullet["sources"].remove(key)
+    if not bullet["sources"]:
+        return False
+    left = [w for src in bullet["sources"] for w in wordings.get(src, [])]
+    if left and bullet["text"] not in left:
+        bullet["text"], bullet["metrics"], bullet["needs_review"] = left[0], pr.find_metrics(left[0]), False
+    bullet["variants"] = [w for w in dict.fromkeys(left) if w != bullet["text"]]
+    return True
+
+
+def _strip_bullets(bullets: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+    """Remove file `key` from every bullet it contributed to; bullets with no other file are dropped."""
+    return [b for b in bullets if key not in b["sources"] or recompute_bullet(b, key)]
+
+
 def strip_source(data: ResumeData, key: str) -> int:
-    """Remove what resume file `key` contributed (bullets, roles, summaries, skills with no other source).
-    Skills with the source `curated` stay. Returns how many bullets were dropped."""
+    """Remove what resume file `key` contributed (bullets, roles and their titles and end dates, summaries,
+    headlines, education, certifications, projects, skills with no other source). Skills with the source `curated`
+    stay. Returns how many bullets were dropped."""
     companies = cast(dict[str, Any], data["companies"])
     dropped = 0
     for cid, company in list(companies.items()):
         before = len(company["bullets"])
-        company["bullets"] = _strip(company["bullets"], key)
-        company["roles"] = _strip(company["roles"], key)
+        company["bullets"] = _strip_bullets(company["bullets"], key)
+        company["roles"] = [r for r in company["roles"] if strip_role(r, key)]
         dropped += before - len(company["bullets"])
         if not company["bullets"] and not company["roles"]:
             del companies[cid]
     profile = cast(dict[str, Any], data["profile"])
     profile["summaries"] = _strip(profile["summaries"], key)
+    strip_items(profile, key)
     groups = cast(dict[str, Any], data["skills"])["groups"]
     for group, entries in groups.items():
         groups[group] = _strip(entries, key)
@@ -335,7 +479,7 @@ def apply_curated(data: ResumeData) -> None:
     """The user's curation (certifications, themes, known-wrong figures ...) survives rebuilds (--force)."""
     cur = rd.load_curated()
     for key in ("certifications", "education"):
-        if key in cur:
+        if cur.get(key):                # an empty curated list counts as none
             data["profile"][key] = cur[key]
     apply_themes(data)
     flag_review(data, cur.get("review_if_metric_matches", []))
@@ -375,11 +519,39 @@ def write_data(data: ResumeData, ledger: dict[str, Any], unparsed: dict[str, Any
 
 # ---------------------------------------------------------------- build
 
+def untraceable_wording(data: ResumeData) -> bool:
+    """True when an older merged bullet (several files, or variants) does not record which file said what, so
+    its wording cannot be rebuilt after a file goes. A single-file bullet is traceable as it is."""
+    return any("wordings" not in b and (len(b["sources"]) > 1 or b.get("variants"))
+               for c in data["companies"].values() for b in c["bullets"])
+
+
+def untraceable_sources(data: ResumeData) -> bool:
+    """True when stored roles or profile items predate the record of which file stated what."""
+    if not data["companies"]:
+        return False
+    return "item_sources" not in data["profile"] or any(
+        "ends" not in r for c in data["companies"].values() for r in c["roles"])
+
+
+def curation_changed(data: ResumeData) -> bool:
+    """True when the curation is not the one the stored data was built with. Curation only ever adds to stored
+    data, so after a change (a removal above all) the data is rebuilt from the files."""
+    return bool(data["companies"]) and tables.load_built_curation() != tables.curation_digest()
+
+
 def load_state(force: bool) -> tuple[dict[str, Any], dict[str, Any], ResumeData]:
     """(ledger, unparsed, data) from the files on disk, or empty ones with --force."""
+    empty: ResumeData = {"companies": {}, "skills": {"groups": {}}, "profile": rd.empty_profile()}
     if force:
-        return {}, {}, {"companies": {}, "skills": {"groups": {}}, "profile": rd.empty_profile()}
+        return {}, {}, empty
     data: ResumeData = {"companies": rd.load_companies(), "skills": rd.load_skills(), "profile": rd.load_profile()}
+    if untraceable_wording(data) or untraceable_sources(data):
+        print("Upgrading the stored data: rebuilding once from your resume files (your curation is kept).")
+        return {}, {}, empty
+    if curation_changed(data):
+        print("Your curation changed since the last build: rebuilding from your resume files (your curation is kept).")
+        return {}, {}, empty
     return rd.load_ledger(), tables.load_unparsed(), data
 
 
@@ -414,8 +586,28 @@ def process_file(path: Path, root: Path, ledger: dict[str, Any], unparsed: dict[
     return "parsed"
 
 
-def build(files: Iterable[Path], root: Path, force: bool) -> None:
+def check_folders(dirs: Iterable[Path], root: Path, present: Iterable[Path], force: bool) -> None:
+    """Stop before pruning when a configured folder has emptied although the ledger lists files from it.
+    `--force` accepts that as a deliberate removal."""
+    ledger = rd.load_ledger()
+    if force or not ledger:
+        return
+    present = list(present)
+    for folder in dirs:
+        prefix = "" if folder == root else rel(folder, root) + "/"
+        if any(key.startswith(prefix) for key in ledger) and not any(folder in p.parents for p in present):
+            raise common.ToolError(
+                f"No resume files found in {folder}, but earlier runs read files from it. Is the folder "
+                f"unmounted or moved? Check `profile status`. If you moved them out on purpose, run "
+                f"`process-resumes --force`.")
+
+
+def build(files: Iterable[Path], root: Path, force: bool, dirs: Iterable[Path] = ()) -> None:
     """Process new or changed resumes, curate, and write the data files."""
+    files = list(files)
+    check_folders(dirs, root, files, force)
+    digest = tables.curation_digest()
+    stored = rd.load_companies()
     ledger, unparsed, data = load_state(force)
     TEXT_DIR.mkdir(exist_ok=True)
     present = sorted(files, key=lambda p: rel(p, root))
@@ -423,8 +615,11 @@ def build(files: Iterable[Path], root: Path, force: bool) -> None:
     outcomes = [process_file(path, root, ledger, unparsed, data) for path in present]
     curate_skills(data)
     retag(data)
+    themes = rd.load_themes_file()
+    carry_ids(data, stored, set(themes.get("themes", {})) | set(themes.get("ignore", [])))
     apply_curated(data)
     write_data(data, ledger, unparsed)
+    tables.save_built_curation(digest)
     orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file())
     if orphans:
         print(f"\nWARNING: {len(orphans)} entr(ies) in your curation match no bullet or summary "
@@ -438,6 +633,10 @@ def build(files: Iterable[Path], root: Path, force: bool) -> None:
 def cmd_process(args: argparse.Namespace) -> None:
     """Scan the resume folders, then survey or build."""
     config = load_config()
+    for folder in config.dirs:
+        if not folder.is_dir():
+            raise common.ToolError(f"The resume folder {folder} does not exist. Is it unmounted or moved? "
+                                   f"Check `profile status`; nothing was changed.")
     files = list_resumes(config.dirs)
     if not files:
         raise common.ToolError(f"No resumes ({', '.join(extract.supported_suffixes())}) found under "
@@ -446,7 +645,7 @@ def cmd_process(args: argparse.Namespace) -> None:
     if args.survey:
         survey(files, config.root)
     else:
-        build(files, config.root, args.force)
+        build(files, config.root, args.force, config.dirs)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -22,6 +22,10 @@ __pycache__/
 # Personal resume data (work history, curation)
 /resume-data/
 
-# Interview prep stories (personal)
+# Interview prep stories
 /prep/
 /profile/
+/tmp
+
+# Track only specs not verbose changes
+/openspec/changes/

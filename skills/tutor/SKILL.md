@@ -64,15 +64,20 @@ Three topics, all backed by the same stored data: architecture, leadership and S
 ## Sessions (always first)
 1. `sessions list`; ask whether to start a new lesson session or continue one. Never guess:
    > Do you want to start a new lesson, or pick up one you did before?
-2. New: `sessions new "title" --mode tutor --topic architecture|leadership|stories [--area A] [--tier N] [--kind service|pair|scenario] [--category C] [--company C] [--order default|random] [--count N]`. Ask whether to begin with what they know least or mix it up, unless already said. Continue: `sessions resume ID`.
+2. New: `sessions new "title" --mode tutor --topic architecture|leadership|stories [--area A] [--tier N] [--kind service|pair|scenario] [--category C] [--company C] [--order default|random] [--count N] [--only-open]`. Solid items follow the weak ones in the queue; `--only-open` leaves them out. Ask whether to begin with what they know least or mix it up, unless already said. Continue: `sessions resume ID`.
 3. Log each lesson: `sessions log ID ITEM --question "quiz question" --answer - --grade "..." --confidence N [--quiz]` (answer on stdin, full text). Close with `sessions close ID`.
 4. Teaching alone caps confidence at 1 (some gaps) and never lowers a confidence earned in practice. Confidence 2 needs `--quiz --grade "what was right" --confidence 2` after a correct quiz answer. `--quiz` is a claim you make, so use it only when the user's answer really was correct; the log keeps the answer so it can be checked. `sessions reopen ID` continues a closed session.
 
 ## Readiness ("how prepared am I?")
 Run `readiness` (add `--jd -` with the posting on stdin for a specific job, `--days N` for the aging window) and report in plain words. Rules for honest reporting:
-- Report coverage and evidence per area, never one percentage. Labels: untested, some gaps, solid-unlogged (set by hand, no logged answer), solid-once, solid-repeated, aging (solid but not practised for 30+ days). Only real answers count; lessons count only after a passed quiz. Stories: empty, draft, done, done-rehearsed. Say these in everyday words, for example "not tried yet", "a few gaps", "solid once", "solid several times", "getting rusty".
+- Report coverage and evidence per area, never one percentage. Labels: untested, some gaps, solid-unlogged (set by hand, no logged answer), solid-once, solid-repeated, aging (solid but not practised for 30+ days). Only real answers count; lessons count only after a passed quiz. Stories: empty, draft, done, done-rehearsed, done-aging. Say these in everyday words, for example "not tried yet", "a few gaps", "solid once", "solid several times", "getting rusty".
 - Say what it does and does not show:
   > This comes from practice answers I graded, so it shows what you've covered and how well it has been tested, not how a real interviewer will score you. One good result is weak evidence; it's worth repeating on another day.
+- If `profile status` shows the retest window is the default (not set), ask once, and save the answer with `profile set reassess_days N` (a whole number of days, 1 to 365; if the user has no preference, keep the default and do not ask again):
+  > How many days should pass before I offer to re-check an answer you did well on? Most people pick 30.
+- After the report, run `readiness --due`. If it lists items, say how many and how old the oldest is, and ask:
+  > N of your good answers are older than D days. Do you want to re-check some of them now?
+  On yes, hand over to practice: the retest is a graded drill, not a lesson, so use the interview-prep skill (`sessions new "title" --due`). On no, say nothing more about it. Never start a retest without a yes.
 - Name the 3 to 5 most valuable gaps (key services not tried, leadership questions with no example, stories still empty for the most recent jobs) and offer to teach or practise the first one. Do not decide for the user.
 - Use `--jd -` to focus on a role; there is no way to mark items as not relevant, so skip them when the user says so.
 

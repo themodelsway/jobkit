@@ -38,7 +38,7 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 - **THEN** the copy opens cleanly and holds a state from before or after that write
 
 ### Requirement: Restore
-`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a database of a known schema version.
+`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a complete jobkit database. The file SHALL be checked on a temporary copy (SQLite integrity check, upgrade to the current schema, every table and column of the current schema present) before anything is replaced.
 
 #### Scenario: Restore
 - **WHEN** a valid backup is restored
@@ -47,3 +47,7 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 #### Scenario: Wrong file
 - **WHEN** the file is not a jobkit database
 - **THEN** the command exits with status 1 and the current database is unchanged
+
+#### Scenario: Look-alike file
+- **WHEN** the file has a `meta` table and a plausible version but lacks the real tables and columns
+- **THEN** it is refused and the current database is unchanged

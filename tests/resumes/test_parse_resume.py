@@ -65,6 +65,21 @@ class ParserTests(unittest.TestCase):
                          {"initech": "Initech", "acme-corp": "Acme Corp"})
         self.assertEqual(pr.discover_companies("no sections here"), {})
 
+    def test_three_line_entry_finds_company_above_title(self):
+        text = "Work History\nAcme Corp\nSenior Engineer\n01/2020 - Present\n• Built things.\n"
+        self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp"})
+        entries, _ = pr.parse_work(text.splitlines()[1:])
+        self.assertEqual([(e["company_id"], e["title"]) for e in entries], [("acme-corp", "Senior Engineer")])
+
+    def test_line_above_dates_after_bullet_is_the_employer(self):
+        text = ("Work History\nAcme Corp\n01/2020 - Present\n• Led the platform team and shipped\n"
+                "the new billing engine.\nGlobex Inc\n01/2015 - 12/2019\n• Built things.\n")
+        self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp", "globex-inc": "Globex Inc"})
+
+    def test_company_and_title_on_one_line_ignores_line_above(self):
+        text = "Work History\n• Wrapped bullet end\nAcme Corp – Senior Engineer\n01/2020 - Present\n• x\n"
+        self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp"})
+
     def test_registry_is_replaced_not_merged(self):
         pr.set_companies({})
         self.assertEqual(pr.COMPANIES, {})
@@ -103,7 +118,7 @@ class HelperTests(unittest.TestCase):
     def test_tag_skills(self):
         terms = pr.skill_terms({"Cloud": [{"name": "Lambda", "aliases": ["AWS Lambda"]},
                                            {"name": "Go", "aliases": []}]})
-        self.assertNotIn("Go", terms)                     # 1-2 letter terms are skipped
+        self.assertIn("Go", terms)                        # 1-2 letter terms are kept; they match whole words only
         self.assertEqual(pr.tag_skills("Built on aws lambda and Lambda", terms), ["Lambda"])
         self.assertEqual(pr.tag_skills("Lambdas", terms), [])
 

@@ -11,7 +11,7 @@ from tests.test_cli_contract import TOOLS
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 COMMANDS = {"jobkit": "jobkit.admin", "profile": "jobkit.user.profile", "process-resumes": "jobkit.resumes.process_resumes",
-            "query-resume": "jobkit.resumes.query_resume", "build-resume": "jobkit.resumes.build_resume",
+            "query-resume": "jobkit.resumes.query_resume", "build-resume": "jobkit.resumes.build_resume", "match-score": "jobkit.resumes.match_score",
             "arch": "jobkit.interview.arch", "lead": "jobkit.interview.lead", "prep": "jobkit.interview.prep",
             "sessions": "jobkit.interview.sessions", "readiness": "jobkit.interview.readiness"}
 
@@ -47,7 +47,7 @@ class ManualTests(unittest.TestCase):
 
 class SchemaDocTests(unittest.TestCase):
     def test_every_export_kind_is_described(self):
-        """Every kind that `jobkit export` and `jobkit migrate` handle is named, in backticks, in data-structures.md."""
+        """Every kind that `jobkit export` handles is named, in backticks, in data-structures.md."""
         text = (DOCS / "data-structures.md").read_text(encoding="utf-8")
         missing = [k.name for k in records.KINDS if f"`{k.name}`" not in text]
         self.assertEqual(missing, [], "export kinds missing from docs/data-structures.md")

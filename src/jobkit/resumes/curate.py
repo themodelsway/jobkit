@@ -122,6 +122,8 @@ def cmd_curate(args: argparse.Namespace) -> None:
     if args.action == "add":
         add_entry(spec, items, args.values, args)
         done = f"Added {args.kind}: {' '.join(args.values)}."
+        if spec.key in ("certifications", "education"):
+            done += f" Once there is any entry, your {spec.key} list replaces the list parsed from your resumes."
     else:
         if not remove_entry(spec, items, args.values):
             raise ToolError(f"No {args.kind} entry {' '.join(args.values)}. Run `curate list {args.kind}`.")

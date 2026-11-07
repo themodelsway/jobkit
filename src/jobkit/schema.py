@@ -158,5 +158,14 @@ def step_drop_documents(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE doc")
 
 
+def step_match_results(conn: sqlite3.Connection) -> None:
+    """Version 10: finished match scores (`match-score run`), kept so the same posting and resume give the same result."""
+    run_script(conn, """
+CREATE TABLE match_result (
+  key TEXT PRIMARY KEY, created TEXT NOT NULL, last_used TEXT NOT NULL, label TEXT NOT NULL, band TEXT NOT NULL,
+  lower REAL NOT NULL, upper REAL NOT NULL, body TEXT NOT NULL);
+""")
+
+
 STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
-               step_profile, step_resume_data, step_curation, step_drop_documents]
+               step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results]

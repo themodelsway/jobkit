@@ -1,7 +1,9 @@
 """Tests for sessions.py and readiness.py in a temp folder (the real prep/ is never touched).
 Run: .venv/bin/python -m unittest discover -s tests -t ."""
+import argparse
 import contextlib
 import io
+import json
 import sys
 import unittest
 from datetime import date, timedelta
@@ -10,6 +12,7 @@ from unittest import mock
 
 from jobkit import store
 from jobkit.interview import tables
+from jobkit.user import profile as up
 from tests.support import HomeCase, drop_catalog
 from jobkit.interview import arch, lead, readiness, sessions
 
@@ -130,8 +133,9 @@ class ReadinessTests(SessionCase):
     def test_labels(self):
         today = date.today().isoformat()
         old = (date.today() - timedelta(days=90)).isoformat()
-        ev2 = {"graded2": {"2025-01-01", "2025-01-02"}, "answered": set()}
-        ev1 = {"graded2": {"2025-01-01"}, "answered": set()}
+        recent = [(date.today() - timedelta(days=n)).isoformat() for n in (1, 2)]
+        ev2 = {"graded2": set(recent), "answered": set()}
+        ev1 = {"graded2": {recent[0]}, "answered": set()}
         self.assertEqual(readiness.label(0, None, None, 30), "untested")
         self.assertEqual(readiness.label(1, today, None, 30), "some gaps")
         self.assertEqual(readiness.label(2, old, ev2, 30), "aging")
@@ -162,6 +166,172 @@ class ReadinessTests(SessionCase):
         drop_catalog()
         code, _, err = self.cli(readiness.main)
         self.assertEqual((code, "run arch init" in err), (1, True))
+
+
+class RetestTests(SessionCase):
+    """The stored retest window, `readiness --due` and `sessions new --due`."""
+
+    def solid(self, card_id, days_ago):
+        progress = tables.load_progress()
+        progress[card_id] = {"confidence": 2, "notes": "", "links": {},
+                             "last_drilled": (date.today() - timedelta(days=days_ago)).isoformat()}
+        tables.save_progress(progress)
+
+    def cards(self, n=3):
+        return [c["id"] for c in arch.catalog()["cards"][:n]]
+
+    def window(self, days):
+        up.save({"resume_root": "x", "reassess_days": days})
+
+    def test_lists_only_old_good_answers_oldest_first_with_ages(self):
+        a, b, c = self.cards()
+        self.solid(a, 50)
+        self.solid(b, 60)
+        self.solid(c, 5)
+        code, out, _ = self.cli(readiness.main, "--due")
+        self.assertEqual(code, 0)
+        rows = [line for line in out.splitlines() if line.startswith("  ")]
+        self.assertEqual([r.split()[0] for r in rows], [b, a])
+        self.assertIn("(60 days ago)", rows[0])
+        self.assertIn("2 item(s) due", out)
+        self.assertNotIn(c, out)
+
+    def test_none_due(self):
+        self.solid(self.cards()[0], 5)
+        code, out, _ = self.cli(readiness.main, "--due")
+        self.assertEqual((code, "none due" in out), (0, True))
+
+    def test_json_and_output_file(self):
+        a = self.cards()[0]
+        self.solid(a, 40)
+        rows = json.loads(self.cli(readiness.main, "--due", "--json")[1])
+        self.assertEqual([(r["id"], r["age_days"]) for r in rows], [(a, 40)])
+        target = self.tmp / "due.json"
+        self.assertEqual(self.cli(readiness.main, "--due", "--json", "-o", str(target))[0], 0)
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))[0]["id"], a)
+
+    def test_listing_changes_nothing_in_the_database(self):
+        self.solid(self.cards()[0], 40)
+        files = [store.db_path(), store.db_path().with_name("jobkit.db-wal")]
+        before = [(f.stat().st_mtime_ns, f.stat().st_size) for f in files if f.exists()]
+        self.cli(readiness.main, "--due")
+        self.assertEqual([(f.stat().st_mtime_ns, f.stat().st_size) for f in files if f.exists()], before)
+
+    def test_stored_window_decides_and_days_overrides(self):
+        a = self.cards()[0]
+        self.solid(a, 45)
+        self.window(60)
+        self.assertIn("none due", self.cli(readiness.main, "--due")[1])
+        self.assertIn(a, self.cli(readiness.main, "--due", "--days", "30")[1])
+        self.window(30)
+        self.assertIn(a, self.cli(readiness.main, "--due")[1])
+
+    def test_report_label_follows_the_stored_window(self):
+        a = self.cards()[0]
+        self.solid(a, 45)
+        self.assertIn("aging", self.cli(readiness.main)[1])
+        self.window(60)
+        self.assertNotIn("aging 1", self.cli(readiness.main)[1])
+
+    def test_due_cannot_be_combined_with_jd(self):
+        jd = self.tmp / "jd.txt"
+        jd.write_text("VPC", encoding="utf-8")
+        self.assertEqual(self.cli(readiness.main, "--due", "--jd", str(jd))[0], 1)
+
+    def test_session_queue_holds_exactly_the_due_items(self):
+        a, b, c = self.cards()
+        self.solid(a, 50)
+        self.solid(b, 60)
+        self.solid(c, 5)
+        sid = self.new_session("--due")
+        self.assertEqual({q["id"] for q in self.session(sid)["queue"]}, {a, b})
+
+    def test_session_with_nothing_due_says_so_and_creates_nothing(self):
+        self.solid(self.cards()[0], 5)
+        code, _, err = self.cli(sessions.main, "new", "Retest", "--due")
+        self.assertEqual(code, 1)
+        self.assertIn("Nothing is due for a retest", err)
+        self.assertIn("No sessions yet", self.cli(sessions.main, "list")[1])
+
+    def due_rows(self, *pairs):
+        """A stand-in for readiness.due_items: (id, age in days) pairs, oldest first."""
+        return [{"id": i, "name": i, "last": "2026-01-01", "age_days": age} for i, age in pairs]
+
+    def save_story(self):
+        tables.save_stories({"stories": [{
+            "id": "acme-topic-a", "company": "acme", "company_name": "Acme", "theme": "topic-a",
+            "headline": "h", "metrics_on_resume": [], "anchor_bullets": [], "situation": None, "task": None,
+            "action": None, "result": None, "metric": None, "lessons": None, "notes": None, "follow_ups": [],
+            "status": "done"}]})
+        return "acme-topic-a"
+
+    def test_only_a_leadership_question_is_due(self):
+        first = lead.cards()[0]["id"]
+        questions = dict(lead.prog()["questions"])
+        entry = questions.setdefault(first, lead.blank())
+        entry["confidence"], entry["last_drilled"] = 2, "2000-01-01"
+        tables.save_lead_progress(questions)
+        sid = self.new_session("--due")
+        self.assertEqual(self.session(sid)["queue"], [{"id": first, "kind": "leader"}])
+
+    def test_due_items_of_every_kind_are_queued_oldest_first_as_retest(self):
+        card, story = self.cards()[0], self.save_story()
+        rows = self.due_rows((card, 60), (story, 40))
+        with mock.patch.object(sessions.readiness, "due_items", return_value=rows):
+            sid = self.new_session("--due")
+        session = self.session(sid)
+        self.assertEqual([q["id"] for q in session["queue"]], [card, story])
+        self.assertEqual(session["mode"], "retest")
+
+    def test_a_mode_narrows_the_due_queue(self):
+        card, story = self.cards()[0], self.save_story()
+        with mock.patch.object(sessions.readiness, "due_items", return_value=self.due_rows((card, 60), (story, 40))):
+            sid = self.new_session("--due", "--mode", "stories")
+        self.assertEqual([q["id"] for q in self.session(sid)["queue"]], [story])
+        self.assertEqual(self.session(sid)["mode"], "stories")
+
+    def test_count_keeps_the_oldest_due_items(self):
+        a, b, c = self.cards()
+        rows = self.due_rows((b, 70), (c, 50), (a, 40))
+        with mock.patch.object(sessions.readiness, "due_items", return_value=rows):
+            code, out, err = self.cli(sessions.main, "new", "Retest", "--due", "--count", "2")
+        self.assertEqual(code, 0, err)
+        sid = out.split("Started session ")[1].split(" ")[0]
+        self.assertEqual([q["id"] for q in self.session(sid)["queue"]], [b, c])
+
+    def test_logging_works_per_kind_in_a_retest_session(self):
+        card, story = self.cards()[0], self.save_story()
+        with mock.patch.object(sessions.readiness, "due_items", return_value=self.due_rows((card, 60), (story, 40))):
+            sid = self.new_session("--due")
+        for item in (card, story):
+            code, _, err = self.cli(sessions.main, "log", sid, item, "--question", "q", "--answer", "an answer")
+            self.assertEqual(code, 0, err)
+        self.assertEqual([e["item"] for e in self.session(sid)["log"]], [card, story])
+
+    def test_home_with_no_stories_or_questions_does_not_crash(self):
+        drop_catalog()
+        code, _, err = self.cli(sessions.main, "new", "Retest", "--due")
+        self.assertEqual(code, 1)
+        self.assertIn("Nothing is due for a retest", err)
+
+    def test_due_and_only_open_conflict(self):
+        self.assertEqual(self.cli(sessions.main, "new", "x", "--due", "--only-open")[0], 1)
+
+    def test_queue_aging_follows_the_stored_window(self):
+        self.assertEqual(sessions.card_group({"confidence": 2, "last_drilled": (date.today() - timedelta(days=45)).isoformat()}, 30), 1)
+        self.assertEqual(sessions.card_group({"confidence": 2, "last_drilled": (date.today() - timedelta(days=45)).isoformat()}, 60), 2)
+        first, second = self.cards(2)
+        self.solid(first, 5)
+        self.solid(second, 45)
+        args = argparse.Namespace(order="default", only_open=False, track=None, area=None, tier=None, kind=None)
+        queue = [q["id"] for q in sessions.card_queue(args)]
+        self.assertLess(queue.index(second), queue.index(first))      # 45 days is aged at the default 30
+        for stored, expected in ((None, 30), (60, 60)):
+            if stored:
+                self.window(stored)
+            with mock.patch.object(sessions, "card_group", wraps=sessions.card_group) as spy:
+                sessions.card_queue(args)
+            self.assertEqual({call.args[1] for call in spy.call_args_list}, {expected})
 
 
 if __name__ == "__main__":

@@ -9,7 +9,9 @@ Import it as `from jobkit import store`; it does no work at import time.
 from __future__ import annotations
 
 import contextlib
+import shutil
 import sqlite3
+import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Final
@@ -200,24 +202,51 @@ def backup_to(path: Path) -> Path:
     return path
 
 
+def _columns(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Every table of the database with its column names."""
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+    return {t: {r[1] for r in conn.execute(f'PRAGMA table_info("{t}")')} for t in tables}
+
+
 def check_backup_file(file: Path) -> None:
-    """Fail unless `file` is a jobkit database this program can read.
+    """Fail unless `file` is a jobkit database this program can read and upgrade.
+
+    The file is checked on a temporary copy: SQLite's integrity check, the upgrade to the current schema, and
+    every table and column the current schema has. The file itself is never changed.
 
     Raises:
-        ToolError: the file is missing, is not a database, is not a jobkit database, or is from a newer version.
+        ToolError: the file is missing, damaged, not a jobkit database, incomplete, or from a newer version.
     """
     if not file.is_file():
         raise ToolError(f"{file} does not exist.")
-    try:
-        with contextlib.closing(sqlite3.connect(f"file:{file}?mode=ro", uri=True)) as conn:
-            found = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone()
-            found_version = stored_version(conn)
-    except sqlite3.DatabaseError as exc:
-        raise ToolError(f"{file} is not a jobkit database ({exc}).") from exc
-    if not found or found_version < 1:
-        raise ToolError(f"{file} is not a jobkit database.")
-    if found_version > version():
-        raise ToolError(f"{file} is version {found_version}; this program only knows version {version()}.")
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "candidate.db"
+        shutil.copyfile(file, copy)
+        try:
+            _check_copy(file, copy)
+        except sqlite3.DatabaseError as exc:
+            raise ToolError(f"{file} is not a jobkit database ({exc}).") from exc
+
+
+def _check_copy(file: Path, copy: Path) -> None:
+    """The checks of `check_backup_file`, run on a throw-away copy."""
+    with contextlib.closing(sqlite3.connect(copy, isolation_level=None)) as conn:
+        found = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone()
+        found_version = stored_version(conn)
+        if not found or found_version < 1:
+            raise ToolError(f"{file} is not a jobkit database.")
+        if found_version > version():
+            raise ToolError(f"{file} is version {found_version}; this program only knows version {version()}.")
+        if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise ToolError(f"{file} is damaged (SQLite integrity check failed).")
+        conn.row_factory = sqlite3.Row
+        migrate_to(conn, version())
+        have = _columns(conn)
+    with contextlib.closing(sqlite3.connect(":memory:", isolation_level=None)) as fresh:
+        migrate_to(fresh, version())
+        missing = [f"{t}.{c}" for t, cols in _columns(fresh).items() for c in sorted(cols - have.get(t, set()))]
+    if missing:
+        raise ToolError(f"{file} is not a complete jobkit database (missing {', '.join(missing[:5])}).")
 
 
 def restore_from(file: Path) -> Path:

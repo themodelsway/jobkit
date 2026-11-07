@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Final, NamedTuple, cast
 
 from jobkit import common
+from jobkit.resumes import evidence
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import resume_data as rd
 from jobkit.resumes import tables
@@ -29,7 +30,11 @@ role roles including include etc new highly""".split())
 MAX_OVERLAP: Final[int] = 8              # words shared with the JD that still add to a bullet's score
 MAX_SKILL_MENTIONS: Final[int] = 3       # mentions of one JD skill that still add to the score
 NEEDS_REVIEW_PENALTY: Final[float] = 6.0
-MIN_EVIDENCE: Final[int] = 2             # matched skills + themes needed to list a bullet (or OVERLAP_ENOUGH words)
+SOURCE_STEP: Final[float] = 0.1          # repeats across resume files are provenance, not proof: a small, capped credit
+SOURCE_STEPS: Final[int] = 5             # at most 5 extra files count, so repeats add at most 0.5
+NOT_CHECKED: Final[str] = ("\nNo --requirement was given, so requirements outside your stored skills were not checked. Pass each "
+                           "skill or duty the posting asks for as --requirement NAME to see it as a gap.")
+MIN_EVIDENCE: Final[int] = 2             # theme hits needed to list a bullet that matches no skill (or OVERLAP_ENOUGH words)
 OVERLAP_ENOUGH: Final[int] = 4
 
 # JD wording that implies a theme (themes are tagged on bullets with `process-resumes curate add theme`)
@@ -84,6 +89,7 @@ class Analysis:
     ranked: list[tuple[Company, list[ScoredBullet]]]
     covered: set[str] = field(default_factory=set)
     hidden: int = 0
+    possible: list[tuple[str, str]] = field(default_factory=list)   # (skill, sentence) to confirm: see parse_resume
     skills: Skills = field(default_factory=lambda: Skills(groups={}))
     profile: ResumeProfile = field(default_factory=rd.empty_profile)
 
@@ -100,6 +106,8 @@ class JdContext:
     themes: set[str]
     recency: Mapping[str, float]
     recency_weight: float
+    plain: tuple[str, ...] = ()        # requirements that are not stored skills, found by their words in a bullet
+    terms: Mapping[str, str] = field(default_factory=dict)   # {name or alias: canonical skill}
 
 
 def load() -> tuple[dict[str, Company], Skills]:
@@ -138,23 +146,49 @@ def jd_skills(text: str, terms: Mapping[str, str]) -> Counter[str]:
     """Canonical skills mentioned in the JD, with mention counts."""
     counts: Counter[str] = Counter()
     for term, name in terms.items():
-        flags = re.I if len(term) >= 5 else 0
-        found = len(re.findall(rf"(?<![\w]){re.escape(term)}(?![\w])", text, flags))
+        found = pr.term_count(term, text)
         if found:
             counts[name] += found
     return counts
 
 
+def add_requirements(need: Counter[str], text: str, requirements: Iterable[str], terms: Mapping[str, str]) -> tuple[str, ...]:
+    """Add the requirements the assistant took from the posting to `need`. A name that is a stored skill or alias
+    (any capitalisation) counts as that skill; any other name is kept as plain text and returned, to be searched
+    for in the bullets. Each requirement counts at least once."""
+    lower = {t.lower(): n for t, n in terms.items()}
+    plain: list[str] = []
+    for raw in requirements:
+        name = raw.strip()
+        if not name:
+            continue
+        stored = lower.get(name.lower())
+        if stored is not None:
+            need[stored] = max(need[stored], 1)
+        elif name not in need:
+            need[name] = max(1, pr.term_count(name, text))
+            plain.append(name)
+    return tuple(plain)
+
+
+def month_number(date: str | None) -> int | None:
+    """Months since year 0 for a 'YYYY-MM' date, else None."""
+    found = re.fullmatch(r"(\d{4})-(\d{2})", date or "")
+    return int(found.group(1)) * 12 + int(found.group(2)) if found else None
+
+
 def recency_scores(companies: Mapping[str, Company]) -> dict[str, float]:
-    """{bullet id: 0..1}: how recently the newest resume containing the bullet was modified (ledger mtime)."""
-    ledger = rd.load_ledger()
-    mtimes = {k: v["mtime"] for k, v in ledger.items() if v["kind"] == "resume"}
-    low, high = (min(mtimes.values()), max(mtimes.values())) if mtimes else (0.0, 0.0)
+    """{bullet id: 0..1}: how recent the role the bullet belongs to is, from the role's own start date (the newest
+    role scores 1, the oldest 0). A bullet with no known role takes its company's latest role. The date of the
+    resume file that holds the bullet plays no part."""
+    starts = [m for c in companies.values() for r in c["roles"] if (m := month_number(r["start"])) is not None]
+    low, high = (min(starts), max(starts)) if starts else (0, 0)
     out: dict[str, float] = {}
     for company in companies.values():
+        latest = max((m for r in company["roles"] if (m := month_number(r["start"])) is not None), default=None)
         for bullet in company["bullets"]:
-            newest = max((mtimes[s] for s in bullet["sources"] if s in mtimes), default=low)
-            out[bullet["id"]] = (newest - low) / (high - low) if high > low else 1.0
+            when = month_number(bullet["role_start"]) or latest
+            out[bullet["id"]] = (when - low) / (high - low) if when is not None and high > low else 1.0
     return out
 
 
@@ -162,7 +196,7 @@ def show(bullet: Bullet, why: Iterable[str] | None = None) -> None:
     """Print one bullet with its id, source count, metrics and what matched."""
     flag = "  [NEEDS REVIEW]" if bullet.get("needs_review") else ""
     print(f"  - {bullet['text']}{flag}")
-    meta = [f"id {bullet['id']}", f"{len(bullet['sources'])} resume(s)"]
+    meta = [f"id {bullet['id']}", f"in {len(bullet['sources'])} resume file(s)"]
     if bullet["metrics"]:
         meta.append("metrics: " + ", ".join(bullet["metrics"]))
     if why:
@@ -193,16 +227,19 @@ def rank_summaries(summaries: Iterable[Summary], angles: Mapping[str, int]) -> l
 
 def score_bullet(bullet: Bullet, ctx: JdContext) -> ScoredBullet | None:
     """Score a bullet for the JD; None when it is not relevant enough to list."""
-    shared = [s for s in bullet["skills"] if s in ctx.need]
+    tagged = bullet["skills"]
+    shared = [s for s in tagged if s in ctx.need and evidence.use_state(bullet["text"], s, tagged, ctx.terms) != evidence.NOT_DEMONSTRATED]
+    shared += [t for t in ctx.plain if pr.term_found(t, bullet["text"])
+               and evidence.use_state(bullet["text"], t, tagged, ctx.terms) != evidence.NOT_DEMONSTRATED]
     overlap = len(words(bullet["text"]) & ctx.words)
     theme_hits = [t for t in bullet["themes"] if t.lower() in ctx.themes]
     score = 3 * sum(min(ctx.need[s], MAX_SKILL_MENTIONS) for s in shared) + min(overlap, MAX_OVERLAP)
     score += 2 * len(theme_hits)
-    score += 0.5 * len(bullet["sources"]) ** 0.5 + (1 if bullet["metrics"] else 0)   # used in more resumes: proven
+    score += SOURCE_STEP * min(len(bullet["sources"]) - 1, SOURCE_STEPS) + (1 if bullet["metrics"] else 0)
     if bullet.get("needs_review"):
         score -= NEEDS_REVIEW_PENALTY                                         # unverified ranks below confirmed
-    score += ctx.recency_weight * ctx.recency[bullet["id"]]                   # nudge toward recently edited resumes
-    if len(shared) + len(theme_hits) >= MIN_EVIDENCE or overlap >= OVERLAP_ENOUGH:
+    score += ctx.recency_weight * ctx.recency[bullet["id"]]                   # nudge toward recent roles
+    if shared or len(theme_hits) >= MIN_EVIDENCE or overlap >= OVERLAP_ENOUGH:
         return ScoredBullet(score, bullet, shared + theme_hits)
     return None
 
@@ -223,20 +260,24 @@ def rank_company(company: Company, ctx: JdContext, include_review: bool) -> tupl
 
 
 def analyze(text: str, extra_themes: Iterable[str] = (), include_review: bool = False,
-            recency_weight: float = 2.0) -> Analysis:
-    """Score a job description against the resume data. Shared by `for-jd` and build_resume.py."""
+            recency_weight: float = 2.0, requirements: Iterable[str] = ()) -> Analysis:
+    """Score a job description against the resume data. Shared by `for-jd` and build_resume.py.
+    `requirements` are skills the assistant took from the posting; each one is searched for and reported."""
     companies, skills = load_or_fail()
-    need = jd_skills(text, vocabulary(skills))
+    terms = vocabulary(skills)
+    need = jd_skills(text, terms)
+    plain = add_requirements(need, text, requirements, terms)
     low = text.lower()
     angles = jd_angles(low)
     profile: ResumeProfile = rd.load_profile()
-    ctx = JdContext(need, words(text), infer_themes(low, extra_themes), recency_scores(companies), recency_weight)
+    ctx = JdContext(need, words(text), infer_themes(low, extra_themes), recency_scores(companies), recency_weight,
+                    plain, terms)
     result = Analysis(need, ctx.themes, angles, rank_summaries(profile["summaries"], angles), [], skills=skills,
-                      profile=profile)
+                      profile=profile, possible=pr.possible_matches(text, terms))
     for company in newest_first(companies):
         scored, hidden = rank_company(company, ctx, include_review)
         result.hidden += hidden
-        result.covered.update(s for item in scored for s in item.bullet["skills"] if s in need)
+        result.covered.update(s for item in scored for s in item.why if s in need)
         result.ranked.append((company, scored))
     return result
 
@@ -267,6 +308,15 @@ def print_company(company: Company, scored: Sequence[ScoredBullet], top: int) ->
         show(item.bullet, item.why)
 
 
+def print_possible(possible: Sequence[tuple[str, str]]) -> None:
+    """Skill names that are also ordinary words, used where they cannot be told apart: for a person to confirm."""
+    if not possible:
+        return
+    print("\n== Possible matches to confirm (the word is also an ordinary one; pass the real ones with --requirement):")
+    for name, sentence in possible:
+        print(f'  {name}: "{sentence}"')
+
+
 def print_skill_coverage(result: Analysis) -> None:
     """JD skills with no matching bullet, and the skills worth featuring by group."""
     need, skills = result.need, result.skills
@@ -283,7 +333,7 @@ def print_skill_coverage(result: Analysis) -> None:
 
 def cmd_for_jd(args: argparse.Namespace) -> None:
     """Rank bullets per company for a job description."""
-    result = analyze(common.read_text_arg(args.jd), args.theme, args.include_review, args.recency)
+    result = analyze(common.read_text_arg(args.jd), args.theme, args.include_review, args.recency, args.requirement)
     print_jd_overview(result, args.summaries)
     for company, scored in result.ranked:
         print_company(company, scored, args.top)
@@ -291,6 +341,9 @@ def cmd_for_jd(args: argparse.Namespace) -> None:
         print(f"\n({result.hidden} unverified bullet(s) flagged needs_review were left out; "
               "use --include-review to see them)")
     print_skill_coverage(result)
+    print_possible(result.possible)
+    if not args.requirement:
+        print(NOT_CHECKED)
 
 
 def skill_aliases(skills: Skills) -> dict[str, str]:
@@ -367,10 +420,13 @@ def build_parser() -> argparse.ArgumentParser:
     match.add_argument("jd", help="path to a text file with the job description, or - for stdin")
     match.add_argument("--top", type=int, default=3, help="bullets per company (default 3)")
     match.add_argument("--recency", type=float, default=2.0,
-                       help="max score bonus for bullets from recently edited resumes (default 2.0; 0 turns it off)")
+                       help="max score bonus for bullets from recent roles (default 2.0; 0 turns it off)")
     match.add_argument("--summaries", type=int, default=2, help="opening summaries to suggest (default 2)")
     match.add_argument("--include-review", action="store_true", help="also show bullets flagged needs_review")
     match.add_argument("--theme", action="append", default=[], help="extra theme to favour (repeatable)")
+    match.add_argument("--requirement", action="append", default=[], metavar="NAME",
+                       help="a skill or duty the posting asks for, even if it is not a stored skill (repeatable); "
+                       "one with no supporting bullet is reported as a gap")
     match.set_defaults(fn=cmd_for_jd)
     search = sub.add_parser("search", help="filter bullets")
     for flag in ("--skill", "--company", "--text", "--theme"):

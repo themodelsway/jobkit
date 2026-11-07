@@ -12,6 +12,10 @@ The system SHALL keep the settings (resume root, resume folders, optional name a
 - **WHEN** `init --resume-root PATH` is run
 - **THEN** the settings are stored and an existing answer is not overwritten
 
+#### Scenario: Init again with other answers
+- **WHEN** `init` is run again with a different resume root, name or folders
+- **THEN** the stored values are kept, a line says so, and `set` is the way to change name or resume root
+
 ### Requirement: Employers are editable
 The system SHALL list the scanned employers with `companies` and let the user rename them and merge them with commands, without editing any file.
 

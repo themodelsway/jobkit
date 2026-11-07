@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from jobkit import admin, base, common, store
+from jobkit import admin, base, common, schema, store
 from jobkit.interview import prep
 from tests.support import HomeCase
 
@@ -149,15 +149,16 @@ class SchemaTests(unittest.TestCase):
     def test_upgrade_refuses_to_drop_a_document_table_that_holds_data(self):
         store.db_path().parent.mkdir(parents=True)
         with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
-            store.migrate_to(conn, store.version() - 1)
+            before_drop = store.MIGRATIONS.index(schema.step_drop_documents)
+            store.migrate_to(conn, before_drop)
             conn.execute("INSERT INTO doc VALUES('a', '{}', 't')")
         with self.assertRaisesRegex(RuntimeError, "still holds data"):
             store.connect()
-        self.assertEqual(self.pragma_version(), store.version() - 1)
+        self.assertEqual(self.pragma_version(), before_drop)
 
     def test_no_file_storage_code_is_left_in_the_source(self):
         source = Path(base.__file__).parent
-        leftovers = [f"{p.name}: {word}" for p in source.rglob("*.py") if p.name != "legacy.py" for word in
+        leftovers = [f"{p.name}: {word}" for p in source.rglob("*.py") for word in
                      ("load_json", "save_json", "LOCK_FILE", "REPO_ROOT", "fcntl", ".bak")
                      if word in p.read_text(encoding="utf-8")]
         self.assertEqual(leftovers, [])

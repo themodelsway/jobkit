@@ -20,7 +20,7 @@ import argparse
 import random
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any, Final, NotRequired, TypedDict, cast
 
@@ -28,8 +28,9 @@ from jobkit import common
 from jobkit.common import ToolError
 from jobkit.interview import arch
 from jobkit.interview import lead
-from jobkit.interview import prep, tables
+from jobkit.interview import prep, readiness, tables
 from jobkit.resumes import query_resume as qr
+from jobkit.user import profile as up
 
 ID_RE: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 MODE_KINDS: Final[dict[str, str]] = {"architecture": "architecture", "stories": "stories", "leadership": "leadership"}
@@ -103,45 +104,96 @@ def known_kind(item: str) -> str | None:
 
 # ---------------------------------------------------------------- queues
 
+def only_open(args: argparse.Namespace) -> bool:
+    """True when the session should hold only unfinished and weak items (`--only-open`)."""
+    return bool(getattr(args, "only_open", False))
+
+
+def card_group(progress: Mapping[str, Any], window: int) -> int:
+    """0 for a card that is not solid yet, 1 for a solid card not drilled within the retest window (or never
+    logged), 2 for a solid card drilled recently."""
+    if progress["confidence"] < 2:
+        return 0
+    last = progress["last_drilled"]
+    return 1 if not last or (date.today() - date.fromisoformat(last)).days > window else 2
+
+
 def card_queue(args: argparse.Namespace, cards: list[arch.Card] | None = None) -> list[QueueItem]:
-    """Cards not yet solid, lowest tier and weakest first (or random)."""
+    """Cards not yet solid first (lowest tier and weakest first, or random), then solid cards that have aged, then
+    solid cards drilled recently; with `--only-open` only the first group. Nothing is changed by queueing."""
     cat, prog = arch.catalog(), arch.progress()["cards"]
     position = {c["id"]: i for i, c in enumerate(cat["cards"])}
     pool = cards if cards is not None else arch.flt(cat["cards"], args)
-    pool = [c for c in pool if arch.progress_of(prog, c["id"])["confidence"] < 2]
+    window = up.reassess_days()
+    groups = {c["id"]: card_group(arch.progress_of(prog, c["id"]), window) for c in pool}
+    if only_open(args):
+        pool = [c for c in pool if groups[c["id"]] == 0]
     if getattr(args, "order", "default") == "random":
         random.shuffle(pool)
-    else:
-        pool.sort(key=lambda c: (c["tier"], arch.progress_of(prog, c["id"])["confidence"],
-                                 arch.progress_of(prog, c["id"])["last_drilled"] or "", position[c["id"]]))
+        pool.sort(key=lambda c: groups[c["id"]])
+        return [{"id": c["id"], "kind": "card"} for c in pool]
+    def order(card: arch.Card) -> tuple[Any, ...]:
+        mine, group = arch.progress_of(prog, card["id"]), groups[card["id"]]
+        last = mine["last_drilled"] or ""
+        weak = group == 0
+        return (group, card["tier"] if weak else 0, mine["confidence"] if weak else 0, last, position[card["id"]])
+    pool.sort(key=order)
     return [{"id": c["id"], "kind": "card"} for c in pool]
 
 
 def story_queue(args: argparse.Namespace, text: str | None = None) -> list[QueueItem]:
-    """Stories not yet done (those with material first); with a JD, only relevant ones, best first."""
-    stories = [s for s in prep.stories() if s["status"] != "done" and (not args.company or args.company == s["company"])]
-    stories.sort(key=lambda s: (s["status"] == "empty", not s["engagement"]))   # material first: workable now
+    """Stories not yet done first (those with material first), then finished stories, which stay worth rehearsing;
+    with a JD, only relevant ones, best first within each group; with `--only-open` only the unfinished ones."""
+    stories = [s for s in prep.stories() if (not args.company or args.company == s["company"])
+               and not (only_open(args) and s["status"] == "done")]
+    stories.sort(key=lambda s: (s["status"] == "done", s["status"] == "empty", not s["engagement"]))
     if text is not None:
         analysis = qr.analyze(text)
         ranked = prep.ranked_scores(analysis)
         stories = [s for s in stories if prep.story_relevance(s, ranked, analysis.themes)]
-        stories.sort(key=lambda s: -prep.story_relevance(s, ranked, analysis.themes))
+        stories.sort(key=lambda s: (s["status"] == "done", -prep.story_relevance(s, ranked, analysis.themes)))
     return [{"id": s["id"], "kind": "story"} for s in stories]
+
+
+def resolve_mode(args: argparse.Namespace) -> None:
+    """Fill in `args.mode`: jd when only `--jd` is given, retest for `--due` alone, else architecture. `--jd` with
+    another mode is an error."""
+    if args.mode is None:
+        args.mode = "jd" if args.jd else "retest" if getattr(args, "due", False) else "architecture"
+    elif args.jd and args.mode != "jd":
+        raise ToolError(f"--jd goes with mode jd, not {args.mode}. Drop --mode, or drop --jd.")
+
+
+def retest_queue(args: argparse.Namespace) -> list[QueueItem]:
+    """Cards, leadership questions and stories, each kind only when its data is stored; every kind applies the
+    filters that belong to it."""
+    queue: list[QueueItem] = []
+    if tables.has_catalog():
+        queue += card_queue(args)
+    if tables.has_questions():
+        leaders: list[QueueItem] = [{"id": q["id"], "kind": "leader"} for q in lead.ordered(args, True)]
+        queue += leaders
+    if tables.has_stories():
+        queue += story_queue(args)
+    return queue
 
 
 def build_queue(args: argparse.Namespace) -> tuple[list[QueueItem], str | None]:
     """(queue, jd path) for the new session's mode."""
+    resolve_mode(args)
+    if args.mode == "retest":
+        return retest_queue(args), None
     kind = args.topic if args.mode == "tutor" else MODE_KINDS.get(args.mode)
     if kind == "architecture":
         return card_queue(args), None
     if kind == "stories":
         return story_queue(args), None
     if kind == "leadership":
-        return [{"id": q["id"], "kind": "leader"} for q in lead.ordered(args)], None
+        return [{"id": q["id"], "kind": "leader"} for q in lead.ordered(args, not only_open(args))], None
     if not args.jd:
         raise ToolError("--jd is required for mode jd")
     text = common.read_text_arg(args.jd)
-    return card_queue(args, arch.matches(text, arch.catalog())) + story_queue(args, text), args.jd
+    return card_queue(args, arch.flt(arch.matches(text, arch.catalog()), args)) + story_queue(args, text), args.jd
 
 
 def unique_session_id(title: str) -> str:
@@ -178,11 +230,20 @@ def show_next(session: Session) -> None:
 
 def cmd_new(args: argparse.Namespace) -> None:
     """Start a session with a queue for the chosen mode and filters."""
+    if args.due and only_open(args):
+        raise ToolError("--due queues the items due for a retest, which are solid; it cannot be combined with --only-open.")
     queue, jd = build_queue(args)
+    if args.due:
+        due = [row["id"] for row in readiness.due_items(readiness.attempts(), up.reassess_days())]
+        queue = [item for item in queue if item["id"] in due]
+        if args.mode == "retest":
+            queue.sort(key=lambda item: due.index(item["id"]))      # oldest first, so --count keeps the oldest
+        if not queue:
+            raise ToolError("Nothing is due for a retest for those filters. No session created.")
     queue = queue[:args.count]
     if not queue:
-        raise ToolError("Nothing to ask for those filters (every item may already be solid, or no card matches "
-                        "the JD). No session created.")
+        raise ToolError("Nothing to ask for those filters (no item matches, or with --only-open every item is "
+                        "already solid or done). No session created.")
     sid = unique_session_id(args.title)
     session: Session = {"id": sid, "title": args.title, "mode": args.mode, "status": "open", "created": now(),
                         "updated": now(), "jd": jd, "queue": queue, "log": []}
@@ -238,7 +299,8 @@ def check_log_flags(session: Session, args: argparse.Namespace, kind: str) -> No
 
 
 def record_confidence(kind: str, item: str, confidence: int, tutor: bool) -> None:
-    """Save the confidence for a card or question; a lesson never lowers what a real drill earned."""
+    """Save the confidence for a card or question; a lesson never lowers what a real drill earned, nor
+    refreshes the date of the last real drill."""
     if kind == "card":
         cards: dict[str, Any] = dict(arch.progress()["cards"])
         entry: dict[str, Any] = cards.setdefault(item, arch.blank_progress())
@@ -247,7 +309,9 @@ def record_confidence(kind: str, item: str, confidence: int, tutor: bool) -> Non
         entry = cards.setdefault(item, lead.blank())
     if not tutor or confidence > entry["confidence"]:
         entry["confidence"] = confidence
-    entry["last_drilled"] = date.today().isoformat()
+        entry["last_drilled"] = date.today().isoformat()
+    elif not entry["last_drilled"]:
+        entry["last_drilled"] = date.today().isoformat()   # first contact only; a lesson never refreshes a drill date
     if kind == "card":
         tables.save_progress(cards)
     else:
@@ -308,7 +372,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
     new = sub.add_parser("new")
     new.add_argument("title")
-    new.add_argument("--mode", choices=["architecture", "stories", "jd", "leadership", "tutor"], default="architecture")
+    new.add_argument("--mode", choices=["architecture", "stories", "jd", "leadership", "tutor"], default=None,
+                     help="default: jd when --jd is given, else architecture")
     new.add_argument("--jd")
     new.add_argument("--track")
     new.add_argument("--area")
@@ -320,6 +385,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="tutor mode: what to teach")
     new.add_argument("--category")
     new.add_argument("--count", type=int, default=10)
+    new.add_argument("--only-open", action="store_true",
+                     help="queue only unfinished and weak items (default: finished stories and solid cards follow them)")
+    new.add_argument("--due", action="store_true",
+                     help="queue only the items due for a retest (see `readiness --due`)")
     new.set_defaults(fn=cmd_new)
     sub.add_parser("list").set_defaults(fn=cmd_list)
     for name, fn in (("resume", cmd_resume), ("close", cmd_close), ("reopen", cmd_reopen)):
