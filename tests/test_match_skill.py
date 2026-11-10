@@ -38,13 +38,16 @@ class SkillSectionTests(unittest.TestCase):
         self.assertIn("This feature is experimental", text)
         self.assertNotIn("ATS", text)
 
-    def test_the_rubric_is_named_with_the_skill_folder_variable(self):
-        self.assertIn("${CLAUDE_SKILL_DIR}/match-rubric.md", "\n".join(section()))
+    def test_the_rubric_is_named_from_the_skill_folder(self):
+        self.assertIn("`match-rubric.md` (in this skill's folder)", "\n".join(section()))
 
 
 class RubricTests(unittest.TestCase):
     def setUp(self):
         self.text = (SKILL / "match-rubric.md").read_text(encoding="utf-8")
+
+    def test_it_is_addressed_to_the_agent_not_to_an_app(self):
+        self.assertIn("This file is for the agent, not the user.", self.text)
 
     def test_version_line_equals_the_engine_version(self):
         found = re.search(r"^Rubric version: (\S+)$", self.text, re.M)

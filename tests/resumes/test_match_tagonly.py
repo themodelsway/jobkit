@@ -71,7 +71,7 @@ class RowsTests(unittest.TestCase):
     def test_unresolved_reference_is_a_one_line_tool_error(self):
         item = SimpleNamespace(id="r1", label="Leadership", quote="q", section="", reason="", confidence=1,
                                importance=1, evidence=["skill:Nonexistent"], related=None, flag=None,
-                               source="claude", code_level=None)
+                               source="agent", code_level=None)
         prep = SimpleNamespace(request=SimpleNamespace(items=[item]), facts=facts())
         with self.assertRaises(common.ToolError) as caught:
             ms._rows(prep)  # type: ignore[arg-type]

@@ -96,7 +96,7 @@ class YearsTests(unittest.TestCase):
 
 
 class ApplyCodeTests(unittest.TestCase):
-    def test_code_level_replaces_claudes(self):
+    def test_code_level_replaces_the_agents(self):
         data = request()
         data["requirements"][0].update(id="code:skill:aws", level="partial", evidence=["bullet:b1"],
                                        flag={"kind": "level", "readings": ["partial", "full"]})

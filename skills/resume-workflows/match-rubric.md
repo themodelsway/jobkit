@@ -2,7 +2,7 @@
 
 Rubric version: 1
 
-This file is for Claude, not the user. It is how to do pass 1 of a match score: split a job posting into requirements and rate each one against the user's stored resume lines. The `match-score` command checks your output and does only arithmetic, so your job is to judge carefully and consistently, and to write the judgment down in the request format below. Never ask the user anything while scoring; settle every doubt with the rules here and say what you assumed.
+This file is for the agent, not the user. It is how to do pass 1 of a match score: split a job posting into requirements and rate each one against the user's stored resume lines. The `match-score` command checks your output and does only arithmetic, so your job is to judge carefully and consistently, and to write the judgment down in the request format below. Never ask the user anything while scoring; settle every doubt with the rules here and say what you assumed.
 
 ## The request you write
 

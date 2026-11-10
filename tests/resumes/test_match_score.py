@@ -144,7 +144,7 @@ class RunTests(MatchCase):
         body = self.run_json()
         self.assertGreater(body["score"]["upper"], body["score"]["lower"])
         self.assertIn('"Lead a team of 10"', body["assumptions"][0])
-        self.assertEqual([r["source"] for r in body["requirements"]], ["claude", "fallback", "claude"])
+        self.assertEqual([r["source"] for r in body["requirements"]], ["agent", "fallback", "agent"])
 
     def test_code_rated_item_uses_the_codes_level(self):
         data = request()
@@ -214,6 +214,44 @@ class RunTests(MatchCase):
         code, out, err = self.cli("run", "-", "--jd", self.posting, stdin=self.requests.read_text(encoding="utf-8"))
         self.assertEqual(code, 0, err)
         self.assertIn("How well", out)
+
+
+class OriginTests(MatchCase):
+    """Where a judgment came from: `agent` for new results; an older stored app name is kept as it is."""
+
+    def stored_bodies(self) -> list[str]:
+        with store.transaction() as conn:
+            return [row["body"] for row in conn.execute("SELECT body FROM match_result ORDER BY key")]
+
+    def make_legacy(self) -> str:
+        """Score once, then give the stored result the origin an older version wrote; returns the stored text."""
+        self.run_json()
+        (body,) = self.stored_bodies()
+        legacy = body.replace('"source": "agent"', '"source": "claude"')
+        self.assertNotEqual(legacy, body)
+        with store.transaction() as conn:
+            conn.execute("UPDATE match_result SET body=?", (legacy,))
+        return legacy
+
+    def test_new_result_records_the_agent_and_no_app_name(self):
+        sources = {r["source"] for r in self.run_json()["requirements"]}
+        self.assertLessEqual(sources, {"agent", "code", "code, contested", "fallback"})
+        self.assertIn("agent", sources)
+        self.assertNotIn("claude", self.stored_bodies()[0])
+
+    def test_stored_app_name_is_reported_and_exported_unchanged(self):
+        legacy = self.make_legacy()
+        cached = json.loads(self.cli("extract", "--jd", self.posting)[1])
+        self.assertTrue(cached["cached"])
+        key = cached["key"]
+        code, out, err = self.cli("show", key[:6])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("How well your profile matches", out)
+        self.assertIn(key, self.cli("list")[1])
+        exported = next(iter(records.kind("match-results").export().values()))["body"]
+        self.assertIn("claude", {r["source"] for r in exported["requirements"]})
+        self.assertNotIn("agent", {r["source"] for r in exported["requirements"]})
+        self.assertEqual(self.stored_bodies(), [legacy], "reading a stored result rewrote it")
 
 
 class BandsFileTests(MatchCase):

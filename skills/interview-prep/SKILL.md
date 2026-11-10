@@ -8,24 +8,30 @@ description: Mock-interview practice: asks first, no hints, then grades. Use whe
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`.
-1. Check the helper. The session's environment says which kind of computer this is:
-   - macOS or Linux: run `sh "${CLAUDE_PLUGIN_ROOT}/setup/install" --check`.
-   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
+1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. PLUGIN below is the folder two levels above this skill file (it holds `setup`). Put these paths in quotes, since they may contain spaces.
+2. Check the helper. The session's environment says which kind of computer this is:
+   - macOS or Linux: run `sh "PLUGIN/setup/install" --check`.
+   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "PLUGIN/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
      > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
 
    The command prints one line:
-   - `ok:FOLDER`: the helper is ready. Remember FOLDER.
-   - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer:
-     > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute, downloads one standard tool from astral.sh, and everything stays on your computer. Is that OK?
-     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails, say the next line and stop:
-       > Setup did not finish. Please check that you are online and ask me to try again. Nothing was changed on your computer.
+   - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
+   - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
+     > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute and downloads one standard tool from astral.sh. Your resumes and notes are kept in a folder on your own computer. Is that OK?
+     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
+       > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
+
+       If it fails in any other way, say the next line and stop:
+       > Setup did not finish. Please check that you are online and that I am allowed to download and install, then ask me to try again. I will carry on from where it stopped.
      - No: install nothing, say the next line and stop:
        > No problem. I can't help with your resumes or practice without that helper, so I'll stop here. Ask me again whenever you're ready.
-   - `unsupported`: say the next line and stop:
-     > Sorry, this isn't available on this kind of computer yet.
-2. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
-3. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
-4. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
+   - `unsupported`: install nothing, say the next line and stop:
+     > Sorry, this isn't available with this app on this kind of computer yet.
+3. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
+4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved, never suggest turning the app's protections off, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
+   > I wasn't allowed to save that, so nothing was saved. Please allow me to write to this folder, then ask me again: DATA_FOLDER
+5. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
+6. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
    1. Ask:
       > Where do you keep your resumes? You can drag the folder here or tell me its name.
    2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
@@ -40,7 +46,7 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
 
 <!-- shared:talking -->
 ## Talking to the user
-Everything the user reads is in everyday words. Lines that start with `>` in this skill are what to say: reword them lightly if you like, but keep the meaning and the plain wording. Never show the user commands, file names or folder paths (except the resume folder they named), error text, or the words database, JSON, id, hash, track, seed, tier, confidence, curation, needs review or JD. Run technical steps yourself; never ask the user to run a command or edit a file. Ask one question at a time, and say what will happen before anything is saved or changed. When something fails, say in plain words what went wrong and what to do next.
+Everything the user reads is in everyday words. Lines that start with `>` in this skill are what to say: reword them lightly if you like, but keep the meaning and the plain wording. Never show the user commands, file names or folder paths (except the resume folder they named, and the data folder when a save was blocked), error text, or the words database, JSON, id, hash, track, seed, tier, confidence, curation, needs review or JD. Run technical steps yourself; never ask the user to run a command or edit a file. Ask one question at a time, and say what will happen before anything is saved or changed. When something fails, say in plain words what went wrong and what to do next.
 
 | Internal term | Say instead |
 |---|---|
@@ -57,7 +63,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 ## What they are preparing for (once, after the resumes are set up)
 1. Ask:
    > What are you preparing for? Tell me the kind of role and the technologies it uses, for example AWS, Acme Data or Google Cloud.
-2. Run `lead init` and `prep init` (leadership questions and stories come from the resumes whatever the target). Then set up each topic the user named (see "Tracks" in `${CLAUDE_SKILL_DIR}/architecture.md`): `arch init --track aws` for the bundled AWS example; for any other technology build a seed, show it to the user in plain words, register it with `arch track add NAME --seed -`, then run `arch init --track NAME`. Key services are the ones the resumes mention (the user may pin their own list with `profile tier1 ...`). `arch tracks` shows what exists; another topic can be added later the same way.
+2. Run `lead init` and `prep init` (leadership questions and stories come from the resumes whatever the target). Then set up each topic the user named (see "Tracks" in `architecture.md` (in this skill's folder)): `arch init --track aws` for the bundled AWS example; for any other technology build a seed, show it to the user in plain words, register it with `arch track add NAME --seed -`, then run `arch init --track NAME`. Key services are the ones the resumes mention (the user may pin their own list with `profile tier1 ...`). `arch tracks` shows what exists; another topic can be added later the same way.
 
 Stories, answers and progress are personal data kept on the user's computer. Read and write them only through the commands below.
 
@@ -91,11 +97,11 @@ For architecture and leadership sessions ask, unless they already said:
 (default order = weakest first; random = `--order random`).
 
 ## Architecture fundamentals (mode: architecture, or the architecture items in a job-posting session)
-Service, decision-pair and scenario questions for each topic the user chose. Read `${CLAUDE_SKILL_DIR}/architecture.md` for the rubric, how to add a topic, and the rule that facts come from checked sources, never from memory. Commands (`arch`): `tracks`, `track add NAME --seed FILE|-`, `status`, `next [--track --area --tier --kind]`, `show ID`, `list`, `set ID confidence|notes VALUE`, `for-jd -`, `stale`, `refresh ID --status ... --source URL`, `init`.
+Service, decision-pair and scenario questions for each topic the user chose. Read `architecture.md` (in this skill's folder) for the rubric, how to add a topic, and the rule that facts come from checked sources, never from memory. Commands (`arch`): `tracks`, `track add NAME --seed FILE|-`, `status`, `next [--track --area --tier --kind]`, `show ID`, `list`, `set ID confidence|notes VALUE`, `for-jd -`, `stale`, `refresh ID --status ... --source URL`, `init`.
 Flow: the session's next item, then `arch show ID`, ask one question, wait for the answer, grade and correct with checked facts, log it.
 
 ## Leadership questions (mode: leadership)
-People-leadership questions (roadmapping, prioritization, mentoring, conflict, team size, execution, influence), each tied to STAR examples from the three most recent companies. Read `${CLAUDE_SKILL_DIR}/leadership.md` first. Commands (`lead`): `status`, `next [--category C] [--order default|random]`, `show ID`, `list`, `set ID principle|notes|confidence VALUE`, `example ID COMPANY FIELD VALUE`, `profile show|set`, `init`. Start with `sessions new "title" --mode leadership [--category C] [--order random]`.
+People-leadership questions (roadmapping, prioritization, mentoring, conflict, team size, execution, influence), each tied to STAR examples from the three most recent companies. Read `leadership.md` (in this skill's folder) first. Commands (`lead`): `status`, `next [--category C] [--order default|random]`, `show ID`, `list`, `set ID principle|notes|confidence VALUE`, `example ID COMPANY FIELD VALUE`, `profile show|set`, `init`. Start with `sessions new "title" --mode leadership [--category C] [--order random]`.
 
 ## Filling in stories
 1. Run `status`, then `next` (use `--company` if the user names one; start with the most recent job).

@@ -1,9 +1,13 @@
 #!/bin/sh
 # Set up the jobkit commands for the jobkit plugin (macOS and Linux).
-#   sh setup/install --check   print one line: ok:<folder> | older:<folder> | missing | unsupported
+#   sh setup/install --check   print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | unsupported
 #   sh setup/install           install uv if it is missing, then install the commands from this plugin
 # Run it only after the user has said yes: it downloads software (uv, from astral.sh).
+# It never replaces a uv that is already there and never installs over newer commands.
 set -eu
+
+# The uv release downloaded when uv is missing. Keep it equal to the one in setup/install.ps1.
+UV_VERSION=0.13.7
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -12,7 +16,24 @@ case "$(uname -s)" in
     *) echo "unsupported"; exit 2 ;;
 esac
 
-wanted=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -n 1)
+# The package version, the oldest uv accepted, and the Python version: all read from the plugin's own files.
+wanted=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$ROOT/pyproject.toml" | head -n 1)
+uv_minimum=$(sed -n 's/^required-version *= *">=\([^"]*\)".*/\1/p' "$ROOT/pyproject.toml" | head -n 1)
+python_version=$(head -n 1 "$ROOT/.python-version" | tr -d ' \r')
+
+# Print lt, eq or gt for two dotted versions, compared number by number (0.10.0 is above 0.9.0).
+compare() {
+    left=$1 right=$2
+    while [ -n "$left" ] || [ -n "$right" ]; do
+        a=$(printf '%s' "${left%%.*}" | sed 's/[^0-9].*//')
+        b=$(printf '%s' "${right%%.*}" | sed 's/[^0-9].*//')
+        case "$left" in *.*) left=${left#*.} ;; *) left= ;; esac
+        case "$right" in *.*) right=${right#*.} ;; *) right= ;; esac
+        if [ "${a:-0}" -lt "${b:-0}" ]; then echo lt; return 0; fi
+        if [ "${a:-0}" -gt "${b:-0}" ]; then echo gt; return 0; fi
+    done
+    echo eq
+}
 
 find_uv() {
     if command -v uv >/dev/null 2>&1; then command -v uv; return 0; fi
@@ -36,7 +57,11 @@ installed_version() {
 
 check() {
     if folder=$(tool_folder); then
-        if [ "$(installed_version "$folder")" = "$wanted" ]; then echo "ok:$folder"; else echo "older:$folder"; fi
+        case "$(compare "$(installed_version "$folder")" "$wanted")" in
+            eq) echo "ok:$folder" ;;
+            gt) echo "newer:$folder" ;;
+            *) echo "older:$folder" ;;
+        esac
     else
         echo "missing"
     fi
@@ -49,17 +74,23 @@ fi
 
 current=$(check)
 case "$current" in
-    ok:*) echo "$current"; exit 0 ;;
+    ok:* | newer:*) echo "$current"; exit 0 ;;
 esac
 
-if ! find_uv >/dev/null; then
+if uv_path=$(find_uv); then
+    have=$("$uv_path" --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p' | head -n 1)
+    if [ "$(compare "${have:-0}" "$uv_minimum")" = lt ]; then
+        echo "failed: uv is too old (found ${have:-an unknown version}, need $uv_minimum or newer); it was left as it is" >&2
+        exit 3
+    fi
+else
     if ! command -v curl >/dev/null 2>&1; then
         echo "failed: curl is not available, so uv could not be downloaded" >&2
         exit 1
     fi
     scratch=$(mktemp -d)
     trap 'rm -rf "$scratch"' EXIT
-    if ! curl -LsSf https://astral.sh/uv/install.sh -o "$scratch/uv-install.sh"; then
+    if ! curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" -o "$scratch/uv-install.sh"; then
         echo "failed: uv could not be downloaded" >&2
         exit 1
     fi
@@ -70,7 +101,8 @@ if ! find_uv >/dev/null; then
 fi
 
 uv_path=$(find_uv) || { echo "failed: uv was not found after installing it" >&2; exit 1; }
-if ! "$uv_path" tool install --force "$ROOT" >/dev/null 2>&1; then
+if ! "$uv_path" tool install --force --python "$python_version" \
+        --constraints "$ROOT/setup/constraints.txt" "$ROOT" >/dev/null 2>&1; then
     echo "failed: the jobkit commands could not be installed" >&2
     exit 1
 fi

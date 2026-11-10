@@ -2,7 +2,7 @@
 
 Named skills (from the stored vocabulary and aliases), the level of a degree, certifications, and total years
 of experience. Each result has an id starting `code:`; pass 1 copies that id into its request and `check`
-replaces whatever level Claude gave it with the code's. "Or related field" wording, years tied to one skill
+replaces whatever level the agent gave it with the code's. "Or related field" wording, years tied to one skill
 and certifications the user does not hold are left to pass 1. The thresholds are placeholders to tune.
 """
 from __future__ import annotations

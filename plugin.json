@@ -1,0 +1,10 @@
+{
+  "name": "jobkit",
+  "version": "0.2.0",
+  "description": "Build tailored resumes from your own resumes and practise for interviews. Your data is stored on your own computer.",
+  "keywords": [
+    "resume",
+    "interview",
+    "career"
+  ]
+}

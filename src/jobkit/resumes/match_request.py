@@ -51,7 +51,7 @@ class Item:  # pylint: disable=too-many-instance-attributes  # mirrors the field
     evidence: list[str] = field(default_factory=list)
     related: str = ""
     flag: Flag | None = None
-    source: str = "claude"
+    source: str = "agent"                      # who rated it: agent, code or (set later) fallback; never an app name
     contest: tuple[str, str] | None = None     # (level, reason) a reviewer gives for a code-rated item
     code_level: str | None = None              # the code pass's own level, kept when it was contested
 

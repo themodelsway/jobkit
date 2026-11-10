@@ -21,7 +21,7 @@ For a **pair**, grade on the decision criteria (latency, protocol, scale, cost, 
 
 ## Facts: never from memory
 - Run `arch show ID` first. The card stores only lifecycle and recent changes. If `lifecycle/changes verified on` is a date within about 6 months, you may use those. A card marked "seeded lead ... NOT verified" is not verified. Limits, prices and feature details are never on the card: look them up each time.
-- If it says NEVER or is older, or the user's answer touches a limit, price, version or newer feature, look it up in the vendor's documentation (WebSearch or WebFetch, on the hosts `arch tracks` lists for the card's track) before correcting. If you cannot check, say "unverified" rather than state a number.
+- If it says NEVER or is older, or the user's answer touches a limit, price, version or newer feature, search and read the vendor's official documentation (on the hosts `arch tracks` lists for the card's track) before correcting. If you cannot check, say "unverified" rather than state a number.
 - After checking, record the result with `arch refresh ID --status active|maintenance|sunset --source URL [--date D] [--note T] [--change "DATE|SUMMARY"]`. A source must be a specific page on one of the track's documentation hosts (the tool rejects other hosts); dates must be YYYY-MM-DD and not in the future (put scheduled end dates in `--note`). Third-party blogs are leads only; confirm on a vendor page before storing.
 - Lifecycle words: **maintenance** = existing customers keep it, new customers cannot onboard, no new features. **Sunset** = has an end date (usually about 12 months). Say which one applies, with the date.
 
@@ -30,7 +30,7 @@ The user may prepare for several technologies at once, for example AWS, Acme Dat
 - **AWS**: `arch init --track aws` (bundled seed).
 - **Anything else**: build a seed, show it to the user for approval, then `arch track add NAME --seed -` (JSON on stdin) and `arch init --track NAME`. NAME is lower-case letters, digits and `-`. `arch init` with no `--track` extends the tracks already enabled; `arch tracks` lists them.
 
-A seed is topic names only, never facts. Take the topic list from the vendor's own documentation index (WebFetch), not from memory:
+A seed is topic names only, never facts. Search and read the vendor's official documentation index for the topic list; never take it from memory:
 ```json
 {"label": "Acme Data",
  "source_hosts": ["docs.example.com"],

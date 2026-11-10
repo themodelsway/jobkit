@@ -8,7 +8,7 @@
   match-score show KEY                          # print a stored result again
 
 `requests.json` and the posting may be "-" (standard input), but not both. The score is arithmetic over the
-requirements Claude rated against your lines; it is a lower and an upper value, never a prediction.
+requirements the agent rated against your lines; it is a lower and an upper value, never a prediction.
 This is not `query-resume match` (an alias of `for-jd`), which ranks lines and gives no score.
 """
 from __future__ import annotations

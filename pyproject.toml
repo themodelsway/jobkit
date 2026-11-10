@@ -1,6 +1,6 @@
 [project]
 name = "jobkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local resume data, matching and interview-prep tools for a job search"
 requires-python = ">=3.14"
 dependencies = [
@@ -30,6 +30,10 @@ lead = "jobkit.interview.lead:main"
 prep = "jobkit.interview.prep:main"
 sessions = "jobkit.interview.sessions:main"
 readiness = "jobkit.interview.readiness:main"
+
+[tool.uv]
+# The oldest uv the helper install accepts. Both installers read this line.
+required-version = ">=0.13.7"
 
 [tool.uv.build-backend]
 module-name = "jobkit"

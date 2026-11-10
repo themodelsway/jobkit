@@ -8,24 +8,30 @@ description: Use when building a tailored resume for a job posting, rating how w
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`.
-1. Check the helper. The session's environment says which kind of computer this is:
-   - macOS or Linux: run `sh "${CLAUDE_PLUGIN_ROOT}/setup/install" --check`.
-   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
+1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. PLUGIN below is the folder two levels above this skill file (it holds `setup`). Put these paths in quotes, since they may contain spaces.
+2. Check the helper. The session's environment says which kind of computer this is:
+   - macOS or Linux: run `sh "PLUGIN/setup/install" --check`.
+   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "PLUGIN/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
      > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
 
    The command prints one line:
-   - `ok:FOLDER`: the helper is ready. Remember FOLDER.
-   - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer:
-     > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute, downloads one standard tool from astral.sh, and everything stays on your computer. Is that OK?
-     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails, say the next line and stop:
-       > Setup did not finish. Please check that you are online and ask me to try again. Nothing was changed on your computer.
+   - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
+   - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
+     > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute and downloads one standard tool from astral.sh. Your resumes and notes are kept in a folder on your own computer. Is that OK?
+     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
+       > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
+
+       If it fails in any other way, say the next line and stop:
+       > Setup did not finish. Please check that you are online and that I am allowed to download and install, then ask me to try again. I will carry on from where it stopped.
      - No: install nothing, say the next line and stop:
        > No problem. I can't help with your resumes or practice without that helper, so I'll stop here. Ask me again whenever you're ready.
-   - `unsupported`: say the next line and stop:
-     > Sorry, this isn't available on this kind of computer yet.
-2. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
-3. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
-4. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
+   - `unsupported`: install nothing, say the next line and stop:
+     > Sorry, this isn't available with this app on this kind of computer yet.
+3. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
+4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved, never suggest turning the app's protections off, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
+   > I wasn't allowed to save that, so nothing was saved. Please allow me to write to this folder, then ask me again: DATA_FOLDER
+5. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
+6. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
    1. Ask:
       > Where do you keep your resumes? You can drag the folder here or tell me its name.
    2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
@@ -40,7 +46,7 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
 
 <!-- shared:talking -->
 ## Talking to the user
-Everything the user reads is in everyday words. Lines that start with `>` in this skill are what to say: reword them lightly if you like, but keep the meaning and the plain wording. Never show the user commands, file names or folder paths (except the resume folder they named), error text, or the words database, JSON, id, hash, track, seed, tier, confidence, curation, needs review or JD. Run technical steps yourself; never ask the user to run a command or edit a file. Ask one question at a time, and say what will happen before anything is saved or changed. When something fails, say in plain words what went wrong and what to do next.
+Everything the user reads is in everyday words. Lines that start with `>` in this skill are what to say: reword them lightly if you like, but keep the meaning and the plain wording. Never show the user commands, file names or folder paths (except the resume folder they named, and the data folder when a save was blocked), error text, or the words database, JSON, id, hash, track, seed, tier, confidence, curation, needs review or JD. Run technical steps yourself; never ask the user to run a command or edit a file. Ask one question at a time, and say what will happen before anything is saved or changed. When something fails, say in plain words what went wrong and what to do next.
 
 | Internal term | Say instead |
 |---|---|
@@ -54,7 +60,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 | theme, summary angle, curation | (do not name them; say "I'll label it" or just do it) |
 <!-- /shared:talking -->
 
-Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. The resume data model (layouts, how lines are matched across resumes, curation) is in `${CLAUDE_SKILL_DIR}/data-model.md`; read it before changing how resumes are read or tagged.
+Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. The resume data model (layouts, how lines are matched across resumes, curation) is in `data-model.md` (in this skill's folder); read it before changing how resumes are read or tagged.
 
 ## Building a resume for a job posting
 1. Ask:
@@ -75,7 +81,7 @@ Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. T
    > Your resumes say different numbers of years of experience. Which one should I use?
 
 ## Rating how well the resume matches a job posting (experimental)
-Use this when the user asks how well their resume matches a posting or wants a score. The result is a match estimate, never an employer's applicant tracking score, and the user must not be told otherwise. Do every technical step yourself, and never ask the user anything from the first step to the end of the report: settle every doubt with the rules in `${CLAUDE_SKILL_DIR}/match-rubric.md` (read it before step 3; it also gives the request format) and report what you assumed. Flags: `match-score --help`.
+Use this when the user asks how well their resume matches a posting or wants a score. The result is a match estimate, never an employer's applicant tracking score, and the user must not be told otherwise. Do every technical step yourself, and never ask the user anything from the first step to the end of the report: settle every doubt with the rules in `match-rubric.md` (in this skill's folder) (read it before step 3; it also gives the request format) and report what you assumed. Flags: `match-score --help`.
 1. If the posting is not already in the conversation, say:
    > Please paste the job posting here.
    Write the posting to `output/match/posting.txt` under the jobkit home folder (create the folder if needed).
