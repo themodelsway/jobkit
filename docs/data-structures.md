@@ -22,37 +22,36 @@ Rules that hold for all data:
 
 All data lives in one SQLite database under the home folder (`~/.jobkit`, or `.jobkit` in your user folder on Windows, or `JOBKIT_HOME`). It is changed only by the commands, and you look at it with `jobkit export`. Each command's changes are stored together or not at all.
 
-A record table keeps the whole record as JSON in `body` (the shapes below are what `body` holds) and repeats the fields that are keys, links or queried as real columns, written from the body in one place, so they cannot disagree. The schema version is in `PRAGMA user_version`; `jobkit status` shows it.
+A record table keeps the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a link, a sort or filter, a listing); every other field is in `body` only, and a field that is a column is not repeated in `body`. So each field has one stored value, and every command that shows it shows the same value. The one exception is `session_log`, whose entries can never be changed, so its copies cannot disagree. The shapes below are what `jobkit export` shows, with the column fields and `body` joined. Confidence is checked when written: only 0, 1 or 2 is stored. The schema version is in `PRAGMA user_version`; `jobkit status` shows it. Step 11 moved every field to one place and removed the `bullet_source` table; an upgrade checks that the copies agree first, and stops without changing anything if they do not.
 
 | Table | One row is | Notes |
 |---|---|---|
 | `meta` | a named setting or document header | The catalog's `dimensions` and `tracks`, the stories and engagements `schema_version`. |
-| `session` | a practice session | `id`, `title`, `mode`, `status`, `created`, `updated`; `body` holds the rest (`topic`, `jd`). |
-| `session_item` | one queued item of a session | `session_id`, `position`, `item`, `kind` (`card`, `story`, `leader`). |
-| `match_result` | one finished match score | Added by schema step 10. `key`, `created`, `last_used`, `label`, `band`, `lower`, `upper`; `body` holds the whole result (see Match scores). Entries not used for 90 days are removed when `match-score run` finishes. |
+| `session` | a practice session | Columns: `id`, `title`, `mode`, `status`, `created`, `updated` (the listing reads them). The creation time never changes. `body` holds the rest (`topic`, `jd`). |
+| `session_item` | one queued item of a session | `session_id`, `position`, `item`, `kind` (`card`, `story`, `leader`); no `body`. A new entry must name an item that exists. If the item is removed later the entry stays and is shown as unavailable. |
+| `match_result` | one finished match score | Added by schema step 10. Columns: `key`, `created`, `last_used`; `body` holds the whole result, including `label`, `band` and the scores, which the listing reads from it (see Match scores). Entries not used for 90 days are removed when `match-score run` finishes. |
 | `session_log` | one logged answer | **Append-only**: the database refuses updates and deletes. `answered` is 1 when the answer is not empty; `tutor` and `quiz` mark lessons and passed quizzes. `readiness` is computed from these rows. |
-| `card` | an architecture card (service, decision pair or scenario) | `id`, `track`, `kind`, `area`, `name`, `tier`; `body` has `aliases`, `members`, `lifecycle`, `recent_changes`, `verified_on`. |
-| `card_progress` | your progress on one card | `card_id` (must be a card), `confidence` (0 to 2), `last_drilled`; `body` has `notes` and `links` to resume bullets. Removing a card removes its progress. |
+| `card` | an architecture card (service, decision pair or scenario) | Columns: `id`, `position`; `body` has `track`, `kind`, `area`, `name`, `tier`, `aliases`, `members`, `lifecycle`, `recent_changes`, `verified_on`. |
+| `card_progress` | your progress on one card | `card_id` (must be a card); `body` has `confidence` (0 to 2), `last_drilled`, `notes` and `links` to resume bullets. Removing a card removes its progress. |
 | `track` | a custom technology track | `name`; `body` is the seed (services, pairs, scenarios, documentation hosts). |
-| `engagement` | a real project | `id`, `company`, `title`, `updated`; `body` has `my_role`, `period`, `summary`, `notes`, `counters`. |
-| `fact` | a fact about an engagement | `engagement_id`, `id` (`f1`, `f2`, ...; an id is never reused), `basis`; `body` has `text`, `source`, `note`, `added`. |
-| `decision` | a decision on an engagement | `engagement_id`, `id` (`d1`, ...), `ownership`; `body` has `what`, `why`, `alternatives`, `tradeoffs`. |
+| `engagement` | a real project | Columns: `id`, `position`; `body` has `company`, `title`, `updated`, `my_role`, `period`, `summary`, `notes`, `counters`. |
+| `fact` | a fact about an engagement | `engagement_id`, `id` (`f1`, `f2`, ...; an id is never reused), `position`; `body` has `basis`, `text`, `source`, `note`, `added`. |
+| `decision` | a decision on an engagement | `engagement_id`, `id` (`d1`, ...), `position`; `body` has `ownership`, `what`, `why`, `alternatives`, `tradeoffs`. |
 | `person` | a person on an engagement | `engagement_id`, `position`; `body` has `role`, `note`. |
-| `story` | a STAR story | `id`, `company`, `theme`, `status`, `engagement_id` (must be an engagement; checked when the change is committed); `body` is the story. |
+| `story` | a STAR story | Columns: `id`, `position`, `engagement_id` (the link to its engagement, shown as `engagement`; must be an engagement, checked when the change is committed); `body` is the rest of the story, including `company`, `theme`, `status`, `updated`. |
 | `theme` | a story theme | `name`; `body` lists its stories and leadership questions. |
-| `lead_question` | a leadership question | `id`, `position`, `category`; `body` has `question` and `themes`. |
-| `lead_progress` | your answer to one question | `question_id` (must be a question), `confidence`, `last_drilled`; `body` has `principle`, `notes` and one STAR `examples` entry per company. |
+| `lead_question` | a leadership question | `id`, `position`; `body` has `category`, `question` and `themes`. |
+| `lead_progress` | your answer to one question | `question_id` (must be a question); `body` has `confidence` (0 to 2), `last_drilled`, `principle`, `notes` and one STAR `examples` entry per company. |
 | `lead_company_fact` | factual scope for one employer | `company_id`; `body` has team sizes, budget and similar facts you stated. |
 | `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `tier1_services`, `reassess_days`) and its JSON `value`. |
-| `employer` | an employer found in the resumes | `id`, `position`, `name`; `body` has the match `regex` and, after a merge, `aliases`. Changed with `profile companies rename` and `merge`. |
-| `open_item` | an open item or data note | `id`, `status` (`open`, `done`); `body` has `text`. |
-| `company` | an employer in the resume data | `id`, `position`, `name`; `body` has `aliases`. Removing a company removes its roles and bullets. |
-| `role` | one period at a company | `company_id`, `position`, `start`; `body` has `end`, `titles`, `subtitles`, `clients`, `sources`. |
-| `bullet` | one experience bullet, deduplicated across resumes | `company_id`, `id` (hash of the text), `needs_review`; `body` has `text`, `skills`, `themes`, `metrics`, `variants`, `wordings`, `ignored`. |
-| `bullet_source` | a resume file a bullet came from | `company_id`, `bullet_id`, `source` (the resume file). Lets a rebuild find what a deleted file contributed. |
-| `skill` | a skill in a group | `group_name`, `position`, `name`; `body` has `aliases` and `sources`. |
+| `employer` | an employer found in the resumes | `id`, `position`; `body` has `name`, the match `regex` and, after a merge, `aliases`. Changed with `profile companies rename` and `merge`. |
+| `open_item` | an open item or data note | `id`; `body` has `status` (`open`, `done`) and `text`. |
+| `company` | an employer in the resume data | `id`, `position`; `body` has `name`, `aliases`. Removing a company removes its roles and bullets. |
+| `role` | one period at a company | `company_id`, `position`; `body` has `start`, `end`, `titles`, `subtitles`, `clients`, `sources`. |
+| `bullet` | one experience bullet, deduplicated across resumes | `company_id`, `id` (hash of the text), `position`; `body` has `needs_review`, `text`, `skills`, `themes`, `metrics`, `variants`, `wordings`, `ignored`. |
+| `skill` | a skill in a group | `group_name`, `position`; `body` has `name`, `aliases` and `sources`. |
 | `resume_item` | one entry of the resume's own sections | `section` (`summaries`, `profile_points`, `education`, `certifications`, `projects`, `headlines`, `item_sources`), `position`; `body` is the entry. `item_sources` entries are `{section, text, sources}`: the resume files that state each item, so a deleted resume takes its items out. No contact details are stored. |
-| `ledger` | a resume file that was read | `file`, `kind` (`resume` or `other`), `mtime`; `body` has `size`, `sha256`, `processed_at`. |
+| `ledger` | a resume file that was read | `file`; `body` has `kind` (`resume` or `other`), `mtime`, `size`, `sha256`, `processed_at`. |
 | `unparsed` | why a file could not be read | `file`; `body` is the list of problems. |
 | `curation` | one curation entry | `file` (`curated` or `themes`), `kind` (the key in that file), `key`, `position`; `body` is the entry. Not linked to bullets: a bullet id changes on a rebuild only when its claim really changes, and such entries are reported as orphaned. Changed only with `process-resumes curate`. |
 
@@ -83,7 +82,7 @@ Name and contact line printed at the top of built resumes. Plain text, not JSON.
 
 How resume text becomes data: each resume is split by employer, bullets are merged across resumes, and every item keeps the resume files it came from (`sources`).
 
-### One employer (`company`, `role`, `bullet`, `bullet_source`; export kind `resume-companies`)
+### One employer (`company`, `role`, `bullet`; export kind `resume-companies`)
 ```json
 {
   "id": "acme", "name": "Acme Corp", "aliases": [],

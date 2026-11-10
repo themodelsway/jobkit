@@ -1,13 +1,13 @@
 """The code pass: requirements rated from stored facts without a model."""
 import copy
+import dataclasses
 import unittest
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
-from jobkit.resumes import match_codepass as cp
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_facts as mf
-from jobkit.resumes import match_request as mr
+from jobkit.common import ToolError
+from jobkit.resumes import match_codepass as cp, match_engine as me, match_facts as mf, match_request as mr
 from tests.resumes.match_fixtures import facts, request
 
 FACTS = facts()
@@ -110,6 +110,68 @@ class ApplyCodeTests(unittest.TestCase):
     def test_sentences_find_the_heading(self):
         parts = cp.sentences("About us\n\nQualifications:\n- Bachelor's degree\n- Python.\n")
         self.assertIn(("Bachelor's degree", "Qualifications"), parts)
+
+
+def degrees(posting: str, *education: str) -> dict[str, dict[str, Any]]:
+    held = dataclasses.replace(facts(), education=list(education))
+    return {i["id"]: i for i in cp.code_pass(posting, held) if i["kind"] == "degree"}
+
+
+class ContestTests(unittest.TestCase):
+    """L5: a reviewer can contest a code level with a reason."""
+
+    def parse(self, contest: dict[str, Any] | None):
+        data = request()
+        data["requirements"][0].update({"id": "code:skill:aws", "level": "full"})
+        if contest is not None:
+            data["requirements"][0]["contest"] = contest
+        return mr.parse_request(data, FACTS, me.BANDS)
+
+    def test_contest_replaces_the_level_and_keeps_both_in_the_report(self):
+        req = self.parse({"level": "partial", "reason": "both lines are old coursework"})
+        notes = cp.apply_code(req, cp.code_pass("Strong Amazon Web Services skills.", FACTS))
+        entry = req.items[0]
+        self.assertEqual(entry.level, "partial")
+        self.assertEqual(entry.code_level, "full")
+        self.assertIn("both lines are old coursework", entry.reason)
+        self.assertEqual(entry.source, "code, contested")
+        self.assertTrue(any("contested" in n for n in notes))
+
+    def test_uncontested_code_level_stands(self):
+        req = self.parse(None)
+        cp.apply_code(req, cp.code_pass("Strong Amazon Web Services skills.", FACTS))
+        self.assertEqual(req.items[0].level, "full")
+        self.assertIsNone(req.items[0].code_level)
+
+    def test_contest_needs_a_reason(self):
+        with self.assertRaises(ToolError):
+            self.parse({"level": "partial"})
+
+
+class DegreeFieldTests(unittest.TestCase):
+    """L7: the whole field is compared, not one shared word."""
+
+    def test_political_science_is_not_computer_science(self):
+        item = degrees("Bachelor degree in Computer Science.", "Bachelor of Political Science, State U")["code:degree:1"]
+        self.assertEqual(item["level"], "partial")
+
+    def test_same_field_is_full(self):
+        item = degrees("Bachelor degree in Computer Science.", "BSc Computer Science, State U")["code:degree:1"]
+        self.assertEqual(item["level"], "full")
+
+    def test_related_field_is_substantial(self):
+        item = degrees("Bachelor degree in Computer Science.", "Bachelor of Software Engineering, State U")["code:degree:1"]
+        self.assertEqual(item["level"], "substantial")
+
+    def test_two_different_same_level_degrees_are_rated_separately(self):
+        found = degrees("Bachelor degree in Finance. Also a bachelor degree in Law.",
+                        "Bachelor of Finance, A", "Bachelor of Politics, B")
+        self.assertEqual(sorted(found), ["code:degree:1", "code:degree:1:law"])
+        self.assertEqual(found["code:degree:1"]["level"], "full")
+        self.assertEqual(found["code:degree:1:law"]["level"], "partial")
+
+    def test_no_field_named_stays_full_at_the_level(self):
+        self.assertEqual(degrees("A bachelor degree is required.", "Bachelor of Arts")["code:degree:1"]["level"], "full")
 
 
 if __name__ == "__main__":

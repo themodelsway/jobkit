@@ -17,9 +17,11 @@ session. Confidence per card is shared across sessions (stored card progress).
 from __future__ import annotations
 
 import argparse
+import itertools
 import random
 import re
 import sys
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any, Final, NotRequired, TypedDict, cast
@@ -34,6 +36,8 @@ from jobkit.user import profile as up
 
 ID_RE: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 MODE_KINDS: Final[dict[str, str]] = {"architecture": "architecture", "stories": "stories", "leadership": "leadership"}
+KIND_NAMES: Final[dict[str, tuple[str, str]]] = {"card": ("card", "cards"), "story": ("story", "stories"),
+                                                 "leader": ("leadership question", "leadership questions")}
 SLUG_CHARS: Final[int] = 40
 RESUME_PREVIEW: Final[int] = 300
 now = common.now
@@ -155,6 +159,22 @@ def story_queue(args: argparse.Namespace, text: str | None = None) -> list[Queue
     return [{"id": s["id"], "kind": "story"} for s in stories]
 
 
+def take_turns(*queues: Sequence[QueueItem]) -> list[QueueItem]:
+    """One item from each queue in turn, each queue keeping its own order; when one runs out the others go on.
+    A cut to `--count` then keeps every kind, where joining the queues end to end would keep only the first."""
+    return [item for round_ in itertools.zip_longest(*queues) for item in round_ if item is not None]
+
+
+def queue_mix(queue: Sequence[QueueItem], matched: int) -> str:
+    """What a new queue holds by kind, and how many matching items `--count` left out: "2 cards, 1 story; 4 more
+    matched and were left out, raise --count to include them"."""
+    counts = Counter(item["kind"] for item in queue)
+    mix = ", ".join(f"{n} {KIND_NAMES[kind][n != 1]}" for kind, n in counts.items())
+    if matched <= len(queue):
+        return mix
+    return f"{mix}; {matched - len(queue)} more matched and were left out, raise --count to include them"
+
+
 def resolve_mode(args: argparse.Namespace) -> None:
     """Fill in `args.mode`: jd when only `--jd` is given, retest for `--due` alone, else architecture. `--jd` with
     another mode is an error."""
@@ -193,7 +213,8 @@ def build_queue(args: argparse.Namespace) -> tuple[list[QueueItem], str | None]:
     if not args.jd:
         raise ToolError("--jd is required for mode jd")
     text = common.read_text_arg(args.jd)
-    return card_queue(args, arch.flt(arch.matches(text, arch.catalog()), args)) + story_queue(args, text), args.jd
+    cards = card_queue(args, arch.flt(arch.matches(text, arch.catalog()), args))
+    return take_turns(cards, story_queue(args, text)), args.jd
 
 
 def unique_session_id(title: str) -> str:
@@ -208,10 +229,14 @@ def unique_session_id(title: str) -> str:
 # ---------------------------------------------------------------- commands
 
 def show_next(session: Session) -> None:
-    """Print the first queued item that has no logged answer yet."""
+    """Print the first queued item that has no logged answer yet; an item whose target was removed is reported
+    as unavailable and skipped."""
     done = {e["item"] for e in session["log"]}
     for item in session["queue"]:
         if item["id"] in done:
+            continue
+        if known_kind(item["id"]) is None:
+            print(f"\nSkipping {item['id']} ({item['kind']}): it is unavailable, its {item['kind']} was removed.")
             continue
         print(f"\nNext item ({item['kind']}):")
         if item["kind"] == "leader":
@@ -240,6 +265,7 @@ def cmd_new(args: argparse.Namespace) -> None:
             queue.sort(key=lambda item: due.index(item["id"]))      # oldest first, so --count keeps the oldest
         if not queue:
             raise ToolError("Nothing is due for a retest for those filters. No session created.")
+    matched = len(queue)
     queue = queue[:args.count]
     if not queue:
         raise ToolError("Nothing to ask for those filters (no item matches, or with --only-open every item is "
@@ -250,7 +276,7 @@ def cmd_new(args: argparse.Namespace) -> None:
     if args.mode == "tutor":
         session["topic"] = args.topic
     put_session(session)
-    print(f"Started session {sid} with {len(queue)} items.")
+    print(f"Started session {sid} with {len(queue)} items ({queue_mix(queue, matched)}).")
     show_next(session)
 
 
@@ -282,10 +308,12 @@ def cmd_resume(args: argparse.Namespace) -> None:
 
 
 def resolve_item(session: Session, item: str) -> QueueItem | None:
-    """The queue entry for `item`, or None if it is not queued; fails for an id that exists nowhere."""
+    """The queue entry for `item`, or None if it is not queued; fails for an id that exists nowhere, also when
+    it is queued (its card, question or story was removed, so it cannot be answered until it exists again)."""
     queued = next((x for x in session["queue"] if x["id"] == item), None)
-    if queued is None and not known_kind(item):
-        raise ToolError(f"Unknown item {item}. Use an id from arch list, lead list or prep status.")
+    if not known_kind(item):
+        hint = " It is queued but unavailable: it was removed." if queued else ""
+        raise ToolError(f"Unknown item {item}.{hint} Use an id from arch list, lead list or prep status.")
     return queued
 
 
@@ -302,20 +330,18 @@ def record_confidence(kind: str, item: str, confidence: int, tutor: bool) -> Non
     """Save the confidence for a card or question; a lesson never lowers what a real drill earned, nor
     refreshes the date of the last real drill."""
     if kind == "card":
-        cards: dict[str, Any] = dict(arch.progress()["cards"])
-        entry: dict[str, Any] = cards.setdefault(item, arch.blank_progress())
+        entry: dict[str, Any] = dict(arch.progress()["cards"].get(item) or arch.blank_progress())
     else:
-        cards = lead.prog()["questions"]
-        entry = cards.setdefault(item, lead.blank())
+        entry = dict(lead.prog()["questions"].get(item) or lead.blank())
     if not tutor or confidence > entry["confidence"]:
         entry["confidence"] = confidence
         entry["last_drilled"] = date.today().isoformat()
     elif not entry["last_drilled"]:
         entry["last_drilled"] = date.today().isoformat()   # first contact only; a lesson never refreshes a drill date
     if kind == "card":
-        tables.save_progress(cards)
+        tables.set_card_progress(item, entry)
     else:
-        tables.save_lead_progress(cards)
+        tables.set_lead_progress(item, entry)
 
 
 def cmd_log(args: argparse.Namespace) -> None:

@@ -38,7 +38,11 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 - **THEN** the copy opens cleanly and holds a state from before or after that write
 
 ### Requirement: Restore
-`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a complete jobkit database. The file SHALL be checked on a temporary copy (SQLite integrity check, upgrade to the current schema, every table and column of the current schema present) before anything is replaced.
+`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a complete jobkit database. The file SHALL be checked on a temporary copy before anything is replaced. A refusal SHALL name the table and SHALL NOT print the record's content.
+
+#### Scenario: Checks before replacing
+- **WHEN** a file is restored
+- **THEN** the copy passes the SQLite integrity check, upgrades to the current schema, has every table, column and trigger of the current schema, has no broken references between tables and holds only readable records
 
 #### Scenario: Restore
 - **WHEN** a valid backup is restored
@@ -50,4 +54,16 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 
 #### Scenario: Look-alike file
 - **WHEN** the file has a `meta` table and a plausible version but lacks the real tables and columns
+- **THEN** it is refused and the current database is unchanged
+
+#### Scenario: Unreadable record
+- **WHEN** the file holds a stored record that is not valid JSON
+- **THEN** it is refused, the table is named, the record's content is not printed and the current database is unchanged
+
+#### Scenario: Broken reference
+- **WHEN** the file holds a record that points at a missing record of a linked table
+- **THEN** it is refused and the current database is unchanged
+
+#### Scenario: Protection removed
+- **WHEN** the file lacks the triggers that protect logged answers
 - **THEN** it is refused and the current database is unchanged

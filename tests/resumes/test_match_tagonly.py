@@ -54,7 +54,7 @@ class CodePassTests(unittest.TestCase):
 class RunTests(MatchCase):
     def test_run_succeeds_for_a_posting_naming_a_tag_only_skill(self):
         data = tagged_facts(False)
-        tables.save_skills(dict(data.skills))
+        tables.replace_skills(dict(data.skills))
         self.posting.write_text(POSTING + "- Leadership experience.\n", encoding="utf-8")
         result = self.run_json()
         self.assertIn("requirements", result)
@@ -62,7 +62,7 @@ class RunTests(MatchCase):
     def test_run_succeeds_when_a_line_carries_the_tag(self):
         data = tagged_facts(True)
         seed(lambda companies: companies.update(copy.deepcopy(dict(data.companies))))
-        tables.save_skills(dict(data.skills))
+        tables.replace_skills(dict(data.skills))
         self.posting.write_text(POSTING + "- Leadership experience.\n", encoding="utf-8")
         self.assertIn("requirements", self.run_json())
 

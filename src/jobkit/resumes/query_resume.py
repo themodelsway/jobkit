@@ -359,22 +359,50 @@ def bullet_matches(bullet: Bullet, skill: str | None, text: str | None, theme: s
             and (not theme or theme.lower() in (t.lower() for t in bullet["themes"])))
 
 
-def cmd_search(args: argparse.Namespace) -> None:
-    """Filter bullets by skill, company, text and theme."""
-    companies, skills = load_or_fail()
-    skill = skill_aliases(skills).get(args.skill.lower(), args.skill) if args.skill else None
-    matched = 0
+def print_group(company: Company, bullets: Sequence[Bullet], with_skills: bool = False) -> None:
+    """The company's name once, then its bullets; nothing when there are no bullets."""
+    if bullets:
+        print(f"== {company['name']}")
+    for bullet in bullets:
+        show(bullet, bullet["skills"] if with_skills else None)
+
+
+def search_matches(companies: Mapping[str, Company], args: argparse.Namespace,
+                   skill: str | None) -> list[tuple[Company, list[Bullet]]]:
+    """(company, its bullets that pass the filters) for each company with a match, newest company first."""
+    found: list[tuple[Company, list[Bullet]]] = []
     for company in newest_first(companies):
         if args.company and args.company.lower() not in (company["id"], company["name"].lower()):
             continue
-        for bullet in (b for b in company["bullets"] if not b.get("ignored")):
-            if not bullet_matches(bullet, skill, args.text, args.theme):
-                continue
-            if matched < args.limit:
-                print(f"[{company['name']}]")
-                show(bullet, bullet["skills"])
-            matched += 1
-    print(f"\n{matched} bullet(s) matched" + (f" (showing {args.limit})" if matched > args.limit else ""))
+        bullets = [b for b in company["bullets"]
+                   if not b.get("ignored") and bullet_matches(b, skill, args.text, args.theme)]
+        if bullets:
+            found.append((company, bullets))
+    return found
+
+
+def search_footer(matched: int, limit: int, hidden: Mapping[str, int]) -> str:
+    """The closing line: the total, and when the limit cut the list, how many matches each company has left."""
+    line = f"\n{matched} bullet(s) matched"
+    if matched <= limit:
+        return line
+    return line + f" (showing {limit}). Not shown: " + "; ".join(f"{name} {n}" for name, n in hidden.items())
+
+
+def cmd_search(args: argparse.Namespace) -> None:
+    """Filter bullets by skill, company, text and theme; `--limit` caps the total printed, newest company first."""
+    companies, skills = load_or_fail()
+    skill = skill_aliases(skills).get(args.skill.lower(), args.skill) if args.skill else None
+    left = max(args.limit, 0)
+    matched = 0
+    hidden: dict[str, int] = {}
+    for company, bullets in search_matches(companies, args, skill):
+        matched += len(bullets)
+        print_group(company, bullets[:left], with_skills=True)
+        if len(bullets) > left:
+            hidden[company["name"]] = len(bullets) - left
+        left = max(left - len(bullets), 0)
+    print(search_footer(matched, max(args.limit, 0), hidden))
 
 
 def cmd_review(args: argparse.Namespace) -> None:
@@ -382,10 +410,7 @@ def cmd_review(args: argparse.Namespace) -> None:
     companies, skills = load_or_fail()
     print("Bullets flagged needs_review:")
     for company in newest_first(companies):
-        for bullet in company["bullets"]:
-            if bullet.get("needs_review"):
-                print(f"[{company['name']}]")
-                show(bullet)
+        print_group(company, [b for b in company["bullets"] if b.get("needs_review")])
     print("\nSkills seen in only one resume (possible typos):")
     for group, items in skills["groups"].items():
         one = [item["name"] for item in items if len(item["sources"]) == 1]
@@ -431,7 +456,9 @@ def build_parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="filter bullets")
     for flag in ("--skill", "--company", "--text", "--theme"):
         search.add_argument(flag)
-    search.add_argument("--limit", type=int, default=20)
+    search.add_argument("--limit", type=int, default=20,
+                        help="most bullets to print across all companies (default 20); the last line says "
+                        "how many matches each company has that were not shown")
     search.set_defaults(fn=cmd_search)
     sub.add_parser("review", help="things that need a human look").set_defaults(fn=cmd_review)
     sub.add_parser("stats", help="counts").set_defaults(fn=cmd_stats)

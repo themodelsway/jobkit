@@ -50,3 +50,18 @@ The system SHALL report a file that yields no work history as unparsed with a re
 #### Scenario: Plain essay text
 - **WHEN** a text file has no recognisable work history
 - **THEN** it appears in the unparsed list
+
+### Requirement: Company, title and dates on separate lines
+The system SHALL recognise a work-history entry written as the company on one line, the job title on the next and the date range on the next, and SHALL take the company line as the employer. A line above the dates SHALL be read as a title only when it looks like a job title and the line above it could be a company name. Otherwise the line above the dates stays the employer.
+
+#### Scenario: Three-line entry
+- **WHEN** a work history has `Acme Corp`, then `Senior Engineer`, then `01/2020 - Present`
+- **THEN** the employer found is `Acme Corp`, not `Senior Engineer`, and the entry's title is `Senior Engineer`
+
+#### Scenario: Line above the dates is the employer
+- **WHEN** the line above the dates is a company name and the line above that ends the previous bullet
+- **THEN** the company name is the employer, as before
+
+#### Scenario: Employer and title on one line
+- **WHEN** the line above the dates reads `Acme Corp – Senior Engineer`
+- **THEN** the employer is `Acme Corp`, whatever the line above it says

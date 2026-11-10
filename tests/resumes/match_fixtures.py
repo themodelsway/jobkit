@@ -1,5 +1,6 @@
 """A small made-up resume (no personal data) for the match-score tests."""
 import copy
+from typing import Any
 
 from jobkit.resumes import match_facts as mf
 
@@ -43,3 +44,19 @@ def request(**changes) -> dict:
                  "related": "ran a platform"}]}
     data.update(changes)
     return data
+
+
+def role(start: str, end: str | None, title: str) -> dict[str, Any]:
+    """A stored role."""
+    return {"start": start, "end": end, "titles": [title], "subtitles": [], "clients": [], "sources": ["a"]}
+
+
+def line(text: str, role_start: str | None = None, **extra: Any) -> dict[str, Any]:
+    """A stored bullet."""
+    return {"id": text[:8], "text": text, "role_start": role_start, "skills": [], "themes": [], "metrics": [],
+            "sources": ["a"], **extra}
+
+
+def jd_from_bullets(data: dict) -> str:
+    """A job description made of the bullets' own words, so every bullet scores as relevant."""
+    return " ".join(b["text"] for c in data["companies"].values() for b in c["bullets"])

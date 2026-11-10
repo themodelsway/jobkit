@@ -6,9 +6,10 @@ import json
 import unittest
 from pathlib import Path
 
-
-from jobkit.resumes import parse_resume as pr
-from jobkit.resumes import process_resumes as proc
+from jobkit.resumes import parse_resume as pr, process_resumes as proc
+from tests.resumes.match_fixtures import line
+from tests.resumes.test_extract import as_txt
+from tests.resumes.test_integrity import RebuildCase
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures"
 REGISTRY = {
@@ -168,6 +169,63 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(sql["aliases"], ["Structured Query Language"])
         self.assertEqual(len(data["profile"]["summaries"]), 1)
         self.assertEqual(data["profile"]["headlines"], ["Senior Software Engineer"])
+
+
+class HyphenatedEmployerTests(RebuildCase):
+    def discover(self, header: str) -> dict[str, str]:
+        text = f"WORK EXPERIENCE\n{header}\n01/2010 - 12/2014\n• Did things.\n"
+        return pr.discover_companies(text)
+
+    def test_hyphen_inside_a_name_is_kept(self):
+        self.assertEqual(self.discover("Acme-Labs"), {"acme-labs": "Acme-Labs"})
+        self.assertEqual(self.discover("X-Acme"), {"x-acme": "X-Acme"})
+
+    def test_a_spaced_hyphen_or_a_dash_still_splits_name_and_title(self):
+        self.assertEqual(self.discover("Acme-Works – Principal Engineer"), {"acme-works": "Acme-Works"})
+        self.assertEqual(self.discover("Acme-Works - Principal Engineer"), {"acme-works": "Acme-Works"})
+        self.assertEqual(self.discover("Acme-Works — Principal Engineer"), {"acme-works": "Acme-Works"})
+
+    def test_a_resume_with_no_known_employer_is_reported(self):
+        parsed = pr.parse_resume(as_txt(), company_res={})
+        self.assertTrue(any("no known employer" in p for p in parsed["problems"]))
+
+
+class FigureMergeTests(unittest.TestCase):
+    def merged(self, first: str, second: str) -> dict:
+        company = {"id": "acme", "bullets": [], "roles": []}
+        proc.merge_bullet(company, first, "2020-01", "a.txt")
+        proc.merge_bullet(company, second, "2020-01", "b.txt")
+        return company
+
+    def test_different_figures_are_separate_bullets(self):
+        company = self.merged("Reduced warehouse operating costs by 40% through route consolidation.",
+                              "Reduced warehouse operating costs by 90% through route consolidation.")
+        self.assertEqual(len(company["bullets"]), 2)
+        self.assertEqual([b["sources"] for b in company["bullets"]], [["a.txt"], ["b.txt"]])
+
+    def test_same_figures_still_merge(self):
+        company = self.merged("Reduced warehouse operating costs by 40% through route consolidation.",
+                              "Reduced warehouse operating costs by 40% through route consolidation work.")
+        self.assertEqual(len(company["bullets"]), 1)
+
+
+class RetagTests(unittest.TestCase):
+    """L2: a rebuild tags older bullets with short names and loses no existing tag."""
+
+    def test_retag_adds_short_names_and_keeps_the_rest(self):
+        bullets = [line("Built Python models in R for forecasting", skills=["Python"]),
+                   line("Wrote Go services with SQL storage", skills=["SQL"], skills_manual=["Kafka"]),
+                   line("Planned the R&D budget", skills=[])]
+        data = {"companies": {"a": {"bullets": bullets}},
+                "skills": {"groups": {"Languages": [{"name": n, "aliases": []} for n in ("Python", "R", "Go", "SQL")]}}}
+        before = {b["id"]: set(b["skills"]) for b in bullets}
+        proc.retag(data)       # type: ignore[arg-type]
+        after = {b["id"]: set(b["skills"]) for b in bullets}
+        for key, old in before.items():
+            self.assertLessEqual(old, after[key])
+        self.assertEqual(after[bullets[0]["id"]], {"Python", "R"})
+        self.assertEqual(after[bullets[1]["id"]], {"Go", "SQL", "Kafka"})
+        self.assertEqual(after[bullets[2]["id"]], set())
 
 
 if __name__ == "__main__":

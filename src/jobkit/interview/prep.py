@@ -143,13 +143,13 @@ def engagements() -> list[Engagement]:
 def save_stories(data: dict[str, Any]) -> None:
     """Store the stories with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
-    tables.save_stories(data)
+    tables.replace_stories(data)
 
 
 def save_engs(data: dict[str, Any]) -> None:
     """Store the engagements with the current schema version."""
     data["schema_version"] = sm.SCHEMA_VERSION
-    tables.save_engagements(data)
+    tables.replace_engagements(data)
 
 
 def find[T: Mapping[str, object]](items: Iterable[T], ident: str, what: str) -> T:
@@ -281,7 +281,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     themes: dict[str, dict[str, Any]] = {}
     for story in out:
         themes.setdefault(story["theme"], {"stories": [], "questions": QUESTIONS.get(story["theme"], [])})["stories"].append(story["id"])
-    tables.save_themes(dict(sorted(themes.items())))
+    tables.replace_themes(dict(sorted(themes.items())))
     print(f"{len(out)} stories ({added} new); {len(themes)} themes")
 
 

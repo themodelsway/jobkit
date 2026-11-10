@@ -288,10 +288,10 @@ def cmd_init(args: argparse.Namespace) -> None:
     for seed in seeds:
         cat["cards"], new = merge_cards(cat["cards"], build_wanted_cards(seed, companies, skill_names))
         added += new
-    tables.save_catalog(cat)
+    tables.replace_catalog(cat)
     prog = progress()
     refresh_links(prog, cat["cards"], companies)
-    tables.save_progress(prog["cards"])
+    tables.replace_progress(prog["cards"])
     print(f"{len(cat['cards'])} cards ({added} new) stored")
 
 
@@ -397,7 +397,7 @@ def cmd_set(args: argparse.Namespace) -> None:
         entry["last_drilled"] = date.today().isoformat()
     else:
         entry["notes"] = args.value
-    tables.save_progress(prog["cards"])
+    tables.set_card_progress(args.id, entry)
     print(f"Updated {args.id}.{args.field}")
 
 
@@ -443,7 +443,7 @@ def cmd_refresh(args: argparse.Namespace) -> None:
     card["recent_changes"] += [Change(date=d, summary=s, source=args.source) for d, s in changes]
     card["recent_changes"].sort(key=lambda change: change["date"])
     card["verified_on"] = date.today().isoformat()
-    tables.save_catalog(cat)
+    tables.replace_catalog(cat)
     print(f"Refreshed {args.id} (verified {card['verified_on']}).")
 
 

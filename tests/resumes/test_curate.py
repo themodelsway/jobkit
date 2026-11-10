@@ -2,10 +2,7 @@
 import contextlib
 import io
 
-from jobkit.resumes import curate
-from jobkit.resumes import process_resumes as proc
-from jobkit.resumes import resume_data as rd
-from jobkit.resumes import tables
+from jobkit.resumes import curate, process_resumes as proc, resume_data as rd, tables
 from tests.resumes.test_extract import as_txt
 from tests.resumes.test_integrity import EXTRA_BULLET, RebuildCase
 
@@ -180,3 +177,37 @@ class SurviveAndOrphanTests(CurateCase):
         self.assertIn("WARNING: 1 entr", out)
         self.assertEqual(tables.load_curation("themes")["themes"], {bid: ["zzz-theme"]})
         self.assertIn(f"theme {bid}", rd.orphan_curation(rd.load_companies(), rd.load_profile(), rd.load_themes_file()))
+
+
+class CurationRemovalTests(CurateCase):
+    def test_removed_curation_is_undone_without_force(self):
+        self.curate("add", "wrong-metric", "40%")
+        self.curate("add", "extra-skill", "Tools", "Terraform")
+        self.curate("add", "theme", self.bullet()["id"], "cache-theme")
+        self.rebuild()
+        self.assertTrue(self.bullet()["needs_review"])
+        self.assertIn("Terraform", self.skill_names())
+        self.assertEqual(self.bullet()["themes"], ["cache-theme"])
+        for kind, *values in (("wrong-metric", "40%"), ("extra-skill", "Tools", "Terraform"),
+                              ("theme", self.bullet()["id"])):
+            self.assertEqual(self.curate("rm", kind, *values)[0], 0)
+        self.rebuild()
+        self.assertFalse(self.bullet().get("needs_review"))
+        self.assertNotIn("Terraform", self.skill_names())
+        self.assertEqual(self.bullet()["themes"], [])
+
+    def test_dropped_skill_comes_back_without_force(self):
+        victim = sorted(self.skill_names())[0]
+        self.curate("add", "skill-drop", victim)
+        self.rebuild()
+        self.assertNotIn(victim, self.skill_names())
+        self.curate("rm", "skill-drop", victim)
+        self.rebuild()
+        self.assertIn(victim, self.skill_names())
+
+    def test_unchanged_curation_does_not_rebuild(self):
+        self.curate("add", "wrong-metric", "40%")
+        self.assertIn("curation changed", self.rebuild())
+        out = self.rebuild()
+        self.assertNotIn("curation changed", out)
+        self.assertIn("0 new/changed", out)

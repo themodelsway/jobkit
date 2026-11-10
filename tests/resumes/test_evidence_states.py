@@ -2,13 +2,9 @@
 import unittest
 from typing import Any
 
-from jobkit.resumes import build_resume as br
-from jobkit.resumes import evidence
-from jobkit.resumes import match_codepass as cp
-from jobkit.resumes import query_resume as qr
-from tests.resumes.match_fixtures import facts, request
+from jobkit.resumes import build_resume as br, evidence, match_codepass as cp, query_resume as qr
+from tests.resumes.match_fixtures import facts, line, request
 from tests.resumes.test_match_score import MatchCase, seed
-from tests.test_logic_review import line
 
 OK, CONFIRM, DENIED = evidence.OK, evidence.CONFIRM_USE, evidence.NOT_DEMONSTRATED
 
@@ -161,11 +157,62 @@ class ReportTests(MatchCase):
         self.assertTrue(any("not demonstrated in your profile" in a for a in body["assumptions"]))
 
 
+def python_facts(*bullets: dict[str, Any]):
+    """Facts where one company holds the given bullets, all tagged Python."""
+    fixture = facts()
+    fixture.companies["acme"]["bullets"] = [{**b, "skills": ["Python"]} for b in bullets]
+    fixture.companies["globex"]["bullets"] = []
+    return fixture
+
+
+def python_level(*bullets: dict[str, Any]) -> str:
+    return {i["id"]: i for i in cp.code_pass("Python is required.", python_facts(*bullets))}["code:skill:python"]["level"]
+
+
+class AdmissibleEvidenceTests(unittest.TestCase):
+    """L5: one evidence rule for ranking, building and scoring."""
+
+    def test_flagged_line_gives_no_credit(self):
+        self.assertEqual(python_level(line("Wrote Python tools", id="a"), line("Python ETL jobs", id="b", needs_review=True)),
+                         "substantial")                                    # one admissible line, not two
+
+    def test_negated_line_gives_no_more_than_partial(self):
+        self.assertEqual(python_level(line("No production use of Python; completed a Python introduction.", id="a")),
+                         "partial")
+
+    def test_one_strong_line_is_as_high_as_two_plain_mentions(self):
+        strong = python_level(line("Cut report time 60% with Python automation", id="a", metrics=["60%"]))
+        plain = python_level(line("Used Python for scripts", id="b"), line("Python for tests", id="c"))
+        self.assertEqual(plain, "full")
+        self.assertEqual(strong, "full")
+
+    def test_reason_says_why_a_mentioned_skill_earned_no_credit(self):
+        found = {i["id"]: i for i in cp.code_pass("Python is required.", python_facts(
+            line("No production use of Python; completed an introduction.", id="a")))}
+        self.assertIn("not demonstrated in your profile", found["code:skill:python"]["reason"])
+
+    def test_one_plain_line_stays_substantial(self):
+        self.assertEqual(python_level(line("Used Python for scripts", id="a")), "substantial")
+
+    def test_ranking_ignores_a_negated_skill_line(self):
+        ctx = qr.JdContext(qr.Counter({"Python": 1, "SQL": 1}), {"python", "sql"}, set(), {"n": 0.0, "p": 0.0}, 0.0)
+        negated = line("No production use of Python or SQL; completed an introduction.", id="n", skills=["Python", "SQL"])
+        plain = line("Used Python and SQL for reports", id="p", skills=["Python", "SQL"])
+        self.assertIsNone(qr.score_bullet(negated, ctx))
+        self.assertIsNotNone(qr.score_bullet(plain, ctx))
+
+    def test_phrases(self):
+        self.assertEqual(evidence.use_state("Never used Python in a job", "Python"), evidence.NOT_DEMONSTRATED)
+        self.assertEqual(evidence.use_state("Took a beginner course in Python", "Python"), evidence.CONFIRM_USE)
+        self.assertEqual(evidence.use_state("Built a Python service used by ten teams", "Python"), evidence.OK)
+        self.assertFalse(evidence.admissible(line("x", ignored=True)))
+
+
 if __name__ == "__main__":
     unittest.main()
 
 
-class ReviewFindingTests(unittest.TestCase):
+class EvidenceEdgeCaseTests(unittest.TestCase):
     """Fixes from the 2026-11-09 adversarial review."""
 
     def result(self, ranked, need):

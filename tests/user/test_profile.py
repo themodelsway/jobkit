@@ -4,12 +4,11 @@ import io
 import re
 import unittest
 
-from jobkit.user import profile as up
-from jobkit.user import tables as utables
+from jobkit.user import profile as up, tables as utables
 from tests.support import HomeCase
 
 
-class ProfileTests(HomeCase):
+class ProfileCase(HomeCase):
     def setUp(self):
         super().setUp()
         self.tmp = self.home
@@ -22,6 +21,8 @@ class ProfileTests(HomeCase):
             code = up.main(list(argv))
         return code, out.getvalue(), err.getvalue()
 
+
+class ProfileTests(ProfileCase):
     def test_status_without_profile(self):
         code, out, _ = self.run_cli("status")
         self.assertEqual(code, 0)
@@ -96,7 +97,7 @@ class ProfileTests(HomeCase):
         up.add_companies({"a": "A Co", "b": "B Co"})
         employers = utables.load_employers()
         employers["b"]["regex"] = "B.*"
-        utables.save_employers(employers)
+        utables.replace_employers(employers)
         self.assertEqual(self.run_cli("companies", "merge", "b", "a")[0], 1)
 
     def test_open_items_add_done_and_errors(self):
@@ -108,7 +109,7 @@ class ProfileTests(HomeCase):
         self.assertEqual((code, err.strip()), (1, "No open item 99"))
         self.assertEqual(self.run_cli("open", "add")[0], 1)
 
-class RetestWindowTests(ProfileTests):
+class RetestWindowTests(ProfileCase):
     def test_default_is_thirty_and_status_says_so(self):
         self.assertEqual(up.reassess_days(), 30)
         self.run_cli("init", "--resume-root", str(self.resumes))
@@ -135,6 +136,45 @@ class RetestWindowTests(ProfileTests):
         for good in ("1", "365"):
             self.assertEqual(self.run_cli("set", "reassess_days", good)[0], 0)
             self.assertEqual(up.reassess_days(), int(good))
+
+
+class ProfileInitTests(HomeCase):
+    def run_cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = up.main(list(argv))
+        return code, out.getvalue()
+
+    def test_second_init_keeps_answers(self):
+        first, second = self.home / "one", self.home / "two"
+        first.mkdir()
+        second.mkdir()
+        self.run_cli("init", "--resume-root", str(first), "--name", "Synthetic One", "--resume-dir", "a")
+        code, out = self.run_cli("init", "--resume-root", str(second), "--name", "Synthetic Two", "--resume-dir", "b")
+        self.assertEqual(code, 0)
+        self.assertIn("Kept the existing", out)
+        profile = up.load()
+        self.assertEqual((profile["resume_root"], profile["name"], profile["resume_dirs"]),
+                         (str(first), "Synthetic One", ["a"]))
+
+    def test_second_init_fills_unset_name(self):
+        root = self.home / "r"
+        root.mkdir()
+        self.run_cli("init", "--resume-root", str(root))
+        self.run_cli("init", "--resume-root", str(root), "--name", "Pat")
+        self.assertEqual(up.load()["name"], "Pat")
+
+
+class ProfileCompaniesTests(HomeCase):
+    def test_lists_companies_or_says_to_scan(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(up.main(["companies"]), 0)
+            self.assertIn("No scan yet", out.getvalue())
+            up.add_companies({"acme": "Acme Corp"})
+            out.truncate(0)
+            self.assertEqual(up.main(["companies"]), 0)
+        self.assertIn("Acme Corp", out.getvalue())
 
 
 if __name__ == "__main__":

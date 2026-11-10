@@ -64,7 +64,7 @@ def load() -> Profile:
 
 def save(profile: Profile) -> None:
     """Store the profile."""
-    tables.save_settings(profile)
+    tables.replace_settings(profile)
 
 
 def exists() -> bool:
@@ -132,7 +132,7 @@ def add_companies(found: dict[str, str]) -> list[str]:
     for cid in new:
         stored[cid] = {"name": found[cid], "regex": re.escape(found[cid]) + rf"(?:{SEP}(?P<t>.+))?"}
     if new:
-        tables.save_employers(stored)
+        tables.replace_employers(stored)
     return new
 
 
@@ -214,7 +214,7 @@ def rename_company(args: list[str]) -> None:
     if args[0] not in employers:
         raise ToolError(f"No employer {args[0]}. Run `companies` to list them.")
     employers[args[0]]["name"] = args[1]
-    tables.save_employers(employers)
+    tables.replace_employers(employers)
     print(f"Renamed {args[0]} to {args[1]}. Run `process-resumes --force` to rebuild with the new name.")
 
 
@@ -232,7 +232,7 @@ def merge_companies(args: list[str]) -> None:
         raise ToolError("These employers have a custom match pattern, so they cannot be merged automatically.")
     target["regex"] = f"(?:{heads[0]}|{heads[1]}){TITLE_SUFFIX}"
     target["aliases"] = sorted({*target.get("aliases", []), source["name"], *source.get("aliases", [])})
-    tables.save_employers(employers)
+    tables.replace_employers(employers)
     print(f"Merged {args[0]} into {args[1]}. Run `process-resumes --force` to rebuild.")
 
 
@@ -262,7 +262,7 @@ def _add_open_item(items: list[OpenItem], text: str | None) -> None:
     if not text:
         raise ToolError("open add needs the text of the item")
     items.append({"id": max([item["id"] for item in items] + [0]) + 1, "text": text, "status": "open"})
-    tables.save_open_items(items)
+    tables.replace_open_items(items)
 
 
 def _finish_open_item(items: list[OpenItem], item_id: str | None) -> None:
@@ -270,7 +270,7 @@ def _finish_open_item(items: list[OpenItem], item_id: str | None) -> None:
     if not match:
         raise ToolError(f"No open item {item_id}")
     match[0]["status"] = "done"
-    tables.save_open_items(items)
+    tables.replace_open_items(items)
 
 
 def cmd_open(args: argparse.Namespace) -> None:

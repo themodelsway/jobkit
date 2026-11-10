@@ -20,11 +20,15 @@ Only log entries with a non-empty answer SHALL count, and tutor-lesson entries S
 - **THEN** it is ignored
 
 ### Requirement: Aging
-A solid answer last drilled more than `--days` ago (default 30) SHALL be labelled aging. An item whose solid answers are all older than `--days` SHALL also be aging, whatever later lessons logged.
+A solid answer last drilled more than `--days` ago SHALL be labelled aging; when `--days` is not given the window SHALL be the stored retest window (30 when none is stored). An item whose solid answers are all older than the window SHALL also be aging, whatever later lessons logged.
 
 #### Scenario: Old solid answer
 - **WHEN** the last solid answer is 45 days old
 - **THEN** the label is aging
+
+#### Scenario: Stored window
+- **WHEN** the stored retest window is 60 and the last solid answer is 45 days old
+- **THEN** the label is not aging, and `--days 30` makes it aging for that run
 
 ### Requirement: Story and leadership status
 Stories SHALL be labelled empty, draft, done, done-rehearsed (done, with an answer logged within `--days`) or done-aging (done, but every logged answer is older). The label says attempted, not graded. Leadership questions SHALL show how many examples with content are filled against the target (up to three employers).
@@ -50,3 +54,14 @@ The report SHALL NOT change any stored data.
 #### Scenario: Run twice
 - **WHEN** the report is run
 - **THEN** the database is unchanged, including its modification time
+
+### Requirement: List answers due for a retest
+`readiness --due` SHALL list, instead of the report, the items labelled aging or done-aging, each with its id, name, the date of its last good answer and its age in days. It SHALL be read-only, use the same window rules as the report, and print "none due" when the list is empty.
+
+#### Scenario: Two items due
+- **WHEN** two items have good answers older than the window and one has a recent one
+- **THEN** only the two older items are listed with their ages
+
+#### Scenario: Nothing due
+- **WHEN** no item is aging
+- **THEN** the output says none are due and the exit status is 0

@@ -40,3 +40,18 @@ The user SHALL be able to pin their own tier-1 AWS services with `tier1`, and ru
 #### Scenario: Show list
 - **WHEN** `tier1` is run with no arguments
 - **THEN** the current list is printed
+
+### Requirement: Retest window
+The profile SHALL hold a retest window, `reassess_days`, as a whole number of days from 1 to 365. `profile set reassess_days N` SHALL store it and reject any other value without changing the stored one. When none is stored the window SHALL be 30, and `profile status` SHALL show which applies.
+
+#### Scenario: Set the window
+- **WHEN** `profile set reassess_days 45` is run
+- **THEN** the stored window is 45 and `profile status` shows 45
+
+#### Scenario: Invalid value
+- **WHEN** `profile set reassess_days 0` or `profile set reassess_days soon` is run
+- **THEN** the command fails and the stored window is unchanged
+
+#### Scenario: Nothing stored
+- **WHEN** no window has been set
+- **THEN** the window is 30 and `profile status` says it is the default

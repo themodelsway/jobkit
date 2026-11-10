@@ -7,10 +7,9 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-
-from jobkit.interview import tables
-from tests.support import HomeCase, drop_catalog
-from jobkit.interview import arch
+from jobkit.interview import arch, tables
+from tests.interview.test_sessions import SessionCase
+from tests.support import drop_catalog, HomeCase
 
 COMPANIES = {"acme": {"id": "acme", "name": "Acme", "bullets": [
     {"id": "acme-1", "text": "Built APIs on Lambda and API Gateway.", "ignored": False},
@@ -68,7 +67,7 @@ class InitTests(ArchTestCase):
         self.cli("init")
         cat = tables.load_catalog()
         cat["cards"].append(arch.new_card("service", "my-card", "My Card", "Mine", 2))
-        tables.save_catalog(cat)
+        tables.replace_catalog(cat)
         self.cli("set", "vpc", "confidence", "2")
         _, out, _ = self.cli("init")
         self.assertIn("(0 new)", out)
@@ -245,12 +244,39 @@ class TrackTests(ArchTestCase):
         cat = tables.load_catalog()
         for card in cat["cards"]:
             card.pop("track", None)
-        tables.save_catalog(cat)
+        tables.replace_catalog(cat)
         self.assertEqual(self.cli("refresh", "vpc", "--status", "active", "--source", GOOD_SOURCE)[0], 0)
         self.assertEqual(self.cli("list", "--track", "aws")[0], 0)
         cat.pop("tracks", None)
-        tables.save_catalog(cat)
+        tables.replace_catalog(cat)
         self.assertRegex(self.cli("tracks")[1], r"aws\s+enabled")
+
+
+class ArchOptionTests(SessionCase):
+    def test_next_and_list_filters(self):
+        cards = tables.load_catalog()["cards"]
+        tier = cards[0]["tier"]
+        out = self.cli(arch.main, "list", "--tier", str(tier))[1]
+        self.assertIn(cards[0]["id"], out)
+        for kind in ("service", "pair", "scenario"):
+            code, out, _ = self.cli(arch.main, "next", "--kind", kind, "--order", "random")
+            self.assertEqual(code, 0)
+            self.assertTrue(out.strip())
+        self.assertEqual(self.cli(arch.main, "next", "--track", "aws", "--tier", str(tier))[0], 0)
+
+    def test_unknown_track_filter_finds_nothing(self):
+        _, out, _ = self.cli(arch.main, "list", "--track", "nosuch")
+        self.assertNotIn("vpc", out)
+
+    def test_stale_months(self):
+        self.assertEqual(self.cli(arch.main, "stale", "--months", "1")[0], 0)
+
+    def test_refresh_note(self):
+        url = "https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html"
+        code, _, err = self.cli(arch.main, "refresh", "vpc", "--status", "active", "--source", url, "--note", "checked")
+        self.assertEqual(code, 0, err)
+        card = next(c for c in tables.load_catalog()["cards"] if c["id"] == "vpc")
+        self.assertEqual(card["lifecycle"]["note"], "checked")
 
 
 if __name__ == "__main__":

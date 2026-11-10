@@ -216,16 +216,16 @@ def cmd_init(args: argparse.Namespace) -> None:
         out.append({"id": seed.id, "category": seed.category, "question": seed.question,
                     "themes": [t for t in seed.themes if mine is None or t in mine]})
     out += list(old.values())
-    tables.save_questions(out)
+    tables.replace_questions(out)
     progress = prog()
     for question in out:
         progress["questions"].setdefault(question["id"], blank())
-    tables.save_lead_progress(progress["questions"])
+    tables.replace_lead_progress(progress["questions"])
     profile = {"companies": tables.load_company_facts()}
     ids = top_company_ids()
     for cid in ids:
         profile["companies"].setdefault(cid, blank_profile())
-    tables.save_company_facts(profile["companies"])
+    tables.replace_company_facts(profile["companies"])
     print(f"{len(out)} questions ({added} new); profile for {', '.join(ids)}")
 
 
@@ -355,7 +355,7 @@ def cmd_set(args: argparse.Namespace) -> None:
         entry["confidence"], entry["last_drilled"] = int(args.value), date.today().isoformat()
     else:
         entry[args.field] = args.value
-    tables.save_lead_progress(progress["questions"])
+    tables.set_lead_progress(args.id, entry)
     print(f"Updated {args.id}.{args.field}")
 
 
@@ -370,7 +370,7 @@ def cmd_example(args: argparse.Namespace) -> None:
     fields = entry["examples"].setdefault(args.company, {})
     fields[args.field] = args.value
     fields.pop("skipped", None)                      # a real example replaces a not-applicable mark
-    tables.save_lead_progress(progress["questions"])
+    tables.set_lead_progress(args.id, entry)
     print(f"Updated {args.id} example for {args.company}.{args.field}")
 
 
@@ -387,7 +387,7 @@ def cmd_skip(args: argparse.Namespace) -> None:
         raise ToolError(f"{args.id} already has an example for {args.company}; it is not 'not applicable'.")
     else:
         fields["skipped"] = (args.reason or "").strip() or "not applicable"
-    tables.save_lead_progress(progress["questions"])
+    tables.set_lead_progress(args.id, entry)
     print(f"{'Cleared' if args.cmd == 'unskip' else 'Marked not applicable:'} {args.id} for {args.company}.")
 
 
@@ -401,7 +401,7 @@ def cmd_profile(args: argparse.Namespace) -> None:
     require_company(args.company)
     facts = tables.load_company_facts()
     facts.setdefault(args.company, blank_profile())[args.field] = args.value
-    tables.save_company_facts(facts)
+    tables.replace_company_facts(facts)
     print(f"Updated profile {args.company}.{args.field}")
 
 

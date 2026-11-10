@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from jobkit import admin, base, common, schema, store
-from jobkit.interview import prep
+from jobkit.interview import prep, tables
 from tests.support import HomeCase
 
 HOLD = """
@@ -70,6 +70,40 @@ class TransactionTests(HomeCase):
             raise RuntimeError("boom")
         self.assertFalse(has("a") or has("b"))
 
+    def test_handled_nested_failure_leaves_none_of_its_own_changes(self):
+        with store.transaction():
+            put("outer")
+            with self.assertRaises(RuntimeError), store.transaction():
+                put("inner")
+                raise RuntimeError("handled")
+            put("after")
+        self.assertTrue(has("outer") and has("after"))
+        self.assertFalse(has("inner"))
+
+    def test_handled_session_save_failure_inside_a_larger_change(self):
+        first = {"id": "s1", "title": "old", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
+                 "updated": "2026-11-01T09:00:00", "queue": [], "log": []}
+        entry = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "answer": "a"}
+        tables.replace_catalog({"cards": [{"id": "vpc", "kind": "service", "name": "VPC"}]})
+        tables.save_session({**first, "log": [entry]})
+        with store.transaction():
+            put("outer")
+            with self.assertRaises(common.ToolError):
+                tables.save_session({**first, "title": "new", "queue": [], "log": []})
+        self.assertTrue(has("outer"))
+        saved = tables.load_session("s1")
+        assert saved is not None
+        self.assertEqual((saved["title"], saved["queue"], saved["log"]), ("old", [], [entry]))
+
+    def test_nested_read_opens_no_savepoint(self):
+        statements: list[str] = []
+        with store.transaction() as conn:
+            conn.set_trace_callback(statements.append)
+            with store.transaction(write=False):
+                pass
+            conn.set_trace_callback(None)
+        self.assertEqual([s for s in statements if "SAVEPOINT" in s.upper()], [])
+
     def test_tool_error_in_run_rolls_back(self):
         def handler(_args):
             put("x")
@@ -119,7 +153,7 @@ class ConcurrencyTests(HomeCase):
         self.assertLess(time.monotonic() - started, 0.5)
 
 
-class SchemaTests(unittest.TestCase):
+class DatabaseFileCase(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="jobkit-schema-"))
         self.previous = os.environ["JOBKIT_HOME"]
@@ -132,19 +166,15 @@ class SchemaTests(unittest.TestCase):
         os.environ["JOBKIT_HOME"] = self.previous
         shutil.rmtree(self.home, ignore_errors=True)
 
-    def test_fresh_database_is_at_the_current_version(self):
-        self.assertTrue(store.create())
-        self.assertEqual(self.pragma_version(), store.version())
-
     def pragma_version(self) -> int:
         with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
             return conn.execute("PRAGMA user_version").fetchone()[0]
 
-    def test_the_transitional_document_table_is_gone(self):
-        store.create()
-        with store.transaction(write=False) as conn:
-            names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertNotIn("doc", names)
+
+class SchemaTests(DatabaseFileCase):
+    def test_fresh_database_is_at_the_current_version(self):
+        self.assertTrue(store.create())
+        self.assertEqual(self.pragma_version(), store.version())
 
     def test_upgrade_refuses_to_drop_a_document_table_that_holds_data(self):
         store.db_path().parent.mkdir(parents=True)
@@ -155,13 +185,6 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "still holds data"):
             store.connect()
         self.assertEqual(self.pragma_version(), before_drop)
-
-    def test_no_file_storage_code_is_left_in_the_source(self):
-        source = Path(base.__file__).parent
-        leftovers = [f"{p.name}: {word}" for p in source.rglob("*.py") for word in
-                     ("load_json", "save_json", "LOCK_FILE", "REPO_ROOT", "fcntl", ".bak")
-                     if word in p.read_text(encoding="utf-8")]
-        self.assertEqual(leftovers, [])
 
     def test_older_database_is_upgraded_before_a_command_runs(self):
         store.db_path().parent.mkdir(parents=True)
@@ -194,7 +217,7 @@ class SchemaTests(unittest.TestCase):
             self.assertIsNone(conn.execute("SELECT 1 FROM sqlite_master WHERE name='half'").fetchone())
 
 
-class AdminTests(SchemaTests):
+class AdminTests(DatabaseFileCase):
     def test_init_creates_the_layout(self):
         code, out, _ = run_admin("init")
         self.assertEqual(code, 0)

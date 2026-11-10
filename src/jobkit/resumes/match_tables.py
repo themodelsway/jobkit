@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from typing import Any, Final
 
 from jobkit import common, store
-from jobkit.interview.tables import dump
 
 RETENTION_DAYS: Final[int] = 90
 Record = dict[str, Any]
@@ -21,13 +20,9 @@ def save_result(key: str, body: Record) -> None:
     """Store a result under its key (a result stored before keeps its created date)."""
     stamp = common.now()
     with store.transaction() as conn:
-        conn.execute(
-            "INSERT INTO match_result(key, created, last_used, label, band, lower, upper, body) "
-            "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET last_used=excluded.last_used, "
-            "label=excluded.label, band=excluded.band, lower=excluded.lower, upper=excluded.upper, "
-            "body=excluded.body",
-            (key, stamp, stamp, body.get("label", ""), body["band"], body["score"]["lower"],
-             body["score"]["upper"], dump(body)))
+        conn.execute("INSERT INTO match_result(key, created, last_used, body) VALUES(?,?,?,?) "
+                     "ON CONFLICT(key) DO UPDATE SET last_used=excluded.last_used, body=excluded.body",
+                     (key, stamp, stamp, store.dump(body)))
 
 
 def get_result(key: str, touch: bool = False) -> Record | None:
@@ -52,8 +47,10 @@ def get_latest(base: str, touch: bool = False) -> Record | None:
 def list_results() -> list[Record]:
     """Stored results, newest first: key, created, last used, label, band and the two scores."""
     with store.transaction(write=False) as conn:
-        rows = conn.execute("SELECT key, created, last_used, label, band, lower, upper FROM match_result "
-                            "ORDER BY created DESC, key").fetchall()
+        rows = conn.execute(
+            "SELECT key, created, last_used, COALESCE(json_extract(body, '$.label'), '') AS label, "
+            "json_extract(body, '$.band') AS band, json_extract(body, '$.score.lower') AS lower, "
+            "json_extract(body, '$.score.upper') AS upper FROM match_result ORDER BY created DESC, key").fetchall()
     return [dict(row) for row in rows]
 
 
@@ -77,8 +74,5 @@ def save_results(data: dict[str, Record]) -> None:
     with store.transaction() as conn:
         conn.execute("DELETE FROM match_result")
         for key, entry in data.items():
-            body = entry["body"]
-            conn.execute("INSERT INTO match_result(key, created, last_used, label, band, lower, upper, body) "
-                         "VALUES(?,?,?,?,?,?,?,?)",
-                         (key, entry["created"], entry["last_used"], body.get("label", ""), body["band"],
-                          body["score"]["lower"], body["score"]["upper"], dump(body)))
+            conn.execute("INSERT INTO match_result(key, created, last_used, body) VALUES(?,?,?,?)",
+                         (key, entry["created"], entry["last_used"], store.dump(entry["body"])))

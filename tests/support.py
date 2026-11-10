@@ -88,7 +88,7 @@ def real_personal_terms() -> set[str]:
     try:
         for row in conn.execute("SELECT key, value FROM setting WHERE key IN ('name', 'resume_root')"):
             terms.add(str(json.loads(row["value"])).strip())
-        terms |= {row["name"] for row in conn.execute("SELECT name FROM employer")}
+        terms |= {row[0] for row in conn.execute("SELECT json_extract(body, '$.name') FROM employer") if row[0]}
     except sqlite3.Error:
         pass
     finally:

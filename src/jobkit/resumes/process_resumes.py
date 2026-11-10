@@ -506,15 +506,15 @@ def write_data(data: ResumeData, ledger: dict[str, Any], unparsed: dict[str, Any
     for company in data["companies"].values():
         company["roles"].sort(key=lambda r: r["start"] or "", reverse=True)
         company["bullets"].sort(key=lambda b: (b.get("role_start") or "", b["id"]), reverse=True)
-    tables.save_companies(data["companies"])      # a company whose every resume is gone is removed
+    tables.replace_companies(data["companies"])      # a company whose every resume is gone is removed
     for entries in data["skills"]["groups"].values():
         entries.sort(key=lambda x: x["name"].lower())
     skills = {"groups": dict(sorted(data["skills"]["groups"].items())), "tag_only": data["skills"].get("tag_only", [])}
-    tables.save_skills(skills)
-    tables.save_profile(cast(Mapping[str, Sequence[Any]], data["profile"]))
+    tables.replace_skills(skills)
+    tables.replace_profile(cast(Mapping[str, Sequence[Any]], data["profile"]))
     tables.save_index(build_index(data, ledger))
-    tables.save_ledger(ledger)
-    tables.save_unparsed(unparsed)
+    tables.replace_ledger(ledger)
+    tables.replace_unparsed(unparsed)
 
 
 # ---------------------------------------------------------------- build

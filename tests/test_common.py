@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-
 from jobkit import common
+from jobkit.common import ToolError
 
 
 class HomeTests(unittest.TestCase):
@@ -65,6 +65,17 @@ class RunTests(unittest.TestCase):
             raise KeyError("x")
         with self.assertRaises(KeyError):
             common.run(self.ns(boom))
+
+
+class InputErrorTests(unittest.TestCase):
+    def test_unreadable_inputs_become_tool_errors(self):
+        with mock.patch("pathlib.Path.read_text", side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, "x")):
+            with self.assertRaisesRegex(ToolError, "not a UTF-8"):
+                common.read_text_arg("x.txt")
+        with self.assertRaisesRegex(ToolError, "cannot read"):
+            common.read_text_arg("/no/such/jd.txt")
+        with self.assertRaisesRegex(ToolError, "cannot read"):
+            common.read_text_arg("/")
 
 
 if __name__ == "__main__":

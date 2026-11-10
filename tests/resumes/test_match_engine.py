@@ -5,7 +5,7 @@ import unittest
 from decimal import Decimal
 from unittest import mock
 
-from jobkit.resumes import match_engine as me
+from jobkit.resumes import match_engine as me, match_report as mrep
 
 D = Decimal
 EXEC = me.BANDS["executive"]
@@ -209,6 +209,53 @@ class PropertyTests(unittest.TestCase):
         broken = dict(me.CREDITS, partial=D("-0.40"))
         with mock.patch.object(me, "CREDITS", broken):
             self.assertFalse(all(monotonic(seed) for seed in range(300)))
+
+
+def requirement(rid: str, category: str, level: str, priority: str = "required") -> me.Requirement:
+    return me.Requirement(rid, me.Reading(category, priority, level), D(1), None)
+
+
+class MustHaveTests(unittest.TestCase):
+    """L6: a critical requirement is never dropped by a zero category weight."""
+
+    SENIOR = me.BANDS["senior-executive"]       # core skills have weight 0 in this band
+
+    def test_missing_critical_skill_lowers_the_score_and_is_listed(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "profile_miss", "critical")]
+        result = me.score(reqs, self.SENIOR)
+        self.assertLess(result.lower, D(100))
+        self.assertNotIn("core", result.not_counted)
+        self.assertEqual(result.unmet_critical, ["core"])
+        self.assertEqual(result.to_dict()["unmet_critical"], ["core"])
+
+    def test_met_critical_requirement_is_counted_but_not_listed_as_unmet(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "full", "critical")]
+        result = me.score(reqs, self.SENIOR)
+        self.assertEqual(me.round1(result.lower), D("100.0"))
+        self.assertEqual(result.unmet_critical, [])
+
+    def test_required_zero_weight_requirement_is_still_noted_not_counted(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "profile_miss")]
+        result = me.score(reqs, self.SENIOR)
+        self.assertEqual(me.round1(result.lower), D("100.0"))
+        self.assertEqual(result.not_counted, ["core"])
+
+    def test_unknown_critical_requirement_is_listed_as_unmet(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "unknown", "critical")]
+        self.assertEqual(me.score(reqs, self.SENIOR).unmet_critical, ["core"])
+
+    def test_report_names_the_unmet_must_have_next_to_the_score(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "profile_miss", "critical")]
+        result = me.score(reqs, self.SENIOR)
+        items = [{"id": "strategy", "label": "Strategy"}, {"id": "core", "label": "Core skill"}]
+        body = mrep.build_body(items, result, {"band": "senior-executive", "band_reason": "vp"})
+        text = "\n".join(mrep._score_block(body))        # pylint: disable=protected-access
+        self.assertIn("Must-haves the profile does not show: Core skill", text)
+        self.assertLess(text.index("Must-haves"), text.index("The lower number"))
+
+    def test_swing_uses_the_same_adjusted_weights(self):
+        reqs = [requirement("strategy", "strategy", "full"), requirement("core", "core_skills", "profile_miss", "critical")]
+        self.assertEqual(me.swing(reqs, self.SENIOR, "core"), D(0))     # no alternative reading: nothing moves
 
 
 if __name__ == "__main__":

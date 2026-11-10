@@ -6,7 +6,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from jobkit import store
-from jobkit.interview.tables import dump
 
 Record = dict[str, Any]
 
@@ -23,11 +22,11 @@ def has_settings() -> bool:
         return conn.execute("SELECT 1 FROM setting LIMIT 1").fetchone() is not None
 
 
-def save_settings(settings: Mapping[str, Any]) -> None:
+def replace_settings(settings: Mapping[str, Any]) -> None:
     """Replace the settings."""
     with store.transaction() as conn:
         conn.execute("DELETE FROM setting")
-        conn.executemany("INSERT INTO setting(key, value) VALUES(?,?)", [(k, dump(v)) for k, v in settings.items()])
+        conn.executemany("INSERT INTO setting(key, value) VALUES(?,?)", [(k, store.dump(v)) for k, v in settings.items()])
 
 
 def has_employers() -> bool:
@@ -42,23 +41,26 @@ def load_employers() -> dict[str, Record]:
         return {r["id"]: json.loads(r["body"]) for r in conn.execute("SELECT id, body FROM employer ORDER BY position")}
 
 
-def save_employers(employers: Mapping[str, Mapping[str, Any]]) -> None:
+def replace_employers(employers: Mapping[str, Mapping[str, Any]]) -> None:
     """Replace the employers."""
     with store.transaction() as conn:
         conn.execute("DELETE FROM employer")
-        conn.executemany("INSERT INTO employer(id, position, name, body) VALUES(?,?,?,?)",
-                         [(i, p, e["name"], dump(e)) for p, (i, e) in enumerate(employers.items())])
+        conn.executemany("INSERT INTO employer(id, position, body) VALUES(?,?,?)",
+                         [(i, p, store.dump(e)) for p, (i, e) in enumerate(employers.items())])
 
 
 def load_open_items() -> list[Record]:
     """Open items and data notes, in id order."""
     with store.transaction(write=False) as conn:
-        return [json.loads(r[0]) for r in conn.execute("SELECT body FROM open_item ORDER BY id")]
+        return store.records(conn, "SELECT id, body FROM open_item ORDER BY id", (), ("id",))
 
 
-def save_open_items(items: Sequence[Mapping[str, Any]]) -> None:
+def replace_open_items(items: Sequence[Mapping[str, Any]]) -> None:
     """Replace the open items."""
     with store.transaction() as conn:
         conn.execute("DELETE FROM open_item")
-        conn.executemany("INSERT INTO open_item(id, status, body) VALUES(?,?,?)",
-                         [(i["id"], i.get("status", "open"), dump(i)) for i in items])
+        rows = []
+        for item in items:
+            (item_id,), body = store.split(item, ("id",))
+            rows.append((item_id, body))
+        conn.executemany("INSERT INTO open_item(id, body) VALUES(?,?)", rows)

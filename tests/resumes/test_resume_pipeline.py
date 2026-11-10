@@ -6,14 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-
-from jobkit.resumes import build_resume as br
-from jobkit.resumes import parse_resume as pr
-from jobkit.resumes import process_resumes as proc
-from jobkit.resumes import query_resume as qr
-from jobkit.resumes import resume_data as rd
-from jobkit.resumes import tables
-from tests.support import HomeClassCase
+from jobkit.resumes import build_resume as br, parse_resume as pr, process_resumes as proc, query_resume as qr, resume_data as rd, tables
+from tests.support import HomeCase, HomeClassCase
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures"
 REGISTRY = {
@@ -166,6 +160,49 @@ class BuildTests(PipelineCase):
         self.assertTrue(header.exists())
         self.assertIn("Created header.md template", text)
         self.assertIn("Opening summary:", text)
+
+
+class ProcessResumesTests(HomeCase):
+    def setUp(self):
+        super().setUp()
+        self.tmp = self.home
+        self.root = self.tmp / "resumes"
+        self.root.mkdir()
+        (self.root / "a.txt").write_text((FIX / "layout_b.txt").read_text(encoding="utf-8"))
+        saved = dict(pr.COMPANIES)
+        self.addCleanup(pr.set_companies, saved)
+        pr.set_companies(REGISTRY)
+        patcher = mock.patch.object(proc, "TEXT_DIR", self.tmp / "text")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for patcher in (mock.patch.object(proc, "load_config", return_value=proc.Config(self.root, [self.root])),
+                        mock.patch.object(proc, "scan_companies")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_cli(self, *argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = proc.main(list(argv))
+        return code, out.getvalue()
+
+    def test_survey_writes_nothing(self):
+        code, out = self.run_cli("--survey")
+        self.assertEqual(code, 0)
+        self.assertIn("a.txt", out)
+        self.assertFalse(tables.has_resume_data())
+        self.assertEqual(tables.load_companies(), {})
+
+    def test_build_is_incremental_and_force_rebuilds(self):
+        self.assertIn("1 new/changed", self.run_cli()[1])
+        self.assertIn("0 new/changed, 1 unchanged", self.run_cli()[1])
+        self.assertIn("1 new/changed, 0 unchanged", self.run_cli("--force")[1])
+        self.assertEqual(list(tables.load_ledger()), ["a.txt"])
+
+    def test_no_resumes_is_a_clear_error(self):
+        (self.root / "a.txt").unlink()
+        code, _ = self.run_cli()
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

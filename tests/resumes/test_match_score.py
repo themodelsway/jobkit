@@ -4,15 +4,11 @@ import copy
 import io
 import json
 import unittest
+from datetime import date
 from unittest import mock
 
 from jobkit import records, store
-from jobkit.resumes import match_bands as mb
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_facts as mf
-from jobkit.resumes import match_score as ms
-from jobkit.resumes import match_tables
-from jobkit.resumes import tables
+from jobkit.resumes import match_bands as mb, match_engine as me, match_facts as mf, match_score as ms, match_tables, tables
 from tests.resumes.match_fixtures import facts, request
 from tests.support import HomeCase
 
@@ -34,9 +30,9 @@ def seed(company_edit=None):
     companies = copy.deepcopy(dict(data.companies))
     if company_edit:
         company_edit(companies)
-    tables.save_companies(companies)
-    tables.save_skills(dict(data.skills))
-    tables.save_profile({"summaries": [], "education": list(data.education),
+    tables.replace_companies(companies)
+    tables.replace_skills(dict(data.skills))
+    tables.replace_profile({"summaries": [], "education": list(data.education),
                          "certifications": list(data.certifications), "profile_points": [], "projects": []})
 
 
@@ -254,6 +250,60 @@ class ExportTests(MatchCase):
         code, _, err = self.cli("run", self.requests, "--jd", self.posting)
         self.assertEqual(code, 1)
         self.assertIn("process-resumes", err)
+
+
+def fingerprint_after(change) -> str:
+    fixture = facts()
+    change(fixture.companies["acme"]["bullets"][0])
+    return mf.resume_fingerprint(fixture)
+
+
+class CacheKeyTests(MatchCase):
+    """L8: every scoring input is in the cache key, and an earlier result is kept."""
+
+    def test_each_evidence_input_changes_the_resume_fingerprint(self):
+        base = mf.resume_fingerprint(facts())
+        changes = {"needs_review": lambda b: b.update(needs_review=True), "ignored": lambda b: b.update(ignored=True),
+                   "skill tag": lambda b: b["skills"].append("Python"),
+                   "manual tag": lambda b: b.update(skills_manual=["Python"])}
+        seen = {base}
+        for name, change in changes.items():
+            with self.subTest(name):
+                value = fingerprint_after(change)
+                self.assertNotIn(value, seen)
+                seen.add(value)
+        self.assertEqual(fingerprint_after(lambda b: None), base)
+
+    def test_tag_order_does_not_change_the_fingerprint(self):
+        one = fingerprint_after(lambda b: b.update(skills=["AWS", "Python"]))
+        two = fingerprint_after(lambda b: b.update(skills=["Python", "AWS"]))
+        self.assertEqual(one, two)
+
+    def test_a_flagged_line_means_the_old_result_is_not_returned(self):
+        first = self.run_json()["key"]
+        seed(lambda c: c["acme"]["bullets"][0].update(needs_review=True))
+        self.assertFalse(json.loads(self.cli("extract", "--jd", self.posting)[1])["cached"])
+        self.assertNotEqual(self.run_json()["key"], first)
+
+    def test_a_later_day_means_the_old_result_is_not_returned(self):
+        with mock.patch.object(ms, "today", return_value=date(2026, 1, 1)):
+            self.run_json()
+            self.assertTrue(json.loads(self.cli("extract", "--jd", self.posting)[1])["cached"])
+        with mock.patch.object(ms, "today", return_value=date(2026, 2, 1)):
+            self.assertFalse(json.loads(self.cli("extract", "--jd", self.posting)[1])["cached"])
+
+    def test_another_band_keeps_the_earlier_result_as_history(self):
+        first = self.run_json()
+        second = self.run_json("--band", "executive")
+        self.assertNotEqual(first["key"], second["key"])
+        rows = match_tables.list_results()
+        self.assertEqual({r["band"] for r in rows}, {"mid-manager", "executive"})
+        self.assertEqual(json.loads(self.cli("extract", "--jd", self.posting)[1])["report"].count("Level of the role"), 1)
+
+    def test_same_inputs_the_same_day_reuse_one_row(self):
+        with mock.patch.object(ms, "today", return_value=date(2026, 1, 1)):
+            self.assertEqual(self.run_json()["key"], self.run_json()["key"])
+        self.assertEqual(len(match_tables.list_results()), 1)
 
 
 if __name__ == "__main__":

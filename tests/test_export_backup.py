@@ -4,8 +4,10 @@ import io
 import json
 import sqlite3
 import unittest
+from pathlib import Path
 
 from jobkit import admin, records, store
+from jobkit.common import ToolError
 from tests.seed_data import seed
 from tests.support import HomeCase
 
@@ -104,6 +106,35 @@ class BackupTests(SeededCase):
         self.assertEqual(jobkit("backup", "--restore", str(other))[0], 1)
         self.assertEqual(jobkit("backup", "--restore", str(self.home / "missing.db"))[0], 1)
 
+    def damaged_backup(self, sql: str) -> Path:
+        """A backup of the seeded database with `sql` run on it (foreign keys off, as in any plain connection)."""
+        target = self.home / "damaged.db"
+        jobkit("backup", "-o", str(target))
+        with contextlib.closing(sqlite3.connect(target, isolation_level=None)) as conn:
+            conn.executescript(sql)
+        return target
+
+    def refused(self, target: Path) -> str:
+        """Restore `target`, expect a refusal that leaves the database as it was; return the message."""
+        code, _, err = jobkit("backup", "--restore", str(target))
+        self.assertEqual(code, 1)
+        self.assertEqual(records.counts()["stories"], 1)
+        self.assertEqual(list((self.home / "backup").glob("jobkit-before-restore-*.db")), [])
+        return err
+
+    def test_restore_refuses_an_unreadable_record_and_names_only_the_table(self):
+        err = self.refused(self.damaged_backup("UPDATE story SET body='{secret-token'"))
+        self.assertIn("story", err)
+        self.assertNotIn("secret-token", err)
+
+    def test_restore_refuses_a_broken_reference(self):
+        err = self.refused(self.damaged_backup("UPDATE story SET engagement_id='ghost'"))
+        self.assertIn("story", err)
+
+    def test_restore_refuses_a_backup_without_the_answer_protection(self):
+        err = self.refused(self.damaged_backup("DROP TRIGGER session_log_no_update"))
+        self.assertIn("trigger", err)
+
     def test_restore_refuses_a_newer_version(self):
         target = self.home / "future.db"
         jobkit("backup", "-o", str(target))
@@ -119,6 +150,26 @@ class StatusTests(SeededCase):
         out = jobkit("status")[1]
         self.assertIn("stories: 1", out)
         self.assertIn("sessions: 1", out)
+
+
+class RestoreCheckTests(HomeCase):
+    def test_look_alike_database_is_refused_and_current_data_kept(self):
+        fake = self.home / "fake.db"
+        with contextlib.closing(sqlite3.connect(fake)) as conn:
+            conn.execute("CREATE TABLE meta (unrelated TEXT)")
+            conn.execute(f"PRAGMA user_version={store.version()}")
+            conn.commit()
+        before = (self.home / "data" / "jobkit.db").read_bytes()
+        with self.assertRaises(ToolError):
+            store.restore_from(fake)
+        store.close()
+        self.assertEqual(store.stored_version(sqlite3.connect(self.home / "data" / "jobkit.db")), store.version())
+        self.assertEqual(len(list((self.home / "backup").glob("*before-restore*"))), 0)
+        self.assertTrue(before)
+
+    def test_real_backup_is_accepted(self):
+        copy = store.backup_to(self.home / "backup" / "ok.db")
+        store.check_backup_file(copy)
 
 
 if __name__ == "__main__":

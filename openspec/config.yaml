@@ -30,3 +30,10 @@ schema: spec-driven
 #     archive:
 #       guidance:
 #         - Summarize the archive outcome before finishing
+
+rules:
+  specs:
+    - A requirement is one or two SHALL sentences, under 500 characters, stating one observable behavior.
+    - Lists of checks, fields, steps or examples go in scenarios, never in the requirement text.
+    - No function, class or table names; implementation detail belongs in design.md or docs/.
+    - Split a capability into two when it no longer covers one coherent topic.

@@ -9,12 +9,13 @@ Import it as `from jobkit import store`; it does no work at import time.
 from __future__ import annotations
 
 import contextlib
+import json
 import shutil
 import sqlite3
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from jobkit import base, schema
 from jobkit.base import ToolError
@@ -147,7 +148,8 @@ def transaction(*, write: bool = True) -> Iterator[sqlite3.Connection]:
     if _STATE.depth:
         _STATE.depth += 1
         try:
-            yield conn
+            with _savepoint(conn, write):
+                yield conn
         finally:
             _STATE.depth -= 1
         return
@@ -172,10 +174,80 @@ def transaction(*, write: bool = True) -> Iterator[sqlite3.Connection]:
         _STATE.depth = 0
 
 
+@contextlib.contextmanager
+def _savepoint(conn: sqlite3.Connection, write: bool) -> Iterator[None]:
+    """A nested write: its changes are undone when it raises, so a caller that handles the error carries on clean.
+
+    A nested read opens nothing. The outer transaction still decides whether anything is committed.
+    """
+    if not write:
+        yield
+        return
+    name = f"nested_{_STATE.depth}"
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {name}")
+        conn.execute(f"RELEASE {name}")
+        raise
+    conn.execute(f"RELEASE {name}")
+
+
 def _rollback(conn: sqlite3.Connection) -> None:
     """Roll back the open transaction if there still is one."""
     if conn.in_transaction:
         conn.execute("ROLLBACK")
+
+
+# ---------------------------------------------------------------- shared record helpers
+
+def dump(value: Any) -> str:
+    """Compact, readable JSON for a body column (NaN and infinity are refused: they are not valid JSON)."""
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
+
+
+def bodies(conn: sqlite3.Connection, sql: str, params: Sequence[Any] = ()) -> list[Any]:
+    """The decoded first column (a `body`) of every row the query returns."""
+    return [json.loads(row[0]) for row in conn.execute(sql, params)]
+
+
+def meta_get(conn: sqlite3.Connection, key: str, default: Any) -> Any:
+    """A value from the meta table, or `default`."""
+    row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return default if row is None else json.loads(row[0])
+
+
+def meta_put(conn: sqlite3.Connection, key: str, value: Any) -> None:
+    """Store a value in the meta table."""
+    conn.execute("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                 (key, dump(value)))
+
+
+def split(record: Mapping[str, Any], owned: Sequence[str]) -> tuple[tuple[Any, ...], str]:
+    """The values of the `owned` fields (None when the record has none), and everything else as JSON text.
+
+    Each record family names the fields that are real columns; the rest of the record lives in `body` only.
+    """
+    return (tuple(record.get(name) for name in owned),
+            dump({k: v for k, v in record.items() if k not in owned}))
+
+
+def merge(fields: Mapping[str, Any], body: str) -> dict[str, Any]:
+    """A record from its column fields and its `body` text (the inverse of `split`)."""
+    return {**fields, **json.loads(body)}
+
+
+def records(conn: sqlite3.Connection, sql: str, params: Sequence[Any] = (), owned: Sequence[str] = ()) -> list[Any]:
+    """Whole records: each row of the query holds the `owned` column values in order, then `body` last."""
+    return [merge(dict(zip(owned, row[:-1], strict=True)), row[-1]) for row in conn.execute(sql, params)]
+
+
+def keep_only(conn: sqlite3.Connection, table: str, key: str, keep: Iterable[str]) -> None:
+    """Delete the rows of `table` whose `key` is not in `keep` (rows that were written are upserts)."""
+    keep = list(keep)
+    marks = ",".join("?" for _ in keep)
+    conn.execute(f"DELETE FROM {table} WHERE {key} NOT IN ({marks})" if keep else f"DELETE FROM {table}", keep)
 
 
 # ---------------------------------------------------------------- backup and restore
@@ -228,6 +300,33 @@ def check_backup_file(file: Path) -> None:
             raise ToolError(f"{file} is not a jobkit database ({exc}).") from exc
 
 
+NOT_RECORDS: Final[frozenset[str]] = frozenset({"resume_item", "curation", "unparsed", "setting", "meta"})
+"""Tables whose JSON is not one object per row, so only `json_valid` applies to them."""
+
+
+def _triggers(conn: sqlite3.Connection) -> set[str]:
+    """Names of every trigger of the database."""
+    return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+
+
+def _check_records(file: Path, conn: sqlite3.Connection, have: dict[str, set[str]]) -> None:
+    """Fail on a broken reference or a stored record that is not readable JSON; messages name the table only.
+
+    Raises:
+        ToolError: a foreign key points at nothing, a `body` or `value` is not valid JSON, or a record is not an object.
+    """
+    broken = sorted({row[0] for row in conn.execute("PRAGMA foreign_key_check")})
+    if broken:
+        raise ToolError(f"{file} holds records that point at missing records (table {', '.join(broken)}).")
+    for table, cols in sorted(have.items()):
+        for col in sorted(cols & {"body", "value"}):
+            if conn.execute(f'SELECT 1 FROM "{table}" WHERE NOT json_valid("{col}") LIMIT 1').fetchone():
+                raise ToolError(f"{file} holds a record in table {table} that is not readable (not valid JSON).")
+            if col == "body" and table not in NOT_RECORDS and conn.execute(
+                    f'SELECT 1 FROM "{table}" WHERE json_type(body) != \'object\' LIMIT 1').fetchone():
+                raise ToolError(f"{file} holds a record in table {table} that is not readable (not a JSON object).")
+
+
 def _check_copy(file: Path, copy: Path) -> None:
     """The checks of `check_backup_file`, run on a throw-away copy."""
     with contextlib.closing(sqlite3.connect(copy, isolation_level=None)) as conn:
@@ -241,12 +340,17 @@ def _check_copy(file: Path, copy: Path) -> None:
             raise ToolError(f"{file} is damaged (SQLite integrity check failed).")
         conn.row_factory = sqlite3.Row
         migrate_to(conn, version())
-        have = _columns(conn)
-    with contextlib.closing(sqlite3.connect(":memory:", isolation_level=None)) as fresh:
-        migrate_to(fresh, version())
-        missing = [f"{t}.{c}" for t, cols in _columns(fresh).items() for c in sorted(cols - have.get(t, set()))]
-    if missing:
-        raise ToolError(f"{file} is not a complete jobkit database (missing {', '.join(missing[:5])}).")
+        have, triggers = _columns(conn), _triggers(conn)
+        with contextlib.closing(sqlite3.connect(":memory:", isolation_level=None)) as fresh:
+            migrate_to(fresh, version())
+            missing = [f"{t}.{c}" for t, cols in _columns(fresh).items() for c in sorted(cols - have.get(t, set()))]
+            unprotected = sorted(_triggers(fresh) - triggers)
+        if missing:
+            raise ToolError(f"{file} is not a complete jobkit database (missing {', '.join(missing[:5])}).")
+        if unprotected:
+            raise ToolError(f"{file} lacks the triggers that protect logged answers (missing trigger "
+                            f"{', '.join(unprotected[:5])}).")
+        _check_records(file, conn, have)
 
 
 def restore_from(file: Path) -> Path:

@@ -1,14 +1,17 @@
 """The database schema as numbered upgrade steps (see `store.migrate`).
 
-Record tables keep the whole record as JSON in `body` and repeat the few fields that are keys, links or
-queried (id, status, dates, ...) as real columns. The columns are written from the body in one place
-(`jobkit.interview.tables`), so they cannot drift, and the record round-trips exactly.
+Record tables keep the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a
+link, a sort or filter, a listing); every other field lives in `body` only, and a field that is a column is
+not repeated in `body`, so each field has one stored value. The append-only `session_log` is the exception.
 Never edit a step after release: add a new one.
 """
 from __future__ import annotations
 
 import sqlite3
+import sys
 from typing import Final
+
+from jobkit.base import ToolError
 
 APPEND_ONLY: Final[str] = """
 CREATE TRIGGER {table}_no_update BEFORE UPDATE ON {table}
@@ -167,5 +170,70 @@ CREATE TABLE match_result (
 """)
 
 
+# Step 11. (table, ((JSON key, column) pairs kept as the column only))
+STRIPPED: Final[tuple[tuple[str, tuple[tuple[str, str], ...]], ...]] = (
+    ("session", (("id", "id"), ("title", "title"), ("mode", "mode"), ("status", "status"),
+                 ("created", "created"), ("updated", "updated"))),
+    ("card", (("id", "id"),)), ("engagement", (("id", "id"),)), ("fact", (("id", "id"),)),
+    ("decision", (("id", "id"),)), ("story", (("id", "id"), ("engagement", "engagement_id"))),
+    ("lead_question", (("id", "id"),)), ("open_item", (("id", "id"),)), ("company", (("id", "id"),)),
+    ("bullet", (("id", "id"),)),
+)
+DROPPED: Final[dict[str, tuple[str, ...]]] = {
+    "session_item": ("body",), "card": ("track", "kind", "area", "name", "tier"),
+    "card_progress": ("confidence", "last_drilled"), "engagement": ("company", "title", "updated"),
+    "fact": ("basis",), "decision": ("ownership",), "story": ("company", "theme", "status", "updated"),
+    "lead_question": ("category",), "lead_progress": ("confidence", "last_drilled"), "employer": ("name",),
+    "open_item": ("status",), "company": ("name",), "role": ("start",), "bullet": ("needs_review",),
+    "skill": ("name",), "ledger": ("kind", "mtime"), "match_result": ("label", "band", "lower", "upper"),
+}
+
+
+def _refuse(table: str, field: str) -> None:
+    """Stop the upgrade: the two stored copies of a field disagree (the message names no record)."""
+    raise ToolError(f"Upgrade stopped, nothing was changed: the two stored copies of {table}.{field} disagree. "
+                    "Run `jobkit export` to look at the data, then fix it or ask for help.")
+
+
+def _check_copies(conn: sqlite3.Connection) -> None:
+    """Fail unless every field that is about to keep one copy has the same value in both copies.
+
+    A missing JSON key and an empty column count as equal. The one exception is the creation time of a session:
+    the column (what `sessions list` showed) is kept and the session is reported on stderr.
+    """
+    for table, pairs in STRIPPED:
+        for key, column in pairs:
+            rows = conn.execute(f"SELECT * FROM {table} WHERE json_extract(body, '$.{key}') IS NOT {column}").fetchall()
+            if not rows:
+                continue
+            if (table, key) != ("session", "created"):
+                _refuse(table, column)
+            for row in rows:
+                print(f"Upgrade: session {row['id']} had two different creation times; kept {row['created']}, "
+                      "the one `sessions list` showed.", file=sys.stderr)
+    odd = conn.execute("SELECT 1 FROM session_item WHERE json_extract(body, '$.id') IS NOT item "
+                       "OR json_extract(body, '$.kind') IS NOT kind "
+                       "OR (SELECT COUNT(*) FROM json_each(session_item.body)) != 2 LIMIT 1").fetchone()
+    if odd:
+        _refuse("session_item", "body")
+
+
+def step_one_home_per_field(conn: sqlite3.Connection) -> None:
+    """Version 11: every field has one stored value; no record or field is lost (export is the same before and after).
+
+    Checks first, then removes the JSON keys that are columns, then drops the columns that only repeated the JSON.
+    """
+    conn.row_factory = sqlite3.Row
+    _check_copies(conn)
+    for table, pairs in STRIPPED:
+        paths = ", ".join(f"'$.{key}'" for key, _ in pairs)
+        conn.execute(f"UPDATE {table} SET body = json_remove(body, {paths})")
+    for table, columns in DROPPED.items():
+        for column in columns:
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    conn.execute("DROP TABLE bullet_source")
+
+
 STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
-               step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results]
+               step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results,
+               step_one_home_per_field]

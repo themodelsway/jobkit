@@ -6,11 +6,23 @@ Define how parsed resumes are merged into the generated resume data (stored in t
 ## Requirements
 
 ### Requirement: Bullet identity
-The system SHALL give each bullet an id that is a short hash of its normalized text.
+The system SHALL give a new bullet an id that is a short hash of its normalized text. A bullet SHALL keep that id on every later run, including a full rebuild, while it continues: while the bullet built on this run shares a wording with the stored bullet, or is at least 0.92 similar to it and states the same numbers. The id SHALL NOT change because of the order the files are read in or because the file that first stated the bullet is gone.
 
 #### Scenario: Same bullet in two resumes
 - **WHEN** identical text appears in two resumes
 - **THEN** one bullet exists and both resumes are listed in its `sources`
+
+#### Scenario: A resume that sorts earlier words the bullet differently
+- **WHEN** a new resume that is read first states a stored bullet in slightly different words, and the data is fully rebuilt
+- **THEN** the bullet keeps its id and its themes
+
+#### Scenario: The file that first stated the bullet is deleted
+- **WHEN** that file is deleted, another file still states the bullet in slightly different words, and the data is fully rebuilt
+- **THEN** the bullet keeps its id and its themes
+
+#### Scenario: A claim that really changed
+- **WHEN** a resume is edited so that a bullet states different numbers or is no longer similar
+- **THEN** it is a new bullet with a new id, and curation on the old id is reported as orphaned
 
 ### Requirement: Near-duplicates become variants
 The system SHALL treat bullets with a similarity ratio of at least 0.92 as variants of one bullet, and SHALL keep materially different claims as separate bullets. Two bullets that state different numbers are different claims, however similar the wording.
@@ -53,7 +65,7 @@ The system SHALL show what each resume parses into with `--survey` and SHALL NOT
 - **THEN** the database and `output/` are unchanged
 
 ### Requirement: One job is one role
-The system SHALL keep one role per job: roles of one employer with the same start date and the same end date are one role, and so are two with the same start date where one resume says `Present` and another gives an end date. The end date of the role SHALL be the latest real end date any resume gives, and `Present` (no end date) only when none gives one; removing a resume SHALL restore the end date the remaining resumes give. Roles with the same start date and different real end dates stay separate.
+The system SHALL keep one role per job. Roles of one employer with the same start date and the same end date are one role, and so are two with the same start date where one resume says `Present` and another gives an end date. Roles with the same start date and different real end dates stay separate.
 
 #### Scenario: Older resume still says Present
 - **WHEN** one resume lists a job as `03/2021 - Present` and another lists it as `03/2021 - 06/2022`
@@ -63,8 +75,12 @@ The system SHALL keep one role per job: roles of one employer with the same star
 - **WHEN** that second resume is deleted
 - **THEN** the role has no end date again
 
+#### Scenario: Different real end dates
+- **WHEN** two resumes list the same start date with different real end dates
+- **THEN** two roles exist
+
 ### Requirement: Hand curation survives rebuilds
-The system SHALL keep curation (certifications, skill merge/drop/group, tag-only skills, extra skills, known-wrong metrics, bullet themes, ignored fragments and summary angles) in the database, apply it after every rebuild, and never overwrite it. Curation SHALL be changed only with commands that list, add and remove its entries.
+The system SHALL keep curation in the database, apply it after every rebuild, and never overwrite it. Curation (certifications, education, skill merge/drop/group, tag-only skills, extra skills, known-wrong metrics, bullet themes, ignored fragments and summary angles) SHALL be changed only with commands that list, add and remove its entries.
 
 #### Scenario: Known-wrong metric
 - **WHEN** a bullet contains a figure listed as known-wrong
@@ -77,6 +93,14 @@ The system SHALL keep curation (certifications, skill merge/drop/group, tag-only
 #### Scenario: Curation changed since the last build
 - **WHEN** the curation differs from the one the stored data was built with
 - **THEN** the next run rebuilds the data from the resume files, with the curation applied, and says so; a run with unchanged curation does not rebuild
+
+#### Scenario: Curated list replaces the parsed list
+- **WHEN** resumes state two certifications and one certification is added with `curate add`
+- **THEN** the command says the curated list replaces the parsed one, and after a rebuild only the curated certification is stored
+
+#### Scenario: Last curated entry removed
+- **WHEN** the only curated education entry is removed and the data is rebuilt
+- **THEN** the education parsed from the resumes is back
 
 ### Requirement: Quality words are tags, not skills
 The system SHALL treat Security, Performance, Scalability, High Availability and Cost Efficiency as bullet tags only.
@@ -93,7 +117,7 @@ The system SHALL NOT write into the resume folders; it SHALL write only to the d
 - **THEN** no file under the resume folders has changed
 
 ### Requirement: Rebuild removes what a missing or changed file contributed
-On each rebuild the system SHALL remove a resume file's contribution from the resume data when that file no longer exists or has changed, and SHALL then merge it again if it still exists. Bullets, roles, role titles, subtitles and clients, summaries, headlines, profile points, education, certifications, projects and skills left with no source SHALL be removed, together with the file's ledger, unparsed and raw-text entries. Skills whose source is `curated` SHALL be kept. Skill alternative spellings are not tracked per file. Data stored before sources were tracked SHALL be rebuilt once from the resume files.
+On each rebuild the system SHALL remove a resume file's contribution from the resume data when that file no longer exists or has changed, and SHALL then merge it again if it still exists. Skills whose source is `curated` SHALL be kept.
 
 #### Scenario: Deleted resume
 - **WHEN** a resume file is deleted and the data is rebuilt
@@ -107,12 +131,32 @@ On each rebuild the system SHALL remove a resume file's contribution from the re
 - **WHEN** a resume is edited to remove a bullet and the data is rebuilt
 - **THEN** that bullet no longer appears if no other resume has it
 
+#### Scenario: Everything left without a source is removed
+- **WHEN** a rebuild leaves bullets, roles, role titles, subtitles, clients, summaries, headlines, profile points, education, certifications, projects or skills with no source
+- **THEN** they are removed, together with the file's ledger, unparsed and raw-text entries
+
+#### Scenario: Alternative spellings
+- **WHEN** a file that gave a skill an alternative spelling is removed
+- **THEN** the spelling stays, because skill alternative spellings are not tracked per file
+
 ### Requirement: Pruning reports what it removed
-The system SHALL print the files whose contribution was removed and how many bullets were dropped, and SHALL NOT prune when the scan finds no resume files.
+The system SHALL print the files whose contribution was removed and how many bullets were dropped. The system SHALL NOT prune when the scan finds no resume files, or when any configured resume folder is unavailable. A folder is unavailable when it does not exist, or when it has no resume files although the ledger lists files from it; `--force` SHALL accept the second case as a deliberate removal.
 
 #### Scenario: Resume folder unavailable
 - **WHEN** the resume folder is empty or unmounted
 - **THEN** the system reports an error and the existing data is unchanged
+
+#### Scenario: One of several folders is missing
+- **WHEN** two resume folders are configured and one does not exist
+- **THEN** the system names that folder in an error, exits with status 1, and the existing data is unchanged
+
+#### Scenario: One of several folders has emptied
+- **WHEN** a configured folder has no resume files and the ledger lists files from it, and `--force` is not given
+- **THEN** the system names that folder in an error, exits with status 1, and the existing data is unchanged
+
+#### Scenario: Files were moved out on purpose
+- **WHEN** a configured folder has no resume files, the ledger lists files from it, and `--force` is given
+- **THEN** the data is rebuilt from the remaining files
 
 ### Requirement: Orphaned curation is reported
 The system SHALL list curation entries (themes, ignored fragments, summary angles) whose id matches no current bullet or summary, in `review` output and as a warning at the end of a rebuild. Reporting SHALL NOT modify any curation entry.
@@ -124,3 +168,24 @@ The system SHALL list curation entries (themes, ignored fragments, summary angle
 #### Scenario: No orphans
 - **WHEN** every curation id matches a current bullet or summary
 - **THEN** the report says none were found
+
+### Requirement: A role ends on the latest real end date
+The end date of a role SHALL be the latest real end date any resume gives, and `Present` (no end date) only when none gives one. Removing a resume SHALL restore the end date the remaining resumes give.
+
+#### Scenario: Latest end date wins
+- **WHEN** two resumes give the same role end dates 05/2022 and 06/2022
+- **THEN** the role ends 2022-06
+
+### Requirement: A curated list replaces the parsed list
+A curated education or certifications list that has entries SHALL replace the list parsed from the resumes, and `curate add` SHALL say so. A curated list with no entries SHALL count as no curation.
+
+#### Scenario: Empty curated list
+- **WHEN** a curated education list has no entries
+- **THEN** it counts as no curation and the parsed list is used
+
+### Requirement: Data from before source tracking is rebuilt once
+Data stored before sources were tracked SHALL be rebuilt once from the resume files.
+
+#### Scenario: Old data
+- **WHEN** a command runs on data stored before sources were tracked
+- **THEN** the data is rebuilt from the resume files once and not again on later runs

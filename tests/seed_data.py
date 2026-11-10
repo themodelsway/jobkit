@@ -69,17 +69,17 @@ def _save_sessions(data: dict[str, Any]) -> None:
 
 
 WRITERS: dict[str, Callable[[Any], None]] = {
-    "stories": tables.save_stories, "engagements": tables.save_engagements,
-    "themes": lambda d: tables.save_themes(d["themes"]), "arch-catalog": tables.save_catalog,
-    "arch-progress": lambda d: tables.save_progress(d["cards"]), "arch-tracks": _save_tracks,
-    "lead-questions": lambda d: tables.save_questions(d["questions"]),
-    "lead-progress": lambda d: tables.save_lead_progress(d["questions"]),
-    "lead-scope": lambda d: tables.save_company_facts(d["companies"]), "sessions": _save_sessions,
-    "settings": user_tables.save_settings, "employers": user_tables.save_employers,
-    "open-items": user_tables.save_open_items, "resume-companies": resume_tables.save_companies,
-    "resume-skills": resume_tables.save_skills, "resume-profile": resume_tables.save_profile,
-    "resume-index": resume_tables.save_index, "resume-ledger": resume_tables.save_ledger,
-    "resume-unparsed": resume_tables.save_unparsed,
+    "stories": tables.replace_stories, "engagements": tables.replace_engagements,
+    "themes": lambda d: tables.replace_themes(d["themes"]), "arch-catalog": tables.replace_catalog,
+    "arch-progress": lambda d: tables.replace_progress(d["cards"]), "arch-tracks": _save_tracks,
+    "lead-questions": lambda d: tables.replace_questions(d["questions"]),
+    "lead-progress": lambda d: tables.replace_lead_progress(d["questions"]),
+    "lead-scope": lambda d: tables.replace_company_facts(d["companies"]), "sessions": _save_sessions,
+    "settings": user_tables.replace_settings, "employers": user_tables.replace_employers,
+    "open-items": user_tables.replace_open_items, "resume-companies": resume_tables.replace_companies,
+    "resume-skills": resume_tables.replace_skills, "resume-profile": resume_tables.replace_profile,
+    "resume-index": resume_tables.save_index, "resume-ledger": resume_tables.replace_ledger,
+    "resume-unparsed": resume_tables.replace_unparsed,
     "curated": lambda d: resume_tables.save_curation("curated", d),
     "curation-themes": lambda d: resume_tables.save_curation("themes", d),
 }
