@@ -54,6 +54,35 @@ class ProfileTests(ProfileCase):
         self.assertEqual(code, 1)
         self.assertIn("is not a folder", err)
 
+    def test_header_is_saved_in_the_database_and_shown(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertIn("No header saved yet", self.run_cli("header")[1])
+        code, out, _ = self.run_cli("header", "set", "Pat Example", "Somewhere | 555 | pat@example.test")
+        self.assertEqual(code, 0)
+        self.assertEqual(up.header_text(), "# Pat Example\nSomewhere | 555 | pat@example.test\n")
+        self.assertIn("# Pat Example", out)
+        self.assertIn("header: present", self.run_cli("status")[1])
+
+    def test_header_set_needs_both_parts(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(self.run_cli("header", "set", "Pat Example")[0], 1)
+
+    def test_older_header_file_is_still_read_until_a_header_is_saved(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        up.HEADER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        up.HEADER_FILE.write_text("# Old Name\nOld line\n", encoding="utf-8")
+        self.assertEqual(up.header_text(), "# Old Name\nOld line\n")
+        self.run_cli("header", "set", "New Name", "New line")
+        self.assertEqual(up.header_text(), "# New Name\nNew line\n")
+
+    def test_years_of_experience_accepts_a_plus_and_rejects_nonsense(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(self.run_cli("set", "years_experience", "12+")[0], 0)
+        self.assertEqual(up.years_experience(), 12)
+        self.assertEqual(self.run_cli("set", "years_experience", "lots")[0], 1)
+        self.assertEqual(self.run_cli("set", "years_experience", "99")[0], 1)
+        self.assertEqual(up.years_experience(), 12)
+
     def test_set_validates_key(self):
         self.run_cli("init", "--resume-root", str(self.resumes))
         self.assertEqual(self.run_cli("set", "colour", "red")[0], 1)

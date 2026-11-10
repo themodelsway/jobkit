@@ -16,6 +16,11 @@ TEXT_DIR: Final[Path] = common.output_dir()
 MISSING_DATA: Final[str] = "No resume data yet: run `process-resumes` first."
 
 
+LINE_LIMIT: Final[int] = 200        # most characters in one resume line (an experience line)
+LINE_WARN: Final[int] = 250         # beyond this a line is far over the limit and is flagged as such
+SUMMARY_LIMIT: Final[int] = 400     # most characters in the summary: two lines
+
+
 class Bullet(TypedDict):
     """One experience bullet, deduplicated across resumes."""
 
@@ -144,14 +149,17 @@ def load_themes_file() -> dict[str, Any]:
     return tables.load_curation("themes") or {"themes": {}, "ignore": [], "summary_angles": {}}
 
 
-def orphan_curation(companies: Mapping[str, Company], profile: ResumeProfile, themes: Mapping[str, Any]) -> list[str]:
-    """Ids in the curation (themes, ignore, summary_angles) that match no current bullet or summary.
-    A bullet id is a hash of its text, so editing a resume can leave hand curation pointing at nothing."""
+def orphan_curation(companies: Mapping[str, Company], profile: ResumeProfile, themes: Mapping[str, Any],
+                    curated: Mapping[str, Any] | None = None) -> list[str]:
+    """Ids in the curation (themes, ignore, summary_angles, and the approved short wordings in `curated`) that
+    match no current bullet or summary. A bullet id is a hash of its text, so editing a resume can leave hand
+    curation pointing at nothing."""
     bullets = {b["id"] for c in companies.values() for b in c["bullets"]}
     summaries = {s["id"] for s in profile.get("summaries", [])}
     orphans = [f"theme {i}" for i in themes.get("themes", {}) if i not in bullets]
     orphans += [f"ignore {i}" for i in themes.get("ignore", []) if i not in bullets]
     orphans += [f"summary angle {i}" for i in themes.get("summary_angles", {}) if i not in summaries]
+    orphans += [f"short wording {i}" for i in (curated or {}).get("short_wording", {}) if i not in bullets]
     return sorted(orphans)
 
 

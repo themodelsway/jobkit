@@ -620,7 +620,7 @@ def build(files: Iterable[Path], root: Path, force: bool, dirs: Iterable[Path] =
     apply_curated(data)
     write_data(data, ledger, unparsed)
     tables.save_built_curation(digest)
-    orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file())
+    orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file(), rd.load_curated())
     if orphans:
         print(f"\nWARNING: {len(orphans)} entr(ies) in your curation match no bullet or summary "
               f"(run `query-resume review` to list them).")

@@ -51,6 +51,7 @@ KINDS: tuple[Kind, ...] = (
     Kind("settings", user_tables.load_settings, len),
     Kind("employers", user_tables.load_employers, len),
     Kind("open-items", user_tables.load_open_items, len),
+    Kind("terms", user_tables.load_terms, len),
     Kind("resume-companies", resume_tables.load_companies, len),
     Kind("resume-skills", resume_tables.load_skills, lambda d: sum(len(v) for v in d["groups"].values())),
     Kind("resume-profile", resume_tables.load_profile, lambda d: sum(len(v) for v in d.values())),

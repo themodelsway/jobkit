@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import re
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, NamedTuple, cast
 
@@ -244,8 +244,12 @@ def score_bullet(bullet: Bullet, ctx: JdContext) -> ScoredBullet | None:
     return None
 
 
-def rank_company(company: Company, ctx: JdContext, include_review: bool) -> tuple[list[ScoredBullet], int]:
-    """(scored bullets best first, number of needs_review bullets left out) for one company."""
+def rank_company(company: Company, ctx: JdContext, include_review: bool,
+                 view: Callable[[Bullet], Bullet] | None = None) -> tuple[list[ScoredBullet], int]:
+    """(scored bullets best first, number of needs_review bullets left out) for one company.
+
+    With `view` (the line as it will be printed), a bullet is still listed for what its stored line shows, but is
+    ranked by what the printed wording shows; a printed wording that shows nothing of the posting ranks last."""
     scored: list[ScoredBullet] = []
     hidden = 0
     for bullet in (b for b in company["bullets"] if not b.get("ignored")):
@@ -253,6 +257,9 @@ def rank_company(company: Company, ctx: JdContext, include_review: bool) -> tupl
             hidden += 1
             continue
         result = score_bullet(bullet, ctx)
+        if result and view:
+            printed = score_bullet(view(bullet), ctx)
+            result = result._replace(score=printed.score if printed else 0.0)
         if result:
             scored.append(result)
     scored.sort(key=lambda s: -s.score)
@@ -260,9 +267,11 @@ def rank_company(company: Company, ctx: JdContext, include_review: bool) -> tupl
 
 
 def analyze(text: str, extra_themes: Iterable[str] = (), include_review: bool = False,
-            recency_weight: float = 2.0, requirements: Iterable[str] = ()) -> Analysis:
+            recency_weight: float = 2.0, requirements: Iterable[str] = (),
+            view: Callable[[Bullet], Bullet] | None = None) -> Analysis:
     """Score a job description against the resume data. Shared by `for-jd` and build_resume.py.
-    `requirements` are skills the assistant took from the posting; each one is searched for and reported."""
+    `requirements` are skills the assistant took from the posting; each one is searched for and reported.
+    `view` turns a stored line into the line as it will be printed, so bullets are ranked by what the resume shows."""
     companies, skills = load_or_fail()
     terms = vocabulary(skills)
     need = jd_skills(text, terms)
@@ -275,7 +284,7 @@ def analyze(text: str, extra_themes: Iterable[str] = (), include_review: bool = 
     result = Analysis(need, ctx.themes, angles, rank_summaries(profile["summaries"], angles), [], skills=skills,
                       profile=profile, possible=pr.possible_matches(text, terms))
     for company in newest_first(companies):
-        scored, hidden = rank_company(company, ctx, include_review)
+        scored, hidden = rank_company(company, ctx, include_review, view)
         result.hidden += hidden
         result.covered.update(s for item in scored for s in item.why if s in need)
         result.ranked.append((company, scored))
@@ -418,7 +427,7 @@ def cmd_review(args: argparse.Namespace) -> None:
             print(f"  {group}: " + ", ".join(one))
     total = sum(len(c["bullets"]) for c in companies.values())
     live = [b for c in companies.values() for b in c["bullets"] if not b.get("ignored")]
-    orphans = rd.orphan_curation(companies, rd.load_profile(), rd.load_themes_file())
+    orphans = rd.orphan_curation(companies, rd.load_profile(), rd.load_themes_file(), rd.load_curated())
     print("\nCuration entries that match no bullet or summary:" + ("" if orphans else " none"))
     for orphan in orphans:
         print(f"  {orphan}")

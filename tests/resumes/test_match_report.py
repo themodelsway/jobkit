@@ -26,7 +26,7 @@ class ReportTests(unittest.TestCase):
                                          "How well your profile matches", "It is not any employer's")]
         self.assertEqual(order, sorted(order))
         self.assertTrue(text.rstrip().endswith(rep.CAVEAT))
-        self.assertIn("experimental", rep.CAVEAT)
+        self.assertIn("early preview", rep.CAVEAT)
 
     def test_whole_numbers_with_lower_and_upper_together(self):
         text = rep.report(make([("a", "core_skills", "required", "full"), ("b", "impact", "required", "unknown")]))

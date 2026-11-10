@@ -175,19 +175,84 @@ class ShippedSkillTests(unittest.TestCase):
         self.assertIn("search and read the vendor's official documentation", text)
 
 
+def tool_parsers() -> dict[str, argparse.ArgumentParser]:
+    """Every installed command name with its parser."""
+    parsers = {}
+    for name, target in pyproject()["project"]["scripts"].items():
+        module, func = target.split(":")
+        assert func == "main", f"{name} must point at main"
+        parsers[name] = importlib.import_module(module).build_parser()
+    return parsers
+
+
+def subparsers_of(parser: argparse.ArgumentParser) -> dict | None:
+    """The sub-command choices of a parser, or None when it has none."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices
+    return None
+
+
+def shell_part(span: str) -> str:
+    """The span up to a pipe into another program (a pipe inside [...] is a choice, not a pipe)."""
+    depth = 0
+    for index, char in enumerate(span):
+        depth += (char == "[") - (char == "]")
+        if char == "|" and depth <= 0 and span[index - 1:index] == " ":
+            return span[:index]
+    return span
+
+
+def check_span(span: str, parsers: dict[str, argparse.ArgumentParser]) -> str | None:
+    """Why a written command is wrong, or None when it is right or not a command."""
+    tokens = shell_part(span).split()
+    if not tokens or tokens[0] not in parsers:
+        return None
+    chain = [parsers[tokens[0]]]
+    rest = tokens[1:]
+    while rest and re.fullmatch(r"[a-z][a-z0-9-]*", rest[0]):
+        choices = subparsers_of(chain[-1])
+        if choices is None:
+            break
+        if rest[0] not in choices:
+            return f"unknown subcommand {rest[0]!r}"
+        chain.append(choices[rest[0]])
+        rest = rest[1:]
+    known = {"-h", "--help"}
+    for parser in chain:
+        known |= set(parser._option_string_actions)
+    tail = re.sub(r'"[^"]*"', "", " ".join(rest))
+    for option in re.findall(r"(?<![\w-])(--?[A-Za-z][\w-]*)", tail):
+        if option not in known:
+            return f"unknown option {option!r}"
+    return None
+
+
+def checked_files() -> list[Path]:
+    """Skill pages and user docs whose written commands are checked."""
+    docs = ROOT / "docs"
+    return sorted([*SKILLS.glob("*/*.md"), *(docs / "guides").glob("*.md"), docs / "explore.md", docs / "manual.md"])
+
+
 class CommandNameTests(unittest.TestCase):
-    def test_commands_named_in_skills_exist(self):
-        entry_points = pyproject()["project"]["scripts"]
-        words = set(entry_points)
-        for target in entry_points.values():
-            module, func = target.split(":")
-            self.assertEqual(func, "main")
-            words |= parser_words(importlib.import_module(module).build_parser())
-        for name in SHIPPED:
-            for span in re.findall(r"`([^`\n]+)`", skill_text(name)):
-                tokens = span.split()
-                if len(tokens) >= 2 and re.fullmatch(r"[a-z][a-z0-9-]*", tokens[0]) and tokens[1] in words:
-                    self.assertIn(tokens[0], words, f"{name}: `{span}` starts with an unknown command")
+    def test_check_span(self):
+        parsers = tool_parsers()
+        for span in ('prep set STORY_ID FIELD "VALUE"', 'sessions new "title" --mode tutor [--area A]',
+                     "profile terms [list | add TEXT]", "readiness --jd -", "lead profile show",
+                     'build-resume --title COMPANY-ID="Title"', "sessions resume ID"):
+            self.assertIsNone(check_span(span, parsers), span)
+        for span in ("sessions log ID --due", "arch drill ID"):
+            self.assertIsNotNone(check_span(span, parsers), span)
+
+    def test_written_commands_exist(self):
+        parsers = tool_parsers()
+        failures = []
+        for path in checked_files():
+            for span in re.findall(r"`([^`\n]+)`", path.read_text(encoding="utf-8")):
+                problem = check_span(span, parsers)
+                if problem:
+                    failures.append(f"{path.relative_to(ROOT)}: `{span}`: {problem}")
+        self.assertEqual(failures, [], "\n".join(failures))
 
 
 class SharedTextTests(unittest.TestCase):
@@ -264,13 +329,16 @@ class SharedTextTests(unittest.TestCase):
             self.assertIn("in quotes", text, name)
 
 
+PRODUCT_NAME = "Jobkit engine"   # the one place the product name may appear in user-facing lines (the setup question)
+
+
 class PlainLanguageTests(unittest.TestCase):
     def test_user_facing_lines_have_no_technical_words(self):
         for name in SHIPPED:
             for number, line in enumerate(skill_text(name).splitlines(), 1):
                 stripped = line.strip()
                 if stripped.startswith(">"):
-                    hit = BANNED.search(stripped)
+                    hit = BANNED.search(stripped.replace(PRODUCT_NAME, ""))
                     self.assertIsNone(hit, f"{name}:{number} says {hit.group(0) if hit else ''!r}: {stripped}")
 
     def test_there_is_user_facing_wording(self):

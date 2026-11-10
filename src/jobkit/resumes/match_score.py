@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""EXPERIMENTAL: rate how well your stored resume lines cover a job posting (a match estimate, not any ATS score).
+"""EARLY PREVIEW: rate how well your stored resume lines cover a job posting (a match estimate, not any ATS score).
 
   match-score extract --jd posting.txt          # the requirements code can rate, or the stored result if seen before
   match-score check requests.json --jd posting.txt   # validate pass 1 output; which close calls take a fallback

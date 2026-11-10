@@ -61,3 +61,18 @@ Each tool SHALL be a module of the `jobkit` package with a console entry point i
 #### Scenario: Run as a module
 - **WHEN** a tool is run as `python -m jobkit.<group>.<tool> --help`
 - **THEN** it exits 0
+
+### Requirement: Written options exist on their subcommand
+Every inline code span that starts with a tool name, in a skill page, a guide, the manual or the command-exploration page, SHALL name real subcommands, and every option in the span SHALL exist on that exact subcommand or one of its parents; the test suite SHALL fail otherwise.
+
+#### Scenario: Option on the wrong subcommand
+- **WHEN** a skill writes `sessions log ID --due` and `--due` exists only on `sessions new`
+- **THEN** the test suite fails and names the file and the written command
+
+#### Scenario: Unknown subcommand
+- **WHEN** a doc writes `arch drill ID` and `arch` has no `drill` subcommand
+- **THEN** the test suite fails and names the file and the written command
+
+#### Scenario: Placeholders are not checked as subcommands
+- **WHEN** a skill writes `prep set STORY_ID FIELD "VALUE"` or `sessions resume ID`
+- **THEN** the uppercase or quoted placeholders are accepted as arguments, not checked as subcommands

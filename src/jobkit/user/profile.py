@@ -3,15 +3,19 @@
 
   settings    resume_root, resume_dirs, name (optional), tier1_services (optional)
   employers   found by the first resume scan: {id: {"name", "regex"}}
-  profile/header.md (in the home folder)  name and contact line printed at the top of generated resumes
+  settings    header (name and contact line printed at the top of generated resumes; an older profile/header.md
+              file in the home folder is still read when no header is saved)
 
 Commands:
   profile status
   profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
-  profile set KEY VALUE         # name, resume_root
+  profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries)
+  profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
   profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
   profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
   profile open [add TEXT | done ID]   # open items and data notes 
+  profile terms [list | add TEXT [--kind K] [--match word|phrase|regex] | ignore TEXT | rm TEXT | import FILE
+                 | check [--staged | --all | PATH ...]]   # personal words that must never be committed (contributors)
 
 Standard library only. Run it as the `profile` command.
 """
@@ -23,14 +27,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Final, NotRequired, TypedDict, cast
 
-from jobkit import common
+from jobkit import common, store
 from jobkit.common import ToolError
-from jobkit.user import tables
+from jobkit.resumes import tables as resume_tables
+from jobkit.user import tables, terms
 
 DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
-SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days")
+SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience")
+YEARS_RANGE: Final[tuple[int, int]] = (1, 60)
 DEFAULT_REASSESS_DAYS: Final[int] = 30   # a good answer older than this is offered for a retest
 REASSESS_RANGE: Final[tuple[int, int]] = (1, 365)
 NEEDS_PROFILE: Final[str] = (
@@ -47,6 +53,8 @@ class Profile(TypedDict):
     name: NotRequired[str]
     tier1_services: NotRequired[list[str]]
     reassess_days: NotRequired[int]
+    header: NotRequired[str]
+    years_experience: NotRequired[int]
 
 
 class OpenItem(TypedDict):
@@ -90,6 +98,23 @@ def parse_window(text: str) -> int:
     if not low <= days <= high:
         raise ToolError(f"reassess_days must be a whole number of days from {low} to {high}, not {text!r}.")
     return days
+
+
+def parse_years(text: str) -> int:
+    """Years of experience from text ("26" or "26+"): a whole number from 1 to 60, else a `ToolError`."""
+    low, high = YEARS_RANGE
+    try:
+        years = int(text.strip().rstrip("+"))
+    except ValueError:
+        years = low - 1
+    if not low <= years <= high:
+        raise ToolError(f"years_experience must be a whole number from {low} to {high}, not {text!r}.")
+    return years
+
+
+def years_experience() -> int | None:
+    """The years of experience the user gave (built summaries show it as "N+ years"), or None."""
+    return load().get("years_experience")
 
 
 def need() -> Profile:
@@ -141,15 +166,37 @@ def header_path() -> Path:
     return HEADER_FILE
 
 
-def personal_terms() -> set[str]:
-    """Your name, resume folder and employer names, for the privacy checks. Empty without a profile."""
-    terms: set[str] = set()
+def header_text() -> str | None:
+    """The saved name and contact line (Markdown: `# Name` then the contact line), or the older header.md file's
+    text, or None when neither exists."""
+    saved = load().get("header")
+    if saved:
+        return saved
+    return HEADER_FILE.read_text(encoding="utf-8") if HEADER_FILE.exists() else None
+
+
+def cmd_header(args: argparse.Namespace) -> None:
+    """Show the saved header, or `header set NAME CONTACT_LINE` to save it."""
+    if args.action == "set":
+        if not args.name or not args.contact or not args.name.strip() or not args.contact.strip():
+            raise ToolError("header set needs a name and a contact line: profile header set NAME CONTACT_LINE")
+        profile = need()
+        profile["header"] = f"# {args.name.strip()}\n{args.contact.strip()}\n"
+        save(profile)
+    print((header_text() or "No header saved yet. Save one with: profile header set NAME CONTACT_LINE").rstrip())
+
+
+def derived_terms() -> list[terms.Term]:
+    """Terms read from what is stored: name, header contact details, resume folder and employer names."""
     stored = load()
-    terms |= {str(value).strip() for value in (stored.get("name"), stored.get("resume_root")) if value}
-    if HEADER_FILE.exists():
-        terms |= {re.sub(r"^#\s*", "", line).strip() for line in HEADER_FILE.read_text(encoding="utf-8").splitlines()[:1]}
-    terms |= {entry["name"] for entry in tables.load_employers().values()}
-    return {t for t in terms if len(t) >= 3 and t.lower() != "your name"}
+    return terms.derive(stored.get("name"), stored.get("resume_root"), header_text(),
+                        [entry["name"] for entry in tables.load_employers().values()],
+                        terms.folder_names(resume_tables.load_ledger(), stored.get("resume_dirs") or ()))
+
+
+def cmd_terms(args: argparse.Namespace) -> int:
+    """List, change, import or check the personal terms."""
+    return terms.run(args, derived_terms())
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -167,8 +214,9 @@ def cmd_status(args: argparse.Namespace) -> None:
           if tables.has_employers() else "employers: not scanned yet (run process-resumes)")
     print(f"tier-1 services: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
     stored = profile.get("reassess_days")
+    print(f"years of experience: {profile.get('years_experience') or '(not set: summaries show what your resume says)'}")
     print(f"retest window: {reassess_days()} days" + ("" if stored is not None else " (default, not set)"))
-    print(f"header: {'present' if HEADER_FILE.exists() else 'missing (build-resume creates a template)'}")
+    print(f"header: {'present' if header_text() else 'missing (profile header set NAME CONTACT_LINE)'}")
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -196,6 +244,8 @@ def cmd_set(args: argparse.Namespace) -> None:
     profile = need()
     if args.key == "reassess_days":
         profile["reassess_days"] = parse_window(args.value)
+    elif args.key == "years_experience":
+        profile["years_experience"] = parse_years(args.value)
     elif args.key == "name":
         profile["name"] = args.value
     else:
@@ -305,6 +355,14 @@ def build_parser() -> argparse.ArgumentParser:
     companies.add_argument("action", nargs="?", choices=["rename", "merge"])
     companies.add_argument("args", nargs="*")
     companies.set_defaults(fn=cmd_companies)
+    header = sub.add_parser("header")
+    header.add_argument("action", nargs="?", choices=["set"])
+    header.add_argument("name", nargs="?")
+    header.add_argument("contact", nargs="?")
+    header.set_defaults(fn=cmd_header)
+    term_cmd = sub.add_parser("terms")
+    terms.add_arguments(term_cmd)
+    term_cmd.set_defaults(fn=cmd_terms)
     tier1 = sub.add_parser("tier1")
     tier1.add_argument("services", nargs="*")
     tier1.set_defaults(fn=cmd_tier1)
@@ -317,7 +375,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv), lock=True)
+    args = build_parser().parse_args(argv)
+    if args.cmd == "terms" and args.action == "check" and not store.db_path().exists():
+        print("personal terms: no database here, nothing to check (skipped)")
+        return 0
+    return common.run(args, lock=args.cmd != "terms" or args.action not in (None, "list", "check"))
 
 
 if __name__ == "__main__":

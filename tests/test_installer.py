@@ -172,6 +172,14 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertIn(f"tool install --force --python {python} --constraints {CONSTRAINTS} {ROOT}", self.log("uv"))
         self.assertEqual(self.log("curl"), "", "uv was there, so nothing is downloaded")
 
+    def test_a_helper_from_the_previous_release_is_upgraded(self):
+        self.add_uv()
+        self.add_helper(self.bumped(-1))                    # what an existing user has installed
+        self.assertTrue(self.run_script("--check").stdout.startswith("older:"))
+        result = self.run_script()
+        self.assertEqual((result.stdout.strip(), result.returncode), (f"ok:{self.fake / 'tools'}", 0), result.stderr)
+        self.assertIn("tool install --force", self.log("uv"))
+
     def test_missing_uv_is_downloaded_at_the_fixed_version(self):
         write_script(self.bin / "curl", FAKE_CURL)
         result = self.run_script()

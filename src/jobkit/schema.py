@@ -234,6 +234,14 @@ def step_one_home_per_field(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE bullet_source")
 
 
+def step_terms(conn: sqlite3.Connection) -> None:
+    """Version 12: your own words that must never be committed (products, clients, patterns) and the ones to ignore."""
+    run_script(conn, """
+CREATE TABLE term (
+  text TEXT PRIMARY KEY COLLATE NOCASE, kind TEXT NOT NULL, match TEXT NOT NULL, ignored INTEGER NOT NULL DEFAULT 0);
+""")
+
+
 STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
                step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results,
-               step_one_home_per_field]
+               step_one_home_per_field, step_terms]

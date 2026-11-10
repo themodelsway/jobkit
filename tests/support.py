@@ -1,5 +1,4 @@
 """Shared test helpers."""
-import json
 import os
 import shutil
 import sqlite3
@@ -77,27 +76,6 @@ def open_real_database() -> sqlite3.Connection | None:
     except sqlite3.Error:
         return None
     return conn
-
-
-def real_personal_terms() -> set[str]:
-    """Name, resume folder, employer names and header name from the real profile (empty without one)."""
-    conn = open_real_database()
-    if conn is None:
-        return set()
-    terms: set[str] = set()
-    try:
-        for row in conn.execute("SELECT key, value FROM setting WHERE key IN ('name', 'resume_root')"):
-            terms.add(str(json.loads(row["value"])).strip())
-        terms |= {row[0] for row in conn.execute("SELECT json_extract(body, '$.name') FROM employer") if row[0]}
-    except sqlite3.Error:
-        pass
-    finally:
-        conn.close()
-    header = Path(REAL_HOME) / "profile" / "header.md"
-    if header.is_file():
-        lines = header.read_text(encoding="utf-8").splitlines()[:1]
-        terms |= {line.lstrip("# ").strip() for line in lines}
-    return {t for t in terms if len(t) >= 3 and t.lower() != "your name"}
 
 
 def real_resume_texts() -> dict[str, str]:

@@ -13,7 +13,7 @@ from jobkit.interview.aws import arch_seed as seed
 ROOT = Path(__file__).resolve().parents[1]
 
 TOOLS = ["jobkit.user.profile", "jobkit.resumes.process_resumes", "jobkit.resumes.query_resume",
-         "jobkit.resumes.build_resume", "jobkit.resumes.match_score", "jobkit.interview.arch", "jobkit.interview.lead",
+         "jobkit.resumes.build_resume", "jobkit.resumes.lines", "jobkit.resumes.match_score", "jobkit.interview.arch", "jobkit.interview.lead",
          "jobkit.interview.prep", "jobkit.interview.sessions", "jobkit.interview.readiness", "jobkit.admin"]
 
 

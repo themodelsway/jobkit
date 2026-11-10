@@ -2,16 +2,21 @@
 
 Checks every file git would commit (tracked + untracked, minus .gitignore) for:
   * generic leaks: home-directory paths, email addresses, phone numbers
-  * anything in your real profile (read-only from ~/.jobkit or $JOBKIT_HOME): name, resume folder, employer names
+  * anything in your personal terms (`profile terms check --all`, from ~/.jobkit or $JOBKIT_HOME)
 
 Without a profile only the generic checks run, and the profile check is reported as skipped.
 """
+import os
 import re
+import sqlite3
 import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
-from tests.support import real_personal_terms
+from jobkit import store
+from tests import REAL_HOME
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,14 +42,49 @@ class TestNoPersonalData(unittest.TestCase):
         self.assertEqual(bad, [], "home path, email or phone number in committable files")
 
     def test_profile_terms(self):
-        terms = real_personal_terms()
-        if not terms:
-            self.skipTest("no profile terms (name, resume folder, employers) in the real home: only the generic checks ran")
-        bad = []
-        for f in committable():
-            low = f.read_text(encoding="utf-8", errors="ignore").lower()
-            bad += [f"{f.relative_to(ROOT)}: {t}" for t in terms if t.lower() in low]
-        self.assertEqual(bad, [], "values from your profile found in committable files")
+        if not (Path(REAL_HOME) / "data" / "jobkit.db").is_file():
+            self.skipTest("no profile in the real home: only the generic checks ran")
+        done = terms_check_on_copy(Path(REAL_HOME))
+        self.assertEqual(done.returncode, 0, "values from your profile found in committable files:\n" + done.stdout)
+
+    def test_the_real_database_is_never_upgraded_or_changed(self):
+        with tempfile.TemporaryDirectory(prefix="jobkit-old-home-") as folder:
+            old = Path(folder)
+            (old / "data").mkdir()
+            conn = store._open(old / "data" / "jobkit.db")        # pylint: disable=protected-access
+            store.migrate_to(conn, store.version() - 1)
+            conn.close()
+            before = (old / "data" / "jobkit.db").read_bytes()
+            done = terms_check_on_copy(old)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(stored_version(old), store.version() - 1)      # still readable by the previous release
+            self.assertEqual((old / "data" / "jobkit.db").read_bytes(), before)
+
+
+def stored_version(home: Path) -> int:
+    """The schema version of the database under `home`, read without changing it."""
+    conn = sqlite3.connect(f"file:{home / 'data' / 'jobkit.db'}?mode=ro", uri=True)
+    try:
+        return int(conn.execute("PRAGMA user_version").fetchone()[0])
+    finally:
+        conn.close()
+
+
+def terms_check_on_copy(home: Path) -> subprocess.CompletedProcess[str]:
+    """Run `profile terms check --all` against a consistent copy of the database under `home`, so the original is
+    never migrated or written (the command upgrades the database it opens)."""
+    with tempfile.TemporaryDirectory(prefix="jobkit-terms-copy-") as folder:
+        (Path(folder) / "data").mkdir()
+        source = sqlite3.connect(f"file:{home / 'data' / 'jobkit.db'}?mode=ro", uri=True)
+        target = sqlite3.connect(Path(folder) / "data" / "jobkit.db")
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+            source.close()
+        env = {**os.environ, "JOBKIT_HOME": folder}
+        return subprocess.run([sys.executable, "-m", "jobkit.user.profile", "terms", "check", "--all"], cwd=ROOT, env=env,
+                              capture_output=True, text=True, check=False)
 
 
 if __name__ == "__main__":

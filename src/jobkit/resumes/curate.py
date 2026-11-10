@@ -1,7 +1,8 @@
 """The user's curation of the resume data, edited with commands (`process-resumes curate ...`).
 
 Curation survives rebuilds: certifications and education to keep, skill merge/drop/group rules, tag-only
-skills, extra skills, figures known to be wrong, bullet themes, ignored fragments and summary angles.
+skills, extra skills, figures known to be wrong, shorter wordings the user approved, bullet themes, ignored fragments
+and summary angles.
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import argparse
 from typing import Any, Final, NamedTuple
 
 from jobkit.base import ToolError
+from jobkit.resumes import lines as line_rules
 from jobkit.resumes import resume_data as rd
 from jobkit.resumes import tables
 
@@ -31,6 +33,7 @@ SPECS: Final[dict[str, Spec]] = {
     "tag-only": Spec("curated", "tag_only", "list", "NAME   (a tag, not a skill)"),
     "skill-group": Spec("curated", "skill_group", "map", "SKILL GROUP"),
     "extra-skill": Spec("curated", "extra_skills", "extra-skill", "GROUP NAME [ALIAS ...]"),
+    "short-wording": Spec("curated", "short_wording", "map", f"BULLET_ID TEXT   (the user's approved wording, at most {rd.LINE_LIMIT} characters)"),
     "theme": Spec("themes", "themes", "map-list", "BULLET_ID THEME [THEME ...]"),
     "ignore": Spec("themes", "ignore", "list", "BULLET_ID   (a fragment, not a bullet)"),
     "summary-angle": Spec("themes", "summary_angles", "map-list", "SUMMARY_ID ANGLE [ANGLE ...]"),
@@ -78,6 +81,8 @@ def add_entry(spec: Spec, items: Any, values: list[str], options: argparse.Names
         items[:] = [c for c in items if c["name"] != values[0]]
         items.append({"name": values[0], "issued": options.issued, "expires": options.expires})
     elif spec.shape == "map":
+        if spec.key == "short_wording":
+            line_rules.require_acceptable(values[0], values[1])
         items[values[0]] = values[1]
     elif spec.shape == "map-list":
         items[values[0]] = values[1:]

@@ -1,11 +1,12 @@
 # jobkit
 
-Resume tooling and interview prep. Features, setup and commands are in `README.md`; behaviour promises are in `openspec/specs/`; flags are in each tool's `--help`. This file holds only what is not obvious from those or from the code. It is the one source of contributor guidance for every coding agent; `CLAUDE.md` only imports it.
+Resume tooling and interview prep. Features, setup and commands are in `README.md`; behaviour promises are in `openspec/specs/`; flags are in each tool's `--help`. This file holds only what is not obvious from those or from the code.
 
 ## Hard rules
 - The resume folder (the `resume_root` setting; `profile status` shows it) is READ-ONLY. Never edit or write there, not even with Bash (an app's deny rules do not block shell writes).
 - Committed files hold nothing personal (name, employers, folders, figures). Personal data lives only under the home folder (`~/.jobkit`, or `JOBKIT_HOME`), outside the repository; `tests/test_no_personal.py` enforces it.
 - No phone, email or LinkedIn in the resume data. The test suite checks the stored data; `jobkit export --only resume-companies | grep -Ei '@|[0-9]{3}[ -][0-9]{3,4}'` shows any hit to review.
+- Personal terms (name, contact details, resume folder, employers, products) are checked in every commit by `profile terms check --staged` (pre-commit hook) and `tests/test_no_personal.py`; add products with `profile terms add`. See the last section of `docs/manual.md`.
 - Raw extracted text goes only in `output/` under the home folder.
 - Never invent resume bullets; suggest edits to the user instead.
 - Prefer Python scripts over `jq` for repeated tasks. If a question is needed, ask one at a time.

@@ -24,6 +24,11 @@ class BuilderTests(unittest.TestCase):
         b = bullet("Cut page load time by 30% by caching database queries", ["30%"])
         self.assertEqual(len(br.pick([a, b], 4)), 1)
 
+    def test_reworded_line_without_a_figure_is_one(self):
+        a = bullet("Hands-on lead for a market-entry strategy program, focusing on customer research, pricing analysis, and partner integration.", [])
+        b = bullet("Led development of multiple workstreams on a market\u2013entry strategy program, focusing on customer research and pricingbased analysis.", [])
+        self.assertEqual(len(br.pick([a, b], 4)), 1)
+
     def test_claim_not_repeated_across_companies(self):
         a = bullet("Reduced page load time by 30% through caching database queries", ["30%"])
         b = bullet("Cut page load time by 30% by caching database queries", ["30%"])
@@ -36,12 +41,70 @@ class BuilderTests(unittest.TestCase):
             first.write_text("one", encoding="utf-8")
             self.assertEqual(br.next_revision(folder, "resume").name, "resume-2.md")
 
-    def test_headline_must_relate_to_the_posting(self):
-        result = qr.Analysis(need=qr.Counter({"Kubernetes": 1}), themes={"platform"}, angles={}, summaries=[],
-                             ranked=[], profile={"headlines": ["Pastry chef", "Kubernetes platform lead"]})
-        self.assertEqual(br.best_headline(result), "Kubernetes platform lead")
-        result.profile = {"headlines": ["Pastry chef"]}
-        self.assertIsNone(br.best_headline(result))
+    def test_summary_has_no_title_in_front_and_fits_the_limit(self):
+        long_one = {"id": "s-long", "text": "x" * (br.SUMMARY_LIMIT + 1), "angles": [], "sources": []}
+        short_one = {"id": "s-short", "text": "Leads cloud work.", "angles": [], "sources": []}
+        result = qr.Analysis(need=qr.Counter(), themes=set(), angles={}, summaries=[long_one, short_one], ranked=[],
+                             profile={"headlines": ["Senior Software Engineer"]})
+        self.assertEqual(br.render_summary(result), ["## Summary", "", "Leads cloud work.", ""])
+        result.summaries = [long_one]
+        self.assertEqual(br.best_summary(result)["id"], "s-long")      # none fits: the best one is used and reported
+
+    def test_summary_shows_the_years_the_user_gave(self):
+        self.assertEqual(br.with_years("Leader with 11+ years of experience. 10 years more.", 12),
+                         "Leader with 12+ years of experience. 10 years more.")
+        self.assertEqual(br.with_years("Leader with 11 years in retail.", 12), "Leader with 12+ years in retail.")
+        self.assertEqual(br.with_years("Leader with 11 years in retail.", None), "Leader with 11 years in retail.")
+
+    def test_years_change_only_the_career_length_never_a_skills_own_duration(self):
+        mixed = "Engineer with 5 years of Kubernetes experience and 11 years in software."
+        self.assertEqual(br.with_years(mixed, 12), "Engineer with 5 years of Kubernetes experience and 12+ years in software.")
+        self.assertEqual(br.with_years("Engineer with 5 years of Kubernetes experience.", 12),
+                         "Engineer with 5 years of Kubernetes experience.")
+        self.assertEqual(br.with_years("Over 10 years of professional experience and 3 years of AWS experience.", 12),
+                         "Over 12+ years of professional experience and 3 years of AWS experience.")
+        self.assertEqual(br.with_years("Leads teams.", 12), "Leads teams.")
+
+    def test_coverage_is_judged_on_the_wording_that_is_printed(self):
+        full = bullet("Designed disaster recovery across production services.", [], id="full", skills=["disaster recovery"])
+        other = bullet("Rehearsed disaster recovery failover twice a year.", [], id="other", skills=["disaster recovery"])
+        company = {"id": "c1", "name": "Acme", "bullets": [full, other],
+                   "roles": [{"start": "2024-01", "end": None, "titles": ["Engineer"]}]}
+        shorter = {"full": "Improved production reliability."}
+        self.assertEqual(br.shown_skills([(company, [full])], ["disaster recovery"], None, {}), {"disaster recovery"})
+        self.assertEqual(br.shown_skills([(company, [full])], ["disaster recovery"], None, shorter), set())
+        result = qr.Analysis(need=qr.Counter({"disaster recovery": 1}), themes=set(), angles={}, summaries=[],
+                             ranked=[(company, [qr.ScoredBullet(2.0, full, []), qr.ScoredBullet(1.0, other, [])])],
+                             covered={"disaster recovery"})
+        picks = [full]
+        with mock.patch.object(br, "approved_wordings", return_value=shorter):
+            br.cover_gaps(result, [(company, picks)], br.BuildOptions(top=2))
+        self.assertEqual([b["id"] for b in picks], ["full", "other"])      # the line that still shows it is brought in
+
+    def test_lines_are_ranked_by_the_wording_that_is_printed(self):
+        full = bullet("Designed disaster recovery across production services.", [], id="full", skills=["disaster recovery"],
+                      themes=[], sources=["a", "b"])
+        other = bullet("Rehearsed disaster recovery failover twice a year.", [], id="other", skills=["disaster recovery"],
+                       themes=[], sources=["a"])
+        company = {"id": "c1", "name": "Acme", "bullets": [full, other], "roles": []}
+        ctx = qr.JdContext(qr.Counter({"disaster recovery": 1}), set(), set(), {"full": 0.0, "other": 0.0}, 0.0)
+        by_stored = [item.bullet["id"] for item in qr.rank_company(company, ctx, False)[0]]
+        self.assertEqual(by_stored, ["full", "other"])
+        def view(item):
+            return br.printed(item, {"full": "Improved production reliability."})
+
+        ranked = qr.rank_company(company, ctx, False, view)[0]
+        self.assertEqual([item.bullet["id"] for item in ranked], ["other", "full"])
+        self.assertEqual(ranked[1].bullet["text"], full["text"])      # the stored line stays the line of record
+
+    def test_line_uses_a_wording_within_the_limit_and_the_users_approved_text_first(self):
+        short = "Cut load time 30% by caching."
+        stored = {"id": "b1", "text": "x" * 250, "variants": [], "wordings": {"a.docx": ["y" * 250, short]}}
+        self.assertEqual(br.fitting_text(stored, {}), short)
+        self.assertEqual(br.fitting_text(stored, {"b1": "My own shorter line."}), "My own shorter line.")
+        no_fit = {"id": "b2", "text": "z" * 250}
+        self.assertEqual(br.fitting_text(no_fit, {}), "z" * 250)       # never invented or cut: reported instead
+        self.assertEqual(br.fitting_text({"id": "b3", "text": "Short."}, {}), "Short.")
 
     def test_total_bullet_limit(self):
         company = {"id": "a", "name": "A", "roles": [{"end": None}], "bullets": []}
@@ -223,7 +286,7 @@ class BuildOptionTests(PipelineCase):
     def build(self, *extra):
         jd, out = self.tmp / "jd3.txt", self.tmp / "out" / f"r{len(extra)}.md"
         jd.write_text(jd_from_bullets(self.data), encoding="utf-8")
-        with mock.patch.object(br, "header_file", return_value=self.tmp / "header.md"):
+        with mock.patch.object(br, "stored_header", return_value=None):
             code, _, err = self.cli(br.main, str(jd), "--output", str(out), *extra)
         self.assertEqual(code, 0, err)
         return out.read_text(encoding="utf-8")

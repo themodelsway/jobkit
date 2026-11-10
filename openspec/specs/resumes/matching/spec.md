@@ -31,7 +31,13 @@ The system SHALL support filtering bullets by skill, company, text and theme, an
 - **THEN** each company is named once above its bullets, and the last line gives the total and, per company, the number of matches not shown
 
 ### Requirement: Build a tailored resume
-The system SHALL write a markdown resume to `output/resumes/<jd name>.md` under the home folder (or `-o`) with the best summary, top bullets per company (default 4, at most 2 for old companies), matching skills, certifications and education, with the header taken from `profile/header.md` in the home folder.
+The system SHALL write a markdown resume to `output/resumes/<jd name>.md` under the home folder (or `-o`) with the best summary, top bullets per company (default 4, at most 2 for old companies), the skills that matter for the posting, certifications and education, with the header taken from the name and contact line saved with `profile header set`; when none is saved, from the older `profile/header.md` file in the home folder; when neither exists, the placeholder header, which the build report flags.
+
+The skills section SHALL list, by group, the skills the posting names first and then stored skills that share a meaningful word with the posting, at most 10 per group, the skill found in most resume files first, and the group with the most posting skills first. It SHALL NOT list a skill the posting neither names nor echoes.
+
+#### Scenario: Skills follow the posting
+- **WHEN** a posting names PostgreSQL and asks for stakeholders and stream processing
+- **THEN** the skills section lists PostgreSQL, then Stakeholder management and Stream Processing Systems, and leaves out unrelated stored skills
 
 #### Scenario: Skill missing from the first picks
 - **WHEN** a JD skill has a matching bullet that the per-employer picks left out
@@ -49,6 +55,25 @@ The system SHALL write a markdown resume to `output/resumes/<jd name>.md` under 
 - **WHEN** two selected bullets state different achievements that both say 20%
 - **THEN** both are in the resume
 
+### Requirement: Line and summary length
+The build SHALL print each experience line within 200 characters when it can: the user's approved shorter wording, else the stored line when it fits, else the longest stored wording of the same line that fits. A line that still exceeds the limit SHALL be printed as stored, never cut or rewritten, and listed in the build report with its id, marked FAR OVER when it is more than 250 characters. The summary SHALL be one summary with no job title in front of it: the best-fitting one of at most 400 characters; when none of the stored summaries fits, the best-fitting one is used anyway and listed in the build report as over the limit. It SHALL show the user's `years_experience` setting as "N+ years" in place of the career-length phrase only: where a summary has several durations, the longest one that is not a specific skill's ("5 years of Kubernetes experience") is changed and the others are left as they are, and a summary with no such phrase is unchanged. The summary length SHALL be measured, and reported, after that substitution. Approved wording SHALL be used only while it still passes the checks against the stored line, and an entry whose line no longer exists SHALL be reported as unmatched curation.
+
+#### Scenario: No wording fits
+- **WHEN** a chosen line and all its stored wordings are over 200 characters and no wording is approved
+- **THEN** the line is printed as stored and listed in the report
+
+#### Scenario: Line far over the limit
+- **WHEN** a printed line is more than 250 characters
+- **THEN** the report and `resume-lines list` mark it FAR OVER
+
+#### Scenario: Same line reworded
+- **WHEN** two selected lines share five or more content words and at least half of the shorter line's words (hyphens and dashes ignored), with or without a figure
+- **THEN** only the better-ranked one is in the resume
+
+#### Scenario: Same result told twice
+- **WHEN** two selected bullets share a figure ("70 percent" and "70%" count as the same) and four or more content words
+- **THEN** only the better-ranked one is in the resume
+
 #### Scenario: Second build for another posting from stdin
 - **WHEN** `build-resume -` is run twice
 - **THEN** the second resume is `resume-2.md` and the first is unchanged
@@ -65,7 +90,7 @@ When the build has no bullet to show for an employer, the resume SHALL still sho
 - **THEN** that title is shown on its role line
 
 ### Requirement: Old companies and repeated claims
-Old companies SHALL be those that ended more than eight years ago. A claim SHALL NOT be repeated across companies, and two different results that share one figure (for example two 20% results) SHALL both be kept; only wording that overlaps as well as the figure counts as the same claim. The opening headline SHALL be one that shares words with the job description, and none is shown otherwise.
+Old companies SHALL be those that ended more than eight years ago. A claim SHALL NOT be repeated across companies, and two different results that share one figure (for example two 20% results) SHALL both be kept; only wording that overlaps as well as the figure counts as the same claim. The resume SHALL NOT print an opening headline; job titles appear only in the experience section.
 
 #### Scenario: Old company
 - **WHEN** a company ended more than eight years ago
@@ -86,7 +111,7 @@ The default file name SHALL get `-2`, `-3` and so on when the file exists; an ex
 - **THEN** the file is written as given
 
 ### Requirement: The build reports its gaps and says it is a draft
-The command SHALL report JD skills with no supporting bullet separately from skills that have evidence but are not shown in this draft, and SHALL say the result is a draft to review (titles and dates, claims, contact lines, qualifications, appearance).
+The command SHALL report JD skills with no supporting bullet separately from skills that have evidence but are not shown in this draft, and SHALL judge which skills are shown from the wording the resume prints (approved or stored shorter wording included), not from the stored line or its tags alone, for the report, for coverage repair and for ranking the lines of each employer (`query-resume for-jd` still ranks the stored lines), so a shortened line that no longer shows a requirement is not counted as showing it. It SHALL say the result is a draft to review (titles and dates, claims, contact lines, qualifications, appearance).
 
 #### Scenario: Skill without evidence
 - **WHEN** a JD skill has no supporting bullet in the stored data
@@ -109,3 +134,10 @@ A built resume SHALL start as a draft. `build-resume --approve FILE` SHALL recor
 #### Scenario: Placeholder header
 - **WHEN** `--approve` is given a file that has the placeholder header
 - **THEN** the approval is refused
+
+### Requirement: Shorter wording on request
+The `resume-lines` tool SHALL list stored lines over the limit, show one line, and validate a proposed wording; a wording SHALL be accepted only when it is within 200 characters and keeps every figure of the stored line without adding one; a figure includes its sign, so "-5%" and "5%" are different figures. Approved wording SHALL be saved with `process-resumes curate add short-wording ID TEXT`, which applies the same checks and never changes the stored line. The skill SHALL propose wording only when the user asks and SHALL save it only after the user accepts it.
+
+#### Scenario: Figure changed
+- **WHEN** a proposed wording drops "70%" or adds "80%"
+- **THEN** `validate` exits 1 and the save is refused

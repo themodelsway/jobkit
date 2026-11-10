@@ -118,6 +118,36 @@ class BuildTests(PipelineCase):
         self.assertTrue(notes.header_missing)
         self.assertIsNotNone(notes.used_summary)
 
+    def test_skills_section_names_posting_skills_first_and_echoes_wording(self):
+        skills = {"groups": {"Data": [{"name": "PostgreSQL", "sources": ["a"]}, {"name": "Stream Processing Systems", "sources": ["a"]},
+                                       {"name": "Hadoop", "sources": ["a"]}],
+                             "Leadership": [{"name": "Stakeholder management", "sources": ["a", "b"]},
+                                            {"name": "Collaborative Problem Solving", "sources": ["a"]}]}}
+        result = qr.Analysis(need=qr.Counter({"PostgreSQL": 1}), themes=set(), angles={}, summaries=[], ranked=[],
+                             skills=skills)
+        text = "\n".join(br.render_skills(result, "We need PostgreSQL, stream processing and strong stakeholders."))
+        self.assertIn("- **Data:** PostgreSQL, Stream Processing Systems", text)
+        self.assertIn("- **Leadership:** Stakeholder management", text)
+        for left_out in ("Hadoop", "Collaborative"):
+            self.assertNotIn(left_out, text)
+        self.assertLess(text.index("Data"), text.index("Leadership"))
+
+    def test_same_result_told_twice_is_a_repeat_but_other_results_sharing_a_number_are_not(self):
+        def bullet(text, metrics):
+            return {"text": text, "metrics": metrics}
+        first = bullet("Built request throttling comparing Redis and Memcached rate limits; cut costs by 70 percent.", [])
+        again = bullet("Evaluated rate limits in Redis versus Memcached, delivering 70% cost savings.", ["70%"])
+        other = bullet("Migrated the billing platform to Kubernetes and reduced release time by 70%.", ["70%"])
+        self.assertTrue(br.too_similar(again, [first]))
+        self.assertFalse(br.too_similar(other, [first]))
+
+    def test_skills_section_caps_each_group(self):
+        names = [{"name": f"Skill{n}", "sources": []} for n in range(15)]
+        result = qr.Analysis(need=qr.Counter({s["name"]: 1 for s in names}), themes=set(), angles={}, summaries=[],
+                             ranked=[], skills={"groups": {"Data": names}})
+        line = br.render_skills(result, "")[2]
+        self.assertEqual(line.count("Skill"), br.SKILL_CAP)
+
     def test_header_and_title_override(self):
         md, notes = br.build(JD, br.BuildOptions(titles={"acme-corp": "Chief Cloud Wizard"}), header="# Pat Example\nSomewhere")
         self.assertTrue(md.startswith("# Pat Example\nSomewhere"))
@@ -149,16 +179,14 @@ class BuildTests(PipelineCase):
         self.assertEqual(br.fmt_date("2021-03"), "03/2021")
         self.assertEqual(br.clean_education({"education": ["● BS Computer Science, 2001 - 2005", "BS"]}), ["BS Computer Science", "BS"])
 
-    def test_cli_writes_file_and_creates_header_template(self):
+    def test_cli_writes_file_and_says_how_to_save_the_header(self):
         jd, out = self.tmp / "jd2.txt", self.tmp / "out" / "r.md"
         jd.write_text(JD, encoding="utf-8")
-        header = self.tmp / "header.md"
-        with mock.patch.object(br, "header_file", return_value=header):
+        with mock.patch.object(br, "stored_header", return_value=None):
             code, text, _ = self.cli(br.main, str(jd), "-o", str(out))
         self.assertEqual(code, 0)
         self.assertTrue(out.read_text(encoding="utf-8").startswith("# Your Name"))
-        self.assertTrue(header.exists())
-        self.assertIn("Created header.md template", text)
+        self.assertIn("profile header set NAME CONTACT_LINE", text)
         self.assertIn("Opening summary:", text)
 
 

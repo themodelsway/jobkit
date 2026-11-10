@@ -17,7 +17,7 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
    The command prints one line:
    - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
    - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
-     > I need to set up a small helper on your computer so I can keep your resumes and practice notes. It takes about a minute and downloads one standard tool from astral.sh. Your resumes and notes are kept in a folder on your own computer. Is that OK?
+     > I need to install the Jobkit engine, so that your resumes, tutor and proactive day are organized and used by your agent. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
      - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
        > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
 
@@ -131,5 +131,5 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 - The stored data is opened only through the commands in this skill, never directly. To show the user their data, read it with `jobkit export` and summarise it in plain words.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
-- Never store a phone number, email address or LinkedIn link in the data. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit/output`).
+- Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit/output`).
 <!-- /shared:rules -->

@@ -14,7 +14,7 @@ The system SHALL keep all user data in one database file, `data/jobkit.db`, unde
 
 #### Scenario: Overridden location
 - **WHEN** `JOBKIT_HOME` names another folder
-- **THEN** that folder is used for the database, backups, output and `header.md`
+- **THEN** that folder is used for the database, backups and output
 
 ### Requirement: Init creates the home
 `jobkit init` SHALL create the home folder layout and an empty database at the current schema version, and SHALL leave an existing database and its data unchanged.

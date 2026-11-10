@@ -1,6 +1,6 @@
 # jobkit data structures
 
-All of jobkit's data is in one SQLite database under the home folder, which is outside the repository, so nothing personal is committed. This page describes the tables, the shape of each record and which command writes it. Examples use made-up values. The commands are in [cli-manual.md](cli-manual.md).
+All of jobkit's data is in one SQLite database under the home folder, which is outside the repository, so nothing personal is committed. This page describes the tables, the shape of each record and which command writes it. Examples use made-up values. The commands are in [manual.md](../manual.md).
 
 Rules that hold for all data:
 
@@ -12,7 +12,7 @@ Rules that hold for all data:
 | Where | Holds | Written by |
 |---|---|---|
 | the database (`data/jobkit.db`) | settings, resume data, curation, stories, drill cards, leadership answers, sessions | `profile`, `process-resumes`, `prep`, `arch`, `lead`, `sessions` |
-| `profile/header.md` | your name and contact line for built resumes (a text file you write) | you |
+| `header` setting | your name and contact line for built resumes (saved with `profile header set`) | you |
 | `output/` | raw extracted text and built resumes | `process-resumes`, `build-resume` |
 | `backup/` | database backups | `jobkit backup` |
 
@@ -22,7 +22,7 @@ Rules that hold for all data:
 
 All data lives in one SQLite database under the home folder (`~/.jobkit`, or `.jobkit` in your user folder on Windows, or `JOBKIT_HOME`). It is changed only by the commands, and you look at it with `jobkit export`. Each command's changes are stored together or not at all.
 
-A record table keeps the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a link, a sort or filter, a listing); every other field is in `body` only, and a field that is a column is not repeated in `body`. So each field has one stored value, and every command that shows it shows the same value. The one exception is `session_log`, whose entries can never be changed, so its copies cannot disagree. The shapes below are what `jobkit export` shows, with the column fields and `body` joined. Confidence is checked when written: only 0, 1 or 2 is stored. The schema version is in `PRAGMA user_version`; `jobkit status` shows it. Step 11 moved every field to one place and removed the `bullet_source` table; an upgrade checks that the copies agree first, and stops without changing anything if they do not.
+A record table keeps the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a link, a sort or filter, a listing); every other field is in `body` only, and a field that is a column is not repeated in `body`. So each field has one stored value, and every command that shows it shows the same value. The one exception is `session_log`, whose entries can never be changed, so its copies cannot disagree. The shapes below are what `jobkit export` shows, with the column fields and `body` joined. Confidence is checked when written: only 0, 1 or 2 is stored. The schema version is in `PRAGMA user_version`; `jobkit status` shows it. Step 12 added the `term` table. Step 11 moved every field to one place and removed the `bullet_source` table; an upgrade checks that the copies agree first, and stops without changing anything if they do not.
 
 | Table | One row is | Notes |
 |---|---|---|
@@ -45,6 +45,7 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | `lead_company_fact` | factual scope for one employer | `company_id`; `body` has team sizes, budget and similar facts you stated. |
 | `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `tier1_services`, `reassess_days`) and its JSON `value`. |
 | `employer` | an employer found in the resumes | `id`, `position`; `body` has `name`, the match `regex` and, after a merge, `aliases`. Changed with `profile companies rename` and `merge`. |
+| `term` | a personal word that must never be committed | `text` (unique, any letter case), `kind`, `match` (`word`, `phrase`, `regex`), `ignored` (1 hides a derived term of that text). Only what has no other home is stored: products, clients, patterns and ignores. Your name, header contact details, resume folder and employer names are read from the `setting` and `employer` tables when checking. |
 | `open_item` | an open item or data note | `id`; `body` has `status` (`open`, `done`) and `text`. |
 | `company` | an employer in the resume data | `id`, `position`; `body` has `name`, `aliases`. Removing a company removes its roles and bullets. |
 | `role` | one period at a company | `company_id`, `position`; `body` has `start`, `end`, `titles`, `subtitles`, `clients`, `sources`. |
@@ -70,8 +71,11 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 ### Employers (`employer`; export kind `employers`)
 `{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found on the first scan. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
 
-### `profile/header.md` (a file in the home folder)
-Name and contact line printed at the top of built resumes. Plain text, not JSON. Contact details live only here.
+### `header` (a setting)
+Name and contact line printed at the top of built resumes, saved with `profile header set NAME CONTACT_LINE` and shown with `profile header`. Contact details live only here, never in the resume data. An older `profile/header.md` file is still read when no header is saved.
+
+### Personal terms (`term`; export kind `terms`)
+`[ { "text": "acme.ai", "kind": "product", "match": "phrase", "ignored": 0 } ]`. Managed with `profile terms`; see the [manual](../manual.md#for-contributors-keeping-personal-data-out-of-commits).
 
 ### Open items (`open_item`; export kind `open-items`)
 `[ { "id": 1, "text": "Confirm team size", "status": "open" } ]`. Status is `open` or `done`.
@@ -336,7 +340,7 @@ Stored results are shared by every app that uses the same jobkit home: `match-sc
 
 | Where | Meaning |
 |---|---|
-| `profile/header.md` | The name and contact line printed at the top of built resumes. Contact details live only here. |
+| `header` setting | The name and contact line printed at the top of built resumes. Contact details live only here. |
 | `profile/match-bands.json` | Your own level bands for `match-score` (optional; see Match scores). |
 | `output/` | Raw extracted resume text (`process-resumes`) and built resumes (`build-resume`). |
 | `backup/` | `jobkit backup` copies of the database. |

@@ -17,7 +17,7 @@ Committed files SHALL NOT contain the user's name, employers, folder paths or fi
 - **THEN** it is written under the home folder and nothing is added inside the repository
 
 ### Requirement: No contact info in resume data
-The system SHALL NOT store phone, email or LinkedIn details in the resume data. Name and contact lines for generated resumes SHALL come from `profile/header.md` in the home folder.
+The system SHALL NOT store phone, email or LinkedIn details in the resume data. Name and contact lines for generated resumes SHALL come from the saved header (`profile header set`), kept apart from the resume data; an older `profile/header.md` file is still read when no header is saved.
 
 #### Scenario: Contact check
 - **WHEN** the stored resume data is searched for `@` or phone patterns
@@ -61,6 +61,20 @@ The personal-term check SHALL report a skip with the reason when the profile pro
 #### Scenario: No profile
 - **WHEN** the profile is absent
 - **THEN** the test output shows the personal-term check as skipped and says why
+
+### Requirement: The staged check reads every added or moved file
+`profile terms check --staged` SHALL read the staged content of every added, copied, modified, renamed (under its new name) or type-changed file, so a renamed file that gains a personal term is not skipped.
+
+#### Scenario: Renamed file with a new term
+- **WHEN** a file is renamed, a personal term is added to it, and it is staged
+- **THEN** the check reports the term, even when the working copy has since been cleaned
+
+### Requirement: Tests never change the real database
+A test that checks the real home SHALL run against a consistent copy of the database, never against the original, because every command upgrades the database it opens. The original SHALL keep its schema version and bytes.
+
+#### Scenario: Older database
+- **WHEN** the real-home personal-term test runs against a database from the previous schema version
+- **THEN** that database is still at the previous version afterwards and its own release can still open it
 
 ### Requirement: Resume folder immutability is tested
 The test suite SHALL show that a full rebuild, including pruning, leaves every file in the resume folder unchanged in content, name and modification time, and adds no file there.

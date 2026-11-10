@@ -19,6 +19,8 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 run "gitleaks" gitleaks git --pre-commit --staged --redact --no-banner
+# Your own personal terms (name, employers, products...) must not be in what is staged; skipped without a database.
+run "personal terms" "$PY" -m jobkit.user.profile terms check --staged
 run "ruff"  "$PY" -m ruff check src tests .githooks
 run "pyright" "$PY" -m pyright
 run "tests" "$PY" -m unittest discover -s tests -t .

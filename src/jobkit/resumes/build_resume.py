@@ -10,7 +10,7 @@
 Picks, from the stored resume data: the best-fitting opening summary, the best bullets for each company
 (same scoring as `query-resume for-jd`), the skills the JD asks for (grouped), certifications and education.
 
-Name and contact lines are NOT stored in resume-data/. They come from profile/header.md; a template is created on first run. Output goes to output/.
+Name and contact lines are NOT stored in the resume data. They come from the saved header (`profile header set`); output goes to output/.
 """
 from __future__ import annotations
 
@@ -28,7 +28,9 @@ from jobkit import common
 from jobkit.resumes import evidence
 from jobkit.resumes import parse_resume as pr
 from jobkit.resumes import query_resume as qr
-from jobkit.resumes.resume_data import Bullet, Company, ResumeProfile, Role
+from jobkit.resumes import lines as line_rules
+from jobkit.resumes import resume_data as rd
+from jobkit.resumes.resume_data import LINE_LIMIT, LINE_WARN, SUMMARY_LIMIT, Bullet, Company, ResumeProfile, Role, SkillEntry, Summary
 from jobkit.user import profile as up
 
 OUTPUT_DIR: Path = common.output_dir() / "resumes"
@@ -39,6 +41,9 @@ OLD_YEARS: Final[int] = 8            # companies that ended more than this many 
 OLD_COMPANY_BULLETS: Final[int] = 2
 SIMILARITY_LIMIT: Final[float] = 0.3
 SAME_FIGURE_SIMILARITY: Final[float] = 0.2   # a shared figure only means "same claim" when the wording also overlaps
+SAME_FIGURE_WORDS: Final[int] = 4             # ...or this many shared words, which is the same topic told twice
+REWORDED_SHARE: Final[float] = 0.5            # a line whose words are at least this share inside another line is a rewording
+REWORDED_WORDS: Final[int] = 5                # ...and shares at least this many words with it
 REVIEW_CHECKLIST: Final[str] = ("This is a draft. Before sending, check: job titles and dates, every claim is yours "
                                 "and still true, the name and contact lines, qualifications, and how it looks when opened.")
 
@@ -72,11 +77,12 @@ class BuildNotes:  # pylint: disable=too-many-instance-attributes
     possible: list[tuple[str, str]] = field(default_factory=list)
     set_aside: list[str] = field(default_factory=list)
     no_bullets: list[str] = field(default_factory=list)
+    too_long: list[str] = field(default_factory=list)
 
 
-def header_file() -> Path:
-    """Where the name and contact lines live (profile/header.md)."""
-    return up.header_path()
+def stored_header() -> str | None:
+    """The name and contact lines saved with `profile header set` (None when none is saved)."""
+    return up.header_text()
 
 
 def fmt_date(date: str | None) -> str:
@@ -134,15 +140,31 @@ def relevant_projects(profile: ResumeProfile, need: Iterable[str]) -> list[str]:
     return [p for p in profile.get("projects", []) if any(pr.term_found(skill, p) for skill in skills)]
 
 
+def figures(bullet: Bullet) -> set[str]:
+    """The bullet's figures in one spelling, so "70 percent" and "70%" are the same figure."""
+    found = {re.sub(r"\s+", "", m.lower().replace("percent", "%")) for m in bullet["metrics"]}
+    return found | {f"{n}%" for n in re.findall(r"(\d+(?:\.\d+)?)\s*(?:%|percent)", bullet["text"], re.I)}
+
+
+def plain_words(text: str) -> set[str]:
+    """Content words with hyphens and dashes removed, so "Rails-based" and "Rails–based" are the same word."""
+    return qr.words(re.sub(r"[\-\u2010-\u2015]", "", text))
+
+
 def too_similar(bullet: Bullet, chosen: Iterable[Bullet]) -> bool:
     """True if the bullet repeats a claim already chosen: mostly the same words, or the same figure with some
-    shared wording. Two different results that happen to share a number (20% and 20%) are both kept."""
-    words = qr.words(bullet["text"])
+    shared wording (a fifth of the words, or SAME_FIGURE_WORDS words). Two different results that happen to
+    share a number (20% and 20%) are both kept."""
+    words = plain_words(bullet["text"])
     for other in chosen:
-        other_words = qr.words(other["text"])
+        other_words = plain_words(other["text"])
+        shared = len(words & other_words)
+        if shared >= REWORDED_WORDS and shared / max(1, min(len(words), len(other_words))) >= REWORDED_SHARE:
+            return True
         overlap = len(words & other_words) / max(1, len(words | other_words))
-        shared_figure = bool(set(bullet["metrics"]) & set(other["metrics"]))
-        if overlap >= SIMILARITY_LIMIT or (shared_figure and overlap >= SAME_FIGURE_SIMILARITY):
+        shared_figure = bool(figures(bullet) & figures(other))
+        same_topic = len(words & other_words) >= SAME_FIGURE_WORDS
+        if overlap >= SIMILARITY_LIMIT or (shared_figure and (overlap >= SAME_FIGURE_SIMILARITY or same_topic)):
             return True
     return False
 
@@ -156,22 +178,67 @@ def pick(candidates: Iterable[Bullet], n: int, already: Sequence[Bullet] = ()) -
     return chosen
 
 
+def best_summary(result: qr.Analysis) -> Summary | None:
+    """The best-fitting summary that is within SUMMARY_LIMIT characters; when none is, the best-fitting one."""
+    fitting = [s for s in result.summaries if len(s["text"]) <= SUMMARY_LIMIT]
+    return (fitting or result.summaries or [None])[0]
+
+
+YEARS_PHRASE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?P<n>\d{1,2}\+?)(?P<tail>\s+years)(?P<kind>\s+of\s+(?P<what>(?:[\w-]+\s+){0,3}?)experience)?", re.I)
+TOTAL_WORDS: Final[frozenset[str]] = frozenset({
+    "professional", "industry", "total", "combined", "progressive", "hands-on", "related", "relevant", "software",
+    "it", "technology", "technical", "engineering", "leadership", "management", "work", "working"})
+
+
+def is_total(match: re.Match[str]) -> bool:
+    """False for "N years of <something specific> experience" (a skill's own duration, not the whole career)."""
+    if not match["kind"]:
+        return True
+    return all(w.lower() in TOTAL_WORDS for w in match["what"].split())
+
+
+def with_years(text: str, years: int | None) -> str:
+    """The summary with its career-length phrase ("N years" / "N+ years") changed to the user's own figure "YEARS+".
+    Only the longest duration that is not a specific skill's ("5 years of Kubernetes experience") is changed; a
+    summary with no such phrase is left as it is."""
+    totals = [m for m in YEARS_PHRASE.finditer(text) if is_total(m)] if years else []
+    if not totals:
+        return text
+    top = max(totals, key=lambda m: int(m["n"].rstrip("+")))
+    return f"{text[:top.start('n')]}{years}+{text[top.end('n'):]}"
+
+
 def render_summary(result: qr.Analysis) -> list[str]:
-    """The opening summary section (best-fitting summary, with the headline in bold)."""
-    if not result.summaries:
-        return []
-    headline = best_headline(result)
-    lead = f"**{headline}**. " if headline else ""
-    return ["## Summary", "", lead + result.summaries[0]["text"], ""]
+    """The opening summary section: one summary of at most SUMMARY_LIMIT characters, with no job title in front
+    (the titles are in the experience section) and the years of experience the user gave."""
+    summary = best_summary(result)
+    return ["## Summary", "", with_years(summary["text"], up.years_experience()), ""] if summary else []
 
 
-def best_headline(result: qr.Analysis) -> str | None:
-    """The stored headline that shares the most words with the JD's skills and themes; None when none does,
-    so an unrelated headline is not shown."""
-    wanted = {w for term in [*result.need, *result.themes] for w in qr.words(term)}
-    scored = [(len(qr.words(h) & wanted), h) for h in result.profile.get("headlines") or []]
-    best = max(scored, default=(0, None), key=lambda pair: pair[0])
-    return best[1] if best[0] else None
+def fitting_text(bullet: Bullet, approved: Mapping[str, str]) -> str:
+    """The wording to print for a line, within LINE_LIMIT characters when possible and always the user's own:
+    their approved shorter wording (only while it still passes the checks against the stored line), else the line itself when it fits, else the longest stored wording of
+    the same line that fits, else the line as stored (the build report lists it as too long)."""
+    if approved.get(bullet["id"]) and not line_rules.problems(bullet["text"], approved[bullet["id"]])[0]:
+        return approved[bullet["id"]]
+    options = [bullet["text"], *bullet.get("variants", []), *(w for ws in bullet.get("wordings", {}).values() for w in ws)]
+    fits = [o for o in options if len(o) <= LINE_LIMIT]
+    return bullet["text"] if len(bullet["text"]) <= LINE_LIMIT else max(fits, key=len, default=bullet["text"])
+
+
+def approved_wordings() -> dict[str, str]:
+    """{bullet id: the shorter wording the user approved}."""
+    return dict(rd.load_curated().get("short_wording", {}))
+
+
+def printed(bullet: Bullet, approved: Mapping[str, str]) -> Bullet:
+    """The line as the resume prints it: the wording that is used, and only the skill tags whose words are still in
+    it (a tag is no proof that a requirement is visible once the wording that named it was shortened away)."""
+    text = fitting_text(bullet, approved)
+    if text == bullet["text"]:
+        return bullet
+    return {**bullet, "text": text, "skills": [s for s in bullet["skills"] if pr.term_found(s, text)]}
 
 
 def bullet_cap(company: Company, options: BuildOptions) -> int:
@@ -242,10 +309,11 @@ def set_aside_lines(companies: Iterable[Company], need: Iterable[str],
 
 
 def shown_skills(chosen: Sequence[tuple[Company, list[Bullet]]], need: Iterable[str] = (),
-                 terms: Mapping[str, str] | None = None) -> set[str]:
-    """The skills that the chosen bullets show, including requirements named in a bullet's words; a tag on a line
-    that denies using that skill does not count."""
-    bullets = [b for _, picks in chosen for b in picks]
+                 terms: Mapping[str, str] | None = None, approved: Mapping[str, str] | None = None) -> set[str]:
+    """The skills that the printed lines show (their wording as it will be printed), including requirements named
+    in a line's words; a tag on a line that denies using that skill does not count."""
+    wording = approved_wordings() if approved is None else approved
+    bullets = [printed(b, wording) for _, picks in chosen for b in picks]
     tagged = {skill for b in bullets for skill in b["skills"] if shows(b, skill, terms)}
     return tagged | {n for n in need if any(shows(b, n, terms) for b in bullets)}
 
@@ -257,13 +325,15 @@ def cover_gaps(result: qr.Analysis, chosen: list[tuple[Company, list[Bullet]]], 
     nothing else shows. The most-asked skills go first; a bullet that repeats a claim already chosen is not used."""
     room = {company["id"]: bullet_cap(company, options) for company, _ in chosen}
     terms = qr.vocabulary(result.skills)
+    approved = approved_wordings()
     picks_of = {company["id"]: picks for company, picks in chosen}
     for skill, _count in result.need.most_common():
-        if skill not in result.covered or skill in shown_skills(chosen, result.need, terms):
+        if skill not in result.covered or skill in shown_skills(chosen, result.need, terms, approved):
             continue
         for company, scored in result.ranked:
             used = [b for _, picks in chosen for b in picks]
-            pool = [item.bullet for item in scored if shows(item.bullet, skill, terms) and item.bullet not in used
+            pool = [item.bullet for item in scored if shows(printed(item.bullet, approved), skill, terms)
+                    and item.bullet not in used
                     and not too_similar(item.bullet, used)]
             picks = picks_of[company["id"]]
             if not pool:
@@ -272,7 +342,8 @@ def cover_gaps(result: qr.Analysis, chosen: list[tuple[Company, list[Bullet]]], 
                 picks.append(pool[0])
                 break
             rest = [(c, p[:-1] if p is picks else p) for c, p in chosen]
-            if not {n for n in result.need if shows(picks[-1], n, terms)} - shown_skills(rest, result.need, terms):
+            last = printed(picks[-1], approved)
+            if not {n for n in result.need if shows(last, n, terms)} - shown_skills(rest, result.need, terms, approved):
                 picks[-1] = pool[0]
                 break
 
@@ -281,6 +352,7 @@ def render_experience(result: qr.Analysis, options: BuildOptions,
                       chosen: Sequence[tuple[Company, list[Bullet]]] | None = None) -> list[str]:
     """The experience section: each company once, then each role with its own title and dates and its bullets."""
     lines = ["## Experience", ""]
+    approved = approved_wordings()
     for company, picks in chosen if chosen is not None else choose_experience(result, options):
         latest = roles_newest_first(company)[0] if company["roles"] else None
         if not picks and latest is None:
@@ -290,16 +362,54 @@ def render_experience(result: qr.Analysis, options: BuildOptions,
         for role, group in groups:
             override = options.titles.get(company["id"]) if role is latest else None
             lines += [f"#### {role_line(role, override)}", ""]
-            lines += [f"- {b['text']}" for b in group] + [""]
+            lines += [f"- {fitting_text(b, approved)}" for b in group] + [""]
     return lines
 
 
-def render_skills(result: qr.Analysis) -> list[str]:
-    """The skills the JD asks for, by group."""
-    groups = {g: [item["name"] for item in items if item["name"] in result.need]
-              for g, items in result.skills["groups"].items()}
-    shown = {g: names for g, names in groups.items() if names}
-    return ["## Skills", ""] + [f"- **{g}:** {', '.join(names)}" for g, names in shown.items()] + [""] if shown else []
+SKILL_CAP: Final[int] = 10                    # most skills shown per group
+ECHO_MIN_LENGTH: Final[int] = 5               # a shared word this long (or longer) counts as an echo
+ECHO_IGNORED: Final[frozenset[str]] = frozenset({
+    "building", "strategic", "creative", "problem", "solving", "collaborative", "impactful", "allocation",
+    "growth", "mindset", "process", "design", "execution", "delivery", "continuous", "improvement", "cloud",
+    "systems", "software", "platform", "business", "management", "team", "data", "model", "models", "large", "language", "engineering"})
+
+
+def stem(word: str) -> str:
+    """A word without a plural or -ing ending, so "stakeholders" and "stakeholder" compare equal."""
+    return re.sub(r"(ing|s)$", "", word.lower())
+
+
+def echoed(name: str, posting_words: set[str]) -> bool:
+    """True when a stored skill shares a meaningful word with the posting (Stakeholder management / "stakeholders")."""
+    posting = {stem(w.strip(".-")) for w in posting_words}   # `words` keeps a sentence's final full stop
+    return any(len(w) >= ECHO_MIN_LENGTH and w.lower() not in ECHO_IGNORED and stem(w) in posting
+               for w in re.findall(r"[A-Za-z]+", name))
+
+
+def skill_tier(item: SkillEntry, result: qr.Analysis, posting: set[str]) -> int | None:
+    """0 the posting names it, 1 it shares a meaningful word with the posting, None not shown."""
+    name = item["name"]
+    if name in result.need:
+        return 0
+    if echoed(name, posting):
+        return 1
+    return None
+
+
+def render_skills(result: qr.Analysis, posting: str = "") -> list[str]:
+    """The skills that matter for this posting, by group: the ones it names first, then skills that share a
+    meaningful word with it; at most SKILL_CAP per group, the best-evidenced first, groups with the most posting skills first."""
+    groups: dict[str, list[tuple[int, str]]] = {}
+    posting_words = qr.words(posting)
+    for group, items in result.skills["groups"].items():
+        ranked = [(tier, -len(item.get("sources", [])), item["name"]) for item in items
+                  if (tier := skill_tier(item, result, posting_words)) is not None]
+        if ranked:
+            groups[group] = [(t, n) for t, _, n in sorted(ranked)][:SKILL_CAP]
+    order = sorted(groups, key=lambda g: (-sum(1 for t, _ in groups[g] if t == 0), g))
+    if not order:
+        return []
+    return ["## Skills", ""] + [f"- **{g}:** {', '.join(n for _, n in groups[g])}" for g in order] + [""]
 
 
 def render_credentials(profile: ResumeProfile, need: Iterable[str] = ()) -> list[str]:
@@ -317,24 +427,42 @@ def render_credentials(profile: ResumeProfile, need: Iterable[str] = ()) -> list
     return lines
 
 
+def too_long_lines(chosen: Sequence[tuple[Company, list[Bullet]]], summary: Summary | None) -> list[str]:
+    """One note for each printed line (and the summary) that is over its limit, with the id to curate it by."""
+    approved = approved_wordings()
+    notes = [f"{b['id']} ({len(text)} characters{', FAR OVER' if len(text) > LINE_WARN else ''}, {company['name']}): {text}"
+             for company, picks in chosen for b in picks if len(text := fitting_text(b, approved)) > LINE_LIMIT]
+    notes += [f"{b['id']} (approved wording ignored, it no longer keeps this line's figures or fits {LINE_LIMIT} characters): {b['text']}"
+              for _, picks in chosen for b in picks
+              if approved.get(b["id"]) and line_rules.problems(b["text"], approved[b["id"]])[0]]
+    shown = with_years(summary["text"], up.years_experience()) if summary else ""
+    if summary and len(shown) > SUMMARY_LIMIT:
+        notes.append(f"{summary['id']} (summary, {len(shown)} characters, limit {SUMMARY_LIMIT}): {shown}")
+    return notes
+
+
 def build(text: str, options: BuildOptions, header: str | None) -> tuple[str, BuildNotes]:
     """Markdown resume for the job description; `header` is the name/contact text (None: use the template)."""
-    result = qr.analyze(text, (), options.include_review, options.recency, options.requirements)
+    approved = approved_wordings()
+    result = qr.analyze(text, (), options.include_review, options.recency, options.requirements,
+                        lambda b: printed(b, approved))
     lines = [(header or HEADER_TEMPLATE).rstrip(), ""]
     chosen = choose_experience(result, options)
-    lines += render_summary(result) + render_experience(result, options, chosen) + render_skills(result)
+    lines += render_summary(result) + render_experience(result, options, chosen) + render_skills(result, text)
     lines += render_credentials(result.profile, result.need)
     terms = qr.vocabulary(result.skills)
     shown = shown_skills(chosen, result.need, terms)
     missing = [s for s in result.need if s not in result.covered]
-    notes = BuildNotes(used_summary=result.summaries[0]["id"] if result.summaries else None,
+    summary = best_summary(result)
+    notes = BuildNotes(used_summary=summary["id"] if summary else None,
                        missing=missing, hidden=result.hidden, header_missing=header is None,
                        selected=[b["id"] for _, picks in chosen for b in picks],
                        not_shown=[s for s in result.need if s in result.covered and s not in shown],
                        shown_count=len([s for s in result.need if s in shown]), need_count=len(result.need),
                        unplaced=unplaced(chosen), requirements_given=bool(options.requirements), possible=result.possible,
                        set_aside=set_aside_lines((company for company, _ in result.ranked), result.need, terms),
-                       no_bullets=[company["name"] for company, picks in chosen if not picks and company["roles"]])
+                       no_bullets=[company["name"] for company, picks in chosen if not picks and company["roles"]],
+                       too_long=too_long_lines(chosen, summary))
     return "\n".join(lines).rstrip() + "\n", notes
 
 
@@ -390,8 +518,8 @@ def cmd_approve(args: argparse.Namespace) -> None:
     resume = Path(args.approve)
     review_status(resume)                                   # fails when the file is missing
     if HEADER_TEMPLATE.splitlines()[0] in resume.read_text(encoding="utf-8").splitlines():
-        raise common.ToolError("This resume still has the placeholder name and contact line. Fill in header.md, "
-                               "build again, then approve.")
+        raise common.ToolError("This resume still has the placeholder name and contact line. Save them with "
+                               "`profile header set NAME CONTACT_LINE`, build again, then approve.")
     path = record_path(resume)
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
@@ -422,8 +550,7 @@ def cmd_build(args: argparse.Namespace) -> None:
 def build_and_write(args: argparse.Namespace) -> None:
     """Build the resume for the job description in `args.jd`, write it with its record, and report gaps."""
     text = common.read_text_arg(args.jd)
-    header_path = header_file()
-    header = header_path.read_text(encoding="utf-8") if header_path.exists() else None
+    header = stored_header()
     options = BuildOptions(args.top, dict(t.split("=", 1) for t in args.title), args.include_review, args.recency,
                            args.max_bullets, tuple(args.requirement))
     markdown, notes = build(text, options, header)
@@ -435,9 +562,8 @@ def build_and_write(args: argparse.Namespace) -> None:
     record = write_record(out, args, text, notes)
 
     if notes.header_missing:
-        header_path.write_text(HEADER_TEMPLATE, encoding="utf-8")
-        print(f"Created {header_path.name} template: put your name and contact line there, then re-run "
-              "(this draft still has the placeholder name and contact line).")
+        print("No name and contact line is saved yet, so this draft has a placeholder. Save them with "
+              "`profile header set NAME CONTACT_LINE`, then build again.")
     print(f"Wrote {out} (record: {record.name})")
     print(f"Opening summary: {notes.used_summary}")
     print("JD skills with no supporting bullet: " + (", ".join(notes.missing) or "none"))
@@ -457,6 +583,9 @@ def build_and_write(args: argparse.Namespace) -> None:
               "Check these employers.")
     if notes.hidden:
         print(f"{notes.hidden} bullet(s) flagged needs_review were left out.")
+    if notes.too_long:
+        print(f"Lines over the {LINE_LIMIT}-character limit (say how many are long and stop there: offer shorter wording only if the user asks; never change a stored line):")
+        print("\n".join(f"  - {note}" for note in notes.too_long))
     print(REVIEW_CHECKLIST)
     print(f"Status: draft. After you have reviewed it: build-resume --approve {out}")
 

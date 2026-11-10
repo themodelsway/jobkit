@@ -64,3 +64,22 @@ def replace_open_items(items: Sequence[Mapping[str, Any]]) -> None:
             (item_id,), body = store.split(item, ("id",))
             rows.append((item_id, body))
         conn.executemany("INSERT INTO open_item(id, body) VALUES(?,?)", rows)
+
+
+def load_terms() -> list[Record]:
+    """The stored terms (text, kind, match, ignored), by text."""
+    with store.transaction(write=False) as conn:
+        return [dict(r) for r in conn.execute("SELECT text, kind, match, ignored FROM term ORDER BY text COLLATE NOCASE")]
+
+
+def save_term(text: str, kind: str, match: str, ignored: bool) -> None:
+    """Add a term, or replace the one with the same text (any letter case)."""
+    with store.transaction() as conn:
+        conn.execute("INSERT OR REPLACE INTO term(text, kind, match, ignored) VALUES(?,?,?,?)",
+                     (text, kind, match, int(ignored)))
+
+
+def delete_term(text: str) -> bool:
+    """Remove a stored term; False when there was none."""
+    with store.transaction() as conn:
+        return conn.execute("DELETE FROM term WHERE text = ?", (text,)).rowcount > 0
