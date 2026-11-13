@@ -2,9 +2,9 @@
 import unittest
 from decimal import Decimal
 
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_flags as mfl
-from jobkit.resumes import match_request as mr
+from jk.resumes import match_engine as me
+from jk.resumes import match_flags as mfl
+from jk.resumes import match_request as mr
 from tests.resumes.match_fixtures import facts, request
 
 FACTS = facts()

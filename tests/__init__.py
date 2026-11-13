@@ -9,6 +9,6 @@ _HOME = tempfile.mkdtemp(prefix="jobkit-test-home-")
 os.environ["JOBKIT_HOME"] = _HOME
 atexit.register(shutil.rmtree, _HOME, True)
 
-from jobkit import store  # noqa: E402  # pylint: disable=wrong-import-position  (after the environment is set)
+from jk import store  # noqa: E402  # pylint: disable=wrong-import-position  (after the environment is set)
 
 store.create()

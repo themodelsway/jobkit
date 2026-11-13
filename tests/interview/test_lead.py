@@ -1,5 +1,5 @@
 """Tests for the `lead` command."""
-from jobkit.interview import lead, readiness, tables
+from jk.interview import lead, readiness, tables
 from tests.interview.test_sessions import SessionCase
 
 

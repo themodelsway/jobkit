@@ -251,7 +251,7 @@ One STAR example per employer, for the three most recent employers.
 
 ---
 
-## Preparation planner (`jobkit.interview.prep_plan`, not yet used by any command)
+## Preparation planner (`jk.interview.prep_plan`, not yet used by any command)
 
 A pure function over plain records: `plan(snapshot, today, focus=(), reassess_days=30)` returns ordered, explained actions. It reads no database; the caller builds the `Snapshot`. The date is passed in, so the same input gives the same plan.
 

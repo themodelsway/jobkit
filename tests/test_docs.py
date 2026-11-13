@@ -6,14 +6,14 @@ import unittest
 from collections.abc import Iterator
 from pathlib import Path
 
-from jobkit import records, store
+from jk import records, store
 from tests.test_cli_contract import TOOLS
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
-COMMANDS = {"jobkit": "jobkit.admin", "profile": "jobkit.user.profile", "process-resumes": "jobkit.resumes.process_resumes",
-            "query-resume": "jobkit.resumes.query_resume", "build-resume": "jobkit.resumes.build_resume", "resume-lines": "jobkit.resumes.lines", "match-score": "jobkit.resumes.match_score",
-            "arch": "jobkit.interview.arch", "lead": "jobkit.interview.lead", "prep": "jobkit.interview.prep",
-            "sessions": "jobkit.interview.sessions", "readiness": "jobkit.interview.readiness"}
+COMMANDS = {"jobkit": "jk.admin", "profile": "jk.user.profile", "process-resumes": "jk.resumes.process_resumes",
+            "query-resume": "jk.resumes.query_resume", "build-resume": "jk.resumes.build_resume", "resume-lines": "jk.resumes.lines", "match-score": "jk.resumes.match_score",
+            "arch": "jk.interview.arch", "lead": "jk.interview.lead", "prep": "jk.interview.prep",
+            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness"}
 
 
 def walk(parser: argparse.ArgumentParser, path: list[str]) -> Iterator[tuple[list[str], list[str]]]:

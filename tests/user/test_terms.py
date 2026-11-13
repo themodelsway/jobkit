@@ -1,11 +1,11 @@
-"""Tests for src/jobkit/user/terms.py (personal terms and the commit scan) in a temp home folder."""
+"""Tests for plugins/jobkit/src/jk/user/terms.py (personal terms and the commit scan) in a temp home folder."""
 import contextlib
 import io
 import subprocess
 import unittest
 
-from jobkit import store
-from jobkit.user import profile as up, tables as utables, terms
+from jk import store
+from jk.user import profile as up, tables as utables, terms
 from tests.support import HomeCase
 
 HEADER = "# Pat Example\nCity, ST | 5550001234 | pat@example.org | linkedin.com/in/patexample\n"

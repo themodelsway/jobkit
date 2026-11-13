@@ -2,7 +2,7 @@
 import copy
 from typing import Any
 
-from jobkit.resumes import match_facts as mf
+from jk.resumes import match_facts as mf
 
 
 def bullet(bid, text, skills=()):

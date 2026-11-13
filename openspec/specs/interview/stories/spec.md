@@ -1,7 +1,7 @@
 # interview/stories Specification
 
 ## Purpose
-Hold STAR stories and the real engagements behind them in the database, with every fact and number carrying a basis. Implemented in `src/jobkit/interview/prep.py` and `story_model.py` (pure rules).
+Hold STAR stories and the real engagements behind them in the database, with every fact and number carrying a basis. Implemented in `plugins/jobkit/src/jk/interview/prep.py` and `story_model.py` (pure rules).
 
 ## Requirements
 

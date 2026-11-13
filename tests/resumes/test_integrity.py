@@ -1,5 +1,5 @@
 """Data-integrity tests: pruning on rebuild, orphaned curation, empty-extraction causes, and the privacy rules on
-generated data and on the resume folder. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+generated data and on the resume folder. Run: uv run python -m unittest discover -s tests -t ."""
 import contextlib
 import hashlib
 import io
@@ -12,8 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from jobkit import common
-from jobkit.resumes import extract, match_facts as mf, parse_resume as pr, process_resumes as proc, resume_data as rd, tables
+from jk import common
+from jk.resumes import extract, match_facts as mf, parse_resume as pr, process_resumes as proc, resume_data as rd, tables
 from tests.resumes.test_extract import as_txt, REGISTRY as BASE_REGISTRY, write_docx
 from tests.support import HomeCase, real_resume_texts
 

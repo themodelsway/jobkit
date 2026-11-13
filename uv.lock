@@ -6,6 +6,12 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "jobkit",
+    "jobkit-dev",
+]
+
 [[package]]
 name = "astroid"
 version = "4.3.4"
@@ -65,10 +71,21 @@ wheels = [
 
 [[package]]
 name = "jobkit"
-version = "0.3.0"
-source = { editable = "." }
+version = "0.3.1"
+source = { editable = "plugins/jobkit" }
 dependencies = [
     { name = "pypdf" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pypdf", specifier = ">=6.0" }]
+
+[[package]]
+name = "jobkit-dev"
+version = "0"
+source = { virtual = "." }
+dependencies = [
+    { name = "jobkit" },
 ]
 
 [package.dev-dependencies]
@@ -79,7 +96,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pypdf", specifier = ">=6.0" }]
+requires-dist = [{ name = "jobkit", editable = "plugins/jobkit" }]
 
 [package.metadata.requires-dev]
 dev = [

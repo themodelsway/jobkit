@@ -1,7 +1,7 @@
 # resumes/extraction Specification
 
 ## Purpose
-Turn a resume file in any supported format into plain text that the parser understands, so the rest of the pipeline never learns which format a file was. Implemented in `src/jobkit/resumes/extract.py`.
+Turn a resume file in any supported format into plain text that the parser understands, so the rest of the pipeline never learns which format a file was. Implemented in `plugins/jobkit/src/jk/resumes/extract.py`.
 
 ## Requirements
 

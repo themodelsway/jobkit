@@ -1,10 +1,10 @@
-"""Tests for src/jobkit/user/profile.py in a temp folder. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+"""Tests for plugins/jobkit/src/jk/user/profile.py in a temp folder. Run: uv run python -m unittest discover -s tests -t ."""
 import contextlib
 import io
 import re
 import unittest
 
-from jobkit.user import profile as up, tables as utables
+from jk.user import profile as up, tables as utables
 from tests.support import HomeCase
 
 

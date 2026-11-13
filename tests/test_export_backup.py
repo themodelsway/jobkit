@@ -1,4 +1,4 @@
-"""Tests for `jobkit export`, `backup` and `status` (src/jobkit/admin.py, records.py, export.py)."""
+"""Tests for `jobkit export`, `backup` and `status` (plugins/jobkit/src/jk/admin.py, records.py, export.py)."""
 import contextlib
 import io
 import json
@@ -6,8 +6,8 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from jobkit import admin, records, store
-from jobkit.common import ToolError
+from jk import admin, records, store
+from jk.common import ToolError
 from tests.seed_data import seed
 from tests.support import HomeCase
 

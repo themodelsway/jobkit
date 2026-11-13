@@ -2,7 +2,7 @@
 import unittest
 from typing import Any
 
-from jobkit.resumes import build_resume as br, evidence, match_codepass as cp, query_resume as qr
+from jk.resumes import build_resume as br, evidence, match_codepass as cp, query_resume as qr
 from tests.resumes.match_fixtures import facts, line, request
 from tests.resumes.test_match_score import MatchCase, seed
 
@@ -246,7 +246,7 @@ class EvidenceEdgeCaseTests(unittest.TestCase):
         self.assertLessEqual(len(chosen[0][1]), br.OLD_COMPANY_BULLETS)
 
     def test_total_limit_below_the_minimum_is_rejected(self):
-        from jobkit import common
+        from jk import common
         companies = [{"id": i, "name": i, "roles": [{"end": None}], "bullets": []} for i in ("a", "b")]
         texts = {"a": "Migrated billing databases to a managed cloud platform", "b": "Mentored junior engineers through code review"}
         ranked = [(c, [qr.ScoredBullet(1.0, line(texts[c["id"]], id=c["id"]), [])]) for c in companies]

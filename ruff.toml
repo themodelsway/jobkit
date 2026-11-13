@@ -1,5 +1,5 @@
 target-version = "py314"
-src = ["src", "tests"]
+src = ["plugins/jobkit/src", "tests"]
 
 [lint]
 preview = true

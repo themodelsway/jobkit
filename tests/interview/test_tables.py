@@ -1,9 +1,9 @@
-"""Tests for src/jobkit/interview/tables.py: round trips, integrity rules and the append-only answer log."""
+"""Tests for plugins/jobkit/src/jk/interview/tables.py: round trips, integrity rules and the append-only answer log."""
 import copy
 import unittest
 
-from jobkit import common, store
-from jobkit.interview import tables
+from jk import common, store
+from jk.interview import tables
 from tests.support import HomeCase
 
 CARD = {"id": "vpc", "track": "aws", "kind": "service", "area": "Network", "name": "VPC", "tier": 1, "aliases": [],

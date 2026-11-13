@@ -3,8 +3,8 @@ import re
 import unittest
 from decimal import Decimal
 
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_report as rep
+from jk.resumes import match_engine as me
+from jk.resumes import match_report as rep
 
 D = Decimal
 

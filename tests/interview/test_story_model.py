@@ -1,10 +1,10 @@
 """Pins the exact messages and ordering of story_model.validate_* and the markdown/search output.
-Messages and their order are part of the prep.py contract (the skills quote them). Run: .venv/bin/python -m unittest discover -s tests -t ."""
+Messages and their order are part of the prep.py contract (the skills quote them). Run: uv run python -m unittest discover -s tests -t ."""
 import copy
 import unittest
 
 
-from jobkit.interview import story_model as sm
+from jk.interview import story_model as sm
 
 ENG = {"id": "e1", "title": "T", "my_role": "lead", "counters": {}, "people": [], "facts": [
     {"id": "f1", "text": "cut cost by 30%", "basis": "stated"},

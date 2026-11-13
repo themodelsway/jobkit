@@ -1,7 +1,7 @@
 # user/profile Specification
 
 ## Purpose
-Hold per-user settings in the database under the home folder so committed files stay free of personal data. Implemented in `src/jobkit/user/profile.py`.
+Hold per-user settings in the database under the home folder so committed files stay free of personal data. Implemented in `plugins/jobkit/src/jk/user/profile.py`.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ The system SHALL keep personal open items and data notes in the database, listed
 - **THEN** the item appears in `open`
 
 ### Requirement: Personal terms
-The system SHALL keep the words that must never be committed (products, clients, patterns, and the derived terms the user ignores) in the database, and SHALL read the user's name, header contact details, resume folder, employer names and the company folder of each resume file from where they are stored instead of copying them. `profile terms check` SHALL report each hit as file and line and exit 1, scanning the staged files as staged (`--staged`), every committable file (`--all`) or given paths, and SHALL skip with a message when there is no database.
+The system SHALL keep the words that must never be committed (products, clients, patterns, and the derived terms the user ignores) in the database, and SHALL read the user's name, header contact details, resume folder, employer names and the company folder of each resume file from where they are stored instead of copying them.
 
 #### Scenario: Derived term found
 - **WHEN** a staged file contains an employer name from the resume scan
@@ -45,6 +45,9 @@ The system SHALL keep the words that must never be committed (products, clients,
 - **WHEN** a term is ignored with `profile terms ignore TEXT`
 - **THEN** `check` no longer reports it and `list` marks it ignored
 
+### Requirement: Personal terms check
+`profile terms check` SHALL report each hit as file and line and exit 1, scanning the staged files as staged (`--staged`), every committable file (`--all`) or given paths, and SHALL skip with a message when there is no database.
+
 #### Scenario: Common words on request
 - **WHEN** `profile terms check --all --exhaustive` is run
 - **THEN** the ignored terms are checked as well and reported as one block per word with the files that contain it, while the pre-commit hook does not use the option
@@ -53,8 +56,16 @@ The system SHALL keep the words that must never be committed (products, clients,
 - **WHEN** a short employer name such as ACME is checked
 - **THEN** it matches only as a whole word
 
+#### Scenario: No database
+- **WHEN** `profile terms check` is run on a machine with no database
+- **THEN** it prints a message that the check was skipped and exits 0
+
 ### Requirement: Tier-1 services
-The user SHALL be able to pin their own tier-1 AWS services with `tier1`, and running it with no arguments SHALL show the current list.
+The user SHALL be able to pin their own tier-1 services, for any track and matched by name, with `tier1`, and running it with no arguments SHALL show the current list.
+
+#### Scenario: Pin services
+- **WHEN** `tier1 SERVICE ...` is run
+- **THEN** those services replace the pinned list and are used instead of the ones derived from the resume scan
 
 #### Scenario: Show list
 - **WHEN** `tier1` is run with no arguments

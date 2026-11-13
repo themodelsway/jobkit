@@ -52,14 +52,14 @@ Each tool SHALL have `build_parser()` and `main(argv) -> int`, SHALL do no work 
 - **THEN** nothing runs and nothing is written
 
 ### Requirement: Tools are installed as commands
-Each tool SHALL be a module of the `jobkit` package with a console entry point in `pyproject.toml`, so that `uv sync` installs it as a command in `.venv/bin/`; a tool SHALL NOT edit `sys.path` to find its siblings.
+Each tool SHALL be a module of the `jk` package (the `jobkit` distribution) with a console entry point in `plugins/jobkit/pyproject.toml`, so that `uv sync` installs it as a command in `.venv/bin/`; a tool SHALL NOT edit `sys.path` to find its siblings.
 
 #### Scenario: Entry points
 - **WHEN** the entry points in `pyproject.toml` are read
 - **THEN** each names a `main` function in a tool module, and every tool module has one entry point
 
 #### Scenario: Run as a module
-- **WHEN** a tool is run as `python -m jobkit.<group>.<tool> --help`
+- **WHEN** a tool is run as `python -m jk.<group>.<tool> --help`
 - **THEN** it exits 0
 
 ### Requirement: Written options exist on their subcommand

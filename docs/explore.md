@@ -4,7 +4,7 @@ These commands display profile settings, interview preparation and study progres
 
 The three skills run these commands on request, from plain-word questions (see [manual.md](manual.md)). Running a command directly shows the same information the skill uses.
 
-Commands run from a terminal in the project folder, as `uv run` followed by the command. `--help` on any command or subcommand lists its options. Setup comes first: `uv sync`, `uv run jobkit init`, `uv run profile init --resume-root PATH`, `uv run process-resumes` to import the resumes, then `prep init`, `lead init` and `arch init --track NAME` (the bundled technology is `aws`) to create stories, leadership questions and technical cards. Until then, `readiness` and the status commands report which step is missing.
+Commands run from a terminal in the repository root, as `uv run` followed by the command. `--help` on any command or subcommand lists its options. Setup comes first: `uv sync`, `uv run jobkit init`, `uv run profile init --resume-root PATH`, `uv run process-resumes` to import the resumes, then `prep init`, `lead init` and `arch init --track NAME` (the bundled technology is `aws`) to create stories, leadership questions and technical cards. Until then, `readiness` and the status commands report which step is missing.
 
 ---
 

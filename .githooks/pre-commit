@@ -20,9 +20,9 @@ if ! command -v gitleaks >/dev/null 2>&1; then
 fi
 run "gitleaks" gitleaks git --pre-commit --staged --redact --no-banner
 # Your own personal terms (name, employers, products...) must not be in what is staged; skipped without a database.
-run "personal terms" "$PY" -m jobkit.user.profile terms check --staged
-run "ruff"  "$PY" -m ruff check src tests .githooks
-run "pyright" "$PY" -m pyright
+run "personal terms" "$PY" -m jk.user.profile terms check --staged
+run "ruff"  "$PY" -m ruff check plugins/jobkit/src tests tools
+run "pyright" "$PY" -m pyright --project pyrightconfig.json
 run "tests" "$PY" -m unittest discover -s tests -t .
 # Staged specs must pass strict OpenSpec validation (a requirement is one short behavior; detail goes in scenarios).
 if command -v openspec >/dev/null 2>&1; then

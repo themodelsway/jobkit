@@ -1,4 +1,4 @@
-"""Tests for src/jobkit/store.py and src/jobkit/admin.py (the database and the `jobkit` command)."""
+"""Tests for plugins/jobkit/src/jk/store.py and plugins/jobkit/src/jk/admin.py (the database and the `jobkit` command)."""
 import contextlib
 import io
 import os
@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from jobkit import admin, base, common, schema, store
-from jobkit.interview import prep, tables
+from jk import admin, base, common, schema, store
+from jk.interview import prep, tables
 from tests.support import HomeCase
 
 HOLD = """

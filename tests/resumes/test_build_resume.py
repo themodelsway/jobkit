@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from jobkit.common import ToolError
-from jobkit.resumes import build_resume as br, query_resume as qr, resume_data as rd, tables
+from jk.common import ToolError
+from jk.resumes import build_resume as br, query_resume as qr, resume_data as rd, tables
 from tests.resumes.match_fixtures import jd_from_bullets, line, role
 from tests.resumes.test_integrity import bullet
 from tests.resumes.test_resume_pipeline import PipelineCase

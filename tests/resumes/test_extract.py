@@ -1,5 +1,5 @@
 """Tests for resumes/extract.py: one synthetic resume rendered as txt, md and docx must parse the same way.
-The docx files are built here with zipfile (no binary fixtures). Run: .venv/bin/python -m unittest discover -s tests -t ."""
+The docx files are built here with zipfile (no binary fixtures). Run: uv run python -m unittest discover -s tests -t ."""
 import contextlib
 import io
 import tempfile
@@ -9,9 +9,9 @@ from pathlib import Path, PureWindowsPath
 from unittest import mock
 from xml.sax.saxutils import escape
 
-from jobkit import common
-from jobkit.common import ToolError
-from jobkit.resumes import extract, parse_resume as pr, process_resumes as proc
+from jk import common
+from jk.common import ToolError
+from jk.resumes import extract, parse_resume as pr, process_resumes as proc
 
 REGISTRY = {
     "acme-corp": ("Acme Corp", r"Acme Corp(?:" + pr.SEP + r"(?P<t>.+))?"),
@@ -312,7 +312,7 @@ class PdfWithoutPopplerTests(unittest.TestCase):
             path = Path(tmp) / "me.pdf"
             path.write_bytes(tiny_pdf([(50, 700, "Acme Corp"), (420, 700, "01/2020 - Present"),
                                        (50, 680, "Senior Engineer")]))
-            with mock.patch("jobkit.resumes.extract.shutil.which", return_value=None):
+            with mock.patch("jk.resumes.extract.shutil.which", return_value=None):
                 doc = extract.extract(path)
         self.assertIn("Senior Engineer", doc.text)
         self.assertRegex(doc.layout_text, r"Acme Corp {2,}01/2020 - Present")

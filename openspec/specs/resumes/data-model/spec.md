@@ -1,7 +1,7 @@
 # resumes/data-model Specification
 
 ## Purpose
-Define how parsed resumes are merged into the generated resume data (stored in the database), and how the user's curation survives rebuilds. Implemented in `src/jobkit/resumes/process_resumes.py` and `resume_data.py`.
+Define how parsed resumes are merged into the generated resume data (stored in the database), and how the user's curation survives rebuilds. Implemented in `plugins/jobkit/src/jk/resumes/process_resumes.py` and `resume_data.py`.
 
 ## Requirements
 

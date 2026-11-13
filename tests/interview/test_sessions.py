@@ -1,5 +1,5 @@
 """Tests for sessions.py and readiness.py in a temp folder (the real prep/ is never touched).
-Run: .venv/bin/python -m unittest discover -s tests -t ."""
+Run: uv run python -m unittest discover -s tests -t ."""
 import argparse
 import contextlib
 import io
@@ -9,9 +9,9 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-from jobkit import store
-from jobkit.interview import arch, lead, prep, readiness, sessions, tables
-from jobkit.user import profile as up
+from jk import store
+from jk.interview import arch, lead, prep, readiness, sessions, tables
+from jk.user import profile as up
 from tests.support import drop_catalog, HomeCase
 
 COMPANIES = {"acme": {"id": "acme", "name": "Acme", "bullets": [], "roles": [{"start": "2021-01", "end": None, "titles": ["T"]}]}}

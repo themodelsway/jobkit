@@ -1,12 +1,12 @@
 """Characterization tests for parse_resume.py and the merge step in process_resumes.py.
 Fixtures in tests/fixtures are synthetic (no real names or employers). Golden files record current behaviour:
-regenerate them only when a behaviour change is intended. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+regenerate them only when a behaviour change is intended. Run: uv run python -m unittest discover -s tests -t ."""
 import copy
 import json
 import unittest
 from pathlib import Path
 
-from jobkit.resumes import parse_resume as pr, process_resumes as proc
+from jk.resumes import parse_resume as pr, process_resumes as proc
 from tests.resumes.match_fixtures import line
 from tests.resumes.test_extract import as_txt
 from tests.resumes.test_integrity import RebuildCase

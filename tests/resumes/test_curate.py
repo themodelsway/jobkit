@@ -1,8 +1,8 @@
-"""Tests for `process-resumes curate` (src/jobkit/resumes/curate.py): every kind applies on rebuild and can be removed."""
+"""Tests for `process-resumes curate` (plugins/jobkit/src/jk/resumes/curate.py): every kind applies on rebuild and can be removed."""
 import contextlib
 import io
 
-from jobkit.resumes import curate, process_resumes as proc, resume_data as rd, tables
+from jk.resumes import curate, process_resumes as proc, resume_data as rd, tables
 from tests.resumes.test_extract import as_txt
 from tests.resumes.test_integrity import EXTRA_BULLET, RebuildCase
 

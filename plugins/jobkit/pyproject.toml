@@ -1,0 +1,35 @@
+[project]
+name = "jobkit"
+version = "0.3.1"
+description = "Local resume data, matching and interview-prep tools for a job search"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+dependencies = [
+    "pypdf>=6.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.14"]
+build-backend = "uv_build"
+
+[project.scripts]
+jobkit = "jk.admin:main"
+profile = "jk.user.profile:main"
+process-resumes = "jk.resumes.process_resumes:main"
+query-resume = "jk.resumes.query_resume:main"
+build-resume = "jk.resumes.build_resume:main"
+resume-lines = "jk.resumes.lines:main"
+match-score = "jk.resumes.match_score:main"
+arch = "jk.interview.arch:main"
+lead = "jk.interview.lead:main"
+prep = "jk.interview.prep:main"
+sessions = "jk.interview.sessions:main"
+readiness = "jk.interview.readiness:main"
+
+[tool.uv]
+# The oldest uv the helper install accepts. Both installers read this line.
+required-version = ">=0.13.7"
+
+[tool.uv.build-backend]
+module-name = "jk"

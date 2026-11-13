@@ -1,6 +1,6 @@
 """Checks the plugin packaging for both apps: manifests, shipped skills, shared text and plain wording.
 
-Run: .venv/bin/python -m unittest discover -s tests -t .
+Run: uv run python -m unittest discover -s tests -t .
 """
 import argparse
 import importlib
@@ -15,8 +15,9 @@ import tomllib
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SKILLS = ROOT / "skills"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_ROOT = REPO_ROOT / "plugins" / "jobkit"
+SKILLS = PLUGIN_ROOT / "skills"
 SHIPPED = {"interview-prep", "tutor", "resume-workflows"}
 SHARED = ("preflight", "talking", "rules")
 
@@ -28,7 +29,7 @@ BANNED = re.compile(
 
 
 def pyproject() -> dict:
-    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def skill_text(name: str) -> str:
@@ -56,8 +57,8 @@ def parser_words(parser: argparse.ArgumentParser) -> set[str]:
     return words
 
 
-MANIFESTS = (".claude-plugin/plugin.json", "plugin.json")
-MARKETPLACES = (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json")
+MANIFESTS = (PLUGIN_ROOT / ".claude-plugin" / "plugin.json", PLUGIN_ROOT / "plugin.json")
+MARKETPLACES = (REPO_ROOT / ".claude-plugin" / "marketplace.json", REPO_ROOT / ".agents" / "plugins" / "marketplace.json")
 # An agent app, a model vendor or an app-specific tool or variable: none may be named in shipped skill text.
 APP_NAMES = re.compile(r"claude|codex|anthropic|openai|chatgpt|gemini|copilot|cursor\b|websearch|webfetch|"
                        r"\bmcp\b|\$\{|plugin_root|skill_dir", re.IGNORECASE)
@@ -67,26 +68,35 @@ STAYS_LOCAL = re.compile(r"everything (personal )?stays on your|all your data ke
 GUIDE_REF = re.compile(r"`([\w./-]+\.md)` \((?:in|a path from) this skill's folder\)")
 
 
-def load(name: str) -> dict:
-    return json.loads((ROOT / name).read_text(encoding="utf-8"))
+def load(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def rel(path: Path) -> str:
+    """A path relative to the repository, for messages."""
+    return str(path.relative_to(REPO_ROOT))
 
 
 class ManifestTests(unittest.TestCase):
     def test_every_manifest_has_the_package_name_and_version(self):
         version = pyproject()["project"]["version"]
-        for name in MANIFESTS:
-            manifest = load(name)
-            self.assertEqual((manifest["name"], manifest["version"]), ("jobkit", version), name)
-            self.assertTrue(manifest["description"].strip(), name)
+        for path in MANIFESTS:
+            manifest = load(path)
+            self.assertEqual((manifest["name"], manifest["version"]), ("jobkit", version), rel(path))
+            self.assertTrue(manifest["description"].strip(), rel(path))
 
     def test_no_other_manifest_exists(self):
-        self.assertFalse((ROOT / ".codex-plugin").exists(), "the root plugin.json is the only Codex manifest")
+        self.assertFalse((PLUGIN_ROOT / ".codex-plugin").exists(), "the plugin's plugin.json is the only Codex manifest")
+        for name in ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin"):
+            self.assertFalse((REPO_ROOT / name).exists(), f"{name} belongs in plugins/jobkit, not the repository root")
 
-    def test_both_marketplaces_point_at_the_repository_root(self):
-        for name in MARKETPLACES:
-            market = load(name)
+    def test_both_marketplaces_point_at_the_plugin_folder(self):
+        for path in MARKETPLACES:
+            market = load(path)
             (entry,) = market["plugins"]
-            self.assertEqual((market["name"], entry["name"], entry["source"]), ("jobkit", "jobkit", "./"), name)
+            self.assertEqual((market["name"], entry["name"], entry["source"]),
+                             ("themodelsway", "jobkit", "./plugins/jobkit"), rel(path))
+            self.assertTrue((REPO_ROOT / entry["source"] / "plugin.json").is_file(), rel(path))
         self.assertTrue(load(MARKETPLACES[0])["owner"]["name"])
 
     def test_codex_entry_has_policy_and_category(self):
@@ -99,22 +109,80 @@ class ManifestTests(unittest.TestCase):
         claude = shutil.which("claude")
         if claude is None:
             self.skipTest("claude is not installed")
-        result = subprocess.run([claude, "plugin", "validate", str(ROOT)], capture_output=True, text=True,
-                                timeout=300, check=False, env={**os.environ, "NO_COLOR": "1"})
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for target in (REPO_ROOT, PLUGIN_ROOT):
+            result = subprocess.run([claude, "plugin", "validate", str(target)], capture_output=True, text=True,
+                                    timeout=300, check=False, env={**os.environ, "NO_COLOR": "1"})
+            self.assertEqual(result.returncode, 0, f"{target}\n{result.stdout}{result.stderr}")
+
+
+CONTRIBUTOR_ONLY = ("tests", "docs", "openspec", ".claude", ".githooks", "tools", "AGENTS.md", "CLAUDE.md",
+                    "ruff.toml", ".pylintrc", "pyrightconfig.json", "uv.lock")
+
+
+class PluginFolderTests(unittest.TestCase):
+    """The plugin folder is complete on its own and holds nothing that belongs to contributors."""
+
+    def test_license_copy_matches_the_canonical_license(self):
+        self.assertEqual((PLUGIN_ROOT / "LICENSE").read_bytes(), (REPO_ROOT / "LICENSE").read_bytes())
+
+    def test_plugin_holds_what_setup_builds_from(self):
+        for name in ("pyproject.toml", ".python-version", "LICENSE", "README.md", "src/jk/common.py",
+                     "setup/install", "setup/install.ps1", "setup/constraints.txt"):
+            self.assertTrue((PLUGIN_ROOT / name).is_file(), f"plugins/jobkit/{name} is missing")
+
+    def test_plugin_holds_no_contributor_files(self):
+        for name in CONTRIBUTOR_ONLY:
+            self.assertFalse((PLUGIN_ROOT / name).exists(), f"plugins/jobkit/{name} must stay at the repository root")
+
+    def test_repository_root_holds_no_plugin_files(self):
+        for name in ("skills", "src", "setup"):
+            self.assertFalse((REPO_ROOT / name).exists(), f"{name} belongs in plugins/jobkit")
+
+    def test_root_is_a_workspace_that_holds_the_lock(self):
+        root = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(root["tool"]["uv"]["workspace"]["members"], ["plugins/jobkit"])
+        self.assertNotIn("scripts", root["project"], "the commands belong to the plugin's own pyproject.toml")
+        self.assertTrue((REPO_ROOT / "uv.lock").is_file())
+        lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
+        jobkit = next(p for p in lock["package"] if p["name"] == "jobkit")
+        self.assertEqual((jobkit["version"], jobkit["source"]), (pyproject()["project"]["version"], {"editable": "plugins/jobkit"}),
+                         "run uv lock after changing the version")
+
+    def test_uv_minimum_is_the_same_at_the_root_and_in_the_plugin(self):
+        """The installers read the plugin's value; uv itself reads the root's."""
+        root = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(root["tool"]["uv"]["required-version"], pyproject()["tool"]["uv"]["required-version"])
+
+    def test_python_pin_is_the_same_at_the_root_and_in_the_plugin(self):
+        """A root `uv sync` reads the root pin; the installers read the plugin's."""
+        root = (REPO_ROOT / ".python-version").read_text(encoding="utf-8").strip()
+        plugin = (REPO_ROOT / "plugins" / "jobkit" / ".python-version").read_text(encoding="utf-8").strip()
+        self.assertEqual(root, plugin)
+
+    def test_contributor_scripts_do_not_ship(self):
+        for name in ("pins.py", "clean_copy.py"):
+            self.assertTrue((REPO_ROOT / "tools" / name).is_file(), name)
+            self.assertFalse((PLUGIN_ROOT / "setup" / name).exists(), name)
+
+    def test_pyright_config_points_at_the_plugin(self):
+        config = load(REPO_ROOT / "pyrightconfig.json")
+        self.assertEqual((config["venvPath"], config["venv"], config["include"]),
+                         (".", ".venv", ["plugins/jobkit/src/jk"]))
+        self.assertNotIn("pyright", pyproject().get("tool", {}))
 
 
 class PrivacyWordingTests(unittest.TestCase):
     def test_no_user_facing_text_says_everything_stays_on_the_computer(self):
-        texts = {"README.md": (ROOT / "README.md").read_text(encoding="utf-8")}
-        texts |= {name: (ROOT / name).read_text(encoding="utf-8") for name in (*MANIFESTS, *MARKETPLACES)}
-        texts |= {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in all_skill_files()}
+        texts = {name: (REPO_ROOT / name).read_text(encoding="utf-8")
+                 for name in ("README.md", "plugins/jobkit/README.md")}
+        texts |= {rel(path): path.read_text(encoding="utf-8") for path in (*MANIFESTS, *MARKETPLACES)}
+        texts |= {rel(p): p.read_text(encoding="utf-8") for p in all_skill_files()}
         for name, text in texts.items():
             hit = STAYS_LOCAL.search(text)
             self.assertIsNone(hit, f"{name} says {hit.group(0) if hit else ''!r}")
 
     def test_readme_points_at_the_app_for_how_the_model_handles_content(self):
-        privacy = (ROOT / "README.md").read_text(encoding="utf-8").split("## Privacy", 1)[1]
+        privacy = (REPO_ROOT / "README.md").read_text(encoding="utf-8").split("## Privacy", 1)[1]
         self.assertIn("stored in the `~/.jobkit` folder", privacy)
         self.assertIn("privacy settings you have configured", privacy)
 
@@ -140,7 +208,7 @@ class ShippedSkillTests(unittest.TestCase):
         for path in all_skill_files():
             text = path.read_text(encoding="utf-8")
             for bad in (".venv", ".claude/", "CLAUDE.md", "AGENTS.md"):
-                self.assertNotIn(bad, text, f"{path.relative_to(ROOT)} mentions {bad}")
+                self.assertNotIn(bad, text, f"{rel(path)} mentions {bad}")
 
     def test_skills_stay_under_500_lines(self):
         for name in SHIPPED:
@@ -168,7 +236,7 @@ class ShippedSkillTests(unittest.TestCase):
         for path in all_skill_files():
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 hit = APP_NAMES.search(line)
-                self.assertIsNone(hit, f"{path.relative_to(ROOT)}:{number} names {hit.group(0) if hit else ''!r}")
+                self.assertIsNone(hit, f"{rel(path)}:{number} names {hit.group(0) if hit else ''!r}")
 
     def test_vendor_facts_come_from_official_documentation(self):
         text = (SKILLS / "interview-prep" / "architecture.md").read_text(encoding="utf-8")
@@ -230,7 +298,7 @@ def check_span(span: str, parsers: dict[str, argparse.ArgumentParser]) -> str | 
 
 def checked_files() -> list[Path]:
     """Skill pages and user docs whose written commands are checked."""
-    docs = ROOT / "docs"
+    docs = REPO_ROOT / "docs"
     return sorted([*SKILLS.glob("*/*.md"), *(docs / "guides").glob("*.md"), docs / "explore.md", docs / "manual.md"])
 
 
@@ -251,7 +319,7 @@ class CommandNameTests(unittest.TestCase):
             for span in re.findall(r"`([^`\n]+)`", path.read_text(encoding="utf-8")):
                 problem = check_span(span, parsers)
                 if problem:
-                    failures.append(f"{path.relative_to(ROOT)}: `{span}`: {problem}")
+                    failures.append(f"{rel(path)}: `{span}`: {problem}")
         self.assertEqual(failures, [], "\n".join(failures))
 
 
@@ -353,7 +421,7 @@ POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 class SetupScriptTests(unittest.TestCase):
     def test_install_script_is_present_and_strict(self):
-        script = ROOT / "setup" / "install"
+        script = PLUGIN_ROOT / "setup" / "install"
         self.assertTrue(script.is_file())
         if not ON_WINDOWS:                                # Windows checkouts have no executable bit
             self.assertTrue(os.access(script, os.X_OK))
@@ -364,13 +432,13 @@ class SetupScriptTests(unittest.TestCase):
 
     @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_install_script_syntax(self):
-        result = subprocess.run(["sh", "-n", str(ROOT / "setup" / "install")], capture_output=True, text=True,
+        result = subprocess.run(["sh", "-n", str(PLUGIN_ROOT / "setup" / "install")], capture_output=True, text=True,
                                 check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_check_reports_a_known_state(self):
-        result = subprocess.run(["sh", str(ROOT / "setup" / "install"), "--check"], capture_output=True, text=True,
+        result = subprocess.run(["sh", str(PLUGIN_ROOT / "setup" / "install"), "--check"], capture_output=True, text=True,
                                 timeout=60, check=False)
         self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|unsupported)$")
 
@@ -380,13 +448,13 @@ class SetupScriptTests(unittest.TestCase):
             stub = Path(tmp) / "uname"
             stub.write_text("#!/bin/sh\necho MINGW64_NT-10.0\n", encoding="utf-8")
             stub.chmod(0o755)
-            result = subprocess.run(["sh", str(ROOT / "setup" / "install"), "--check"], capture_output=True,
+            result = subprocess.run(["sh", str(PLUGIN_ROOT / "setup" / "install"), "--check"], capture_output=True,
                                     text=True, timeout=60, check=False, env={**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"})
         self.assertEqual((result.stdout.strip(), result.returncode), ("unsupported", 2))
 
 
 class WindowsInstallScriptTests(unittest.TestCase):
-    SCRIPT = ROOT / "setup" / "install.ps1"
+    SCRIPT = PLUGIN_ROOT / "setup" / "install.ps1"
 
     def test_script_is_ascii_only(self):
         data = self.SCRIPT.read_bytes()

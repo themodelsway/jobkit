@@ -1,4 +1,4 @@
-"""Tests for story_model.py and the prep.py story/engagement commands. Run: .venv/bin/python -m unittest discover -s tests -t .
+"""Tests for story_model.py and the prep.py story/engagement commands. Run: uv run python -m unittest discover -s tests -t .
 Everything happens in a temp directory; the real prep/ folder is never touched."""
 import contextlib
 import io
@@ -6,8 +6,8 @@ import json
 import unittest
 from unittest import mock
 
-from jobkit import common, store
-from jobkit.interview import prep, story_model as sm, tables
+from jk import common, store
+from jk.interview import prep, story_model as sm, tables
 from tests.support import HomeCase
 
 

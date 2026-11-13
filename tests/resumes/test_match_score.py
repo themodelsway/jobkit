@@ -7,8 +7,8 @@ import unittest
 from datetime import date
 from unittest import mock
 
-from jobkit import records, store
-from jobkit.resumes import match_bands as mb, match_engine as me, match_facts as mf, match_score as ms, match_tables, tables
+from jk import records, store
+from jk.resumes import match_bands as mb, match_engine as me, match_facts as mf, match_score as ms, match_tables, tables
 from tests.resumes.match_fixtures import facts, request
 from tests.support import HomeCase
 

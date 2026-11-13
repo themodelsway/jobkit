@@ -1,9 +1,9 @@
-"""Tests for src/jobkit/interview/prep_plan.py: synthetic data only, no database."""
+"""Tests for plugins/jobkit/src/jk/interview/prep_plan.py: synthetic data only, no database."""
 import unittest
 from datetime import date, timedelta
 
-from jobkit.common import ToolError
-from jobkit.interview import prep_plan as pp
+from jk.common import ToolError
+from jk.interview import prep_plan as pp
 
 TODAY = date(2026, 6, 30)
 C = pp.Competency

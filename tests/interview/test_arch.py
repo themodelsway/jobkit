@@ -1,5 +1,5 @@
-"""Tests for src/jobkit/interview/arch.py in a temp folder (the real prep/ is never touched).
-Run: .venv/bin/python -m unittest discover -s tests -t ."""
+"""Tests for plugins/jobkit/src/jk/interview/arch.py in a temp folder (the real prep/ is never touched).
+Run: uv run python -m unittest discover -s tests -t ."""
 import contextlib
 import io
 import json
@@ -7,7 +7,7 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-from jobkit.interview import arch, tables
+from jk.interview import arch, tables
 from tests.interview.test_sessions import SessionCase
 from tests.support import drop_catalog, HomeCase
 

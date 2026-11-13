@@ -14,10 +14,11 @@ import tomllib
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / "setup" / "install"
-WINDOWS_SCRIPT = ROOT / "setup" / "install.ps1"
-CONSTRAINTS = ROOT / "setup" / "constraints.txt"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_ROOT = REPO_ROOT / "plugins" / "jobkit"
+SCRIPT = PLUGIN_ROOT / "setup" / "install"
+WINDOWS_SCRIPT = PLUGIN_ROOT / "setup" / "install.ps1"
+CONSTRAINTS = PLUGIN_ROOT / "setup" / "constraints.txt"
 ON_WINDOWS = sys.platform == "win32"
 TOOLS = ("sh", "sed", "head", "tr", "uname", "dirname", "mktemp", "rm", "cat", "chmod", "mkdir")
 
@@ -48,7 +49,7 @@ printf '#!/bin/sh\\nmkdir -p "$HOME/.local/bin"\\ncp "$FAKE/uv.fake" "$HOME/.loc
 
 def project() -> dict:
     """The parsed `pyproject.toml`."""
-    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def plugin_version() -> str:
@@ -151,7 +152,7 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertTrue(self.run_script("--check").stdout.startswith("newer:"))
         self.add_helper(f"{major}.{minor}.{patch}.1")
         self.assertTrue(self.run_script("--check").stdout.startswith("newer:"))
-        self.add_helper(f"{major}.{minor}")
+        self.add_helper(f"{major}.{minor}.{patch}.0")                # a missing last number counts as zero
         self.assertTrue(self.run_script("--check").stdout.startswith("ok:"))
 
     def test_newer_commands_are_left_alone(self):
@@ -168,8 +169,8 @@ class ShellInstallerTests(unittest.TestCase):
         self.add_helper("0.0.9")
         result = self.run_script()
         self.assertEqual((result.stdout.strip(), result.returncode), (f"ok:{self.fake / 'tools'}", 0), result.stderr)
-        python = (ROOT / ".python-version").read_text(encoding="utf-8").strip()
-        self.assertIn(f"tool install --force --python {python} --constraints {CONSTRAINTS} {ROOT}", self.log("uv"))
+        python = (PLUGIN_ROOT / ".python-version").read_text(encoding="utf-8").strip()
+        self.assertIn(f"tool install --force --python {python} --constraints {CONSTRAINTS} {PLUGIN_ROOT}", self.log("uv"))
         self.assertEqual(self.log("curl"), "", "uv was there, so nothing is downloaded")
 
     def test_a_helper_from_the_previous_release_is_upgraded(self):
@@ -241,11 +242,11 @@ class PinRecordTests(unittest.TestCase):
     def test_constraints_equal_a_fresh_export_of_the_lock_file(self):
         if shutil.which("uv") is None:
             self.skipTest("uv is not installed")
-        fresh = subprocess.run([sys.executable, str(ROOT / "setup" / "pins.py"), "--print"], capture_output=True,
+        fresh = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "pins.py"), "--print"], capture_output=True,
                                text=True, timeout=120, check=False)
         self.assertEqual(fresh.returncode, 0, fresh.stderr)
         self.assertEqual(CONSTRAINTS.read_text(encoding="utf-8"), fresh.stdout,
-                         "run: uv run python setup/pins.py")
+                         "run: uv run python tools/pins.py")
 
     def test_constraints_name_the_package_version_and_exact_pins(self):
         text = CONSTRAINTS.read_text(encoding="utf-8")
@@ -256,11 +257,11 @@ class PinRecordTests(unittest.TestCase):
         self.assertTrue(any(x.startswith("pypdf==") for x in pins(text)))
 
     def test_python_version_is_exact(self):
-        self.assertRegex((ROOT / ".python-version").read_text(encoding="utf-8").strip(), r"^\d+\.\d+\.\d+$")
+        self.assertRegex((PLUGIN_ROOT / ".python-version").read_text(encoding="utf-8").strip(), r"^\d+\.\d+\.\d+$")
 
     def test_a_changed_pin_comes_with_a_new_package_version(self):
         """Compared with the last commit: pins may only differ when the package version differs too."""
-        if shutil.which("git") is None or not (ROOT / ".git").exists():
+        if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
             self.skipTest("not a git checkout")
         old = {name: self.committed(name) for name in ("setup/constraints.txt", ".python-version", "setup/install",
                                                        "setup/install.ps1", "pyproject.toml")}
@@ -271,18 +272,27 @@ class PinRecordTests(unittest.TestCase):
             return
         self.assertEqual(pins(CONSTRAINTS.read_text(encoding="utf-8")), pins(old["setup/constraints.txt"] or ""),
                          "a package pin changed: raise the version in pyproject.toml")
-        self.assertEqual((ROOT / ".python-version").read_text(encoding="utf-8").strip(),
+        self.assertEqual((PLUGIN_ROOT / ".python-version").read_text(encoding="utf-8").strip(),
                          (old[".python-version"] or "").strip(), "the Python pin changed: raise the version")
         for name in ("setup/install", "setup/install.ps1"):
             found = re.search(r"^\$?UV_?VERSION *= *'?([0-9.]+)", old[name] or "", re.M | re.I)
             if found:
-                self.assertEqual(pinned_uv(ROOT / name), found.group(1), "the uv pin changed: raise the version")
+                self.assertEqual(pinned_uv(PLUGIN_ROOT / name), found.group(1), "the uv pin changed: raise the version")
+
+    @classmethod
+    def committed(cls, name: str) -> str | None:
+        """A plugin file as it is in the last commit, or None when it is not there.
+
+        The plugin folder is tried first; the old repository-root path is the fallback, so the check
+        still compares against a commit made before the files moved into `plugins/jobkit/`.
+        """
+        return cls.shown(f"plugins/jobkit/{name}") or cls.shown(name)
 
     @staticmethod
-    def committed(name: str) -> str | None:
+    def shown(path: str) -> str | None:
         """A file as it is in the last commit, or None when it is not there."""
-        shown = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{name}"], capture_output=True, text=True,
-                               timeout=30, check=False, env={**os.environ, "LC_ALL": "C"})
+        shown = subprocess.run(["git", "-C", str(REPO_ROOT), "show", f"HEAD:{path}"], capture_output=True,
+                               text=True, timeout=30, check=False, env={**os.environ, "LC_ALL": "C"})
         return shown.stdout if shown.returncode == 0 else None
 
 

@@ -1,13 +1,11 @@
+# Contributor workspace: one lockfile and one environment for the plugin and the development tools.
+# Nothing here ships; the installable plugin is plugins/jobkit (its own pyproject.toml is what users get).
 [project]
-name = "jobkit"
-version = "0.3.0"
-description = "Local resume data, matching and interview-prep tools for a job search"
-license = "Apache-2.0"
-license-files = ["LICENSE"]
+name = "jobkit-dev"
+version = "0"
+description = "Contributor environment for jobkit (not published, not installed by the plugin)"
 requires-python = ">=3.14"
-dependencies = [
-    "pypdf>=6.0",
-]
+dependencies = ["jobkit"]
 
 [dependency-groups]
 dev = [
@@ -16,37 +14,12 @@ dev = [
     "ruff>=0.6",
 ]
 
-[build-system]
-requires = ["uv_build>=0.9,<0.14"]
-build-backend = "uv_build"
-
-[project.scripts]
-jobkit = "jobkit.admin:main"
-profile = "jobkit.user.profile:main"
-process-resumes = "jobkit.resumes.process_resumes:main"
-query-resume = "jobkit.resumes.query_resume:main"
-build-resume = "jobkit.resumes.build_resume:main"
-resume-lines = "jobkit.resumes.lines:main"
-match-score = "jobkit.resumes.match_score:main"
-arch = "jobkit.interview.arch:main"
-lead = "jobkit.interview.lead:main"
-prep = "jobkit.interview.prep:main"
-sessions = "jobkit.interview.sessions:main"
-readiness = "jobkit.interview.readiness:main"
-
 [tool.uv]
-# The oldest uv the helper install accepts. Both installers read this line.
+# Keep equal to plugins/jobkit/pyproject.toml (the installers read that one); a test checks it.
 required-version = ">=0.13.7"
 
-[tool.uv.build-backend]
-module-name = "jobkit"
+[tool.uv.sources]
+jobkit = { workspace = true }
 
-[tool.pyright]
-pythonVersion = "3.14"
-venvPath = "."
-venv = ".venv"
-include = ["src/jobkit"]
-reportMissingImports = "none"
-reportMissingModuleSource = "none"
-reportUnusedCoroutine = "error"
-reportUnnecessaryTypeIgnoreComment = "warning"
+[tool.uv.workspace]
+members = ["plugins/jobkit"]

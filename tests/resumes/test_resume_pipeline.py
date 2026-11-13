@@ -1,12 +1,12 @@
 """End-to-end tests of merge -> curate -> write -> query -> build on the synthetic fixtures, in a temp folder.
-Run: .venv/bin/python -m unittest discover -s tests -t ."""
+Run: uv run python -m unittest discover -s tests -t ."""
 import contextlib
 import io
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from jobkit.resumes import build_resume as br, parse_resume as pr, process_resumes as proc, query_resume as qr, resume_data as rd, tables
+from jk.resumes import build_resume as br, parse_resume as pr, process_resumes as proc, query_resume as qr, resume_data as rd, tables
 from tests.support import HomeCase, HomeClassCase
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures"

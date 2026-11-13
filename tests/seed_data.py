@@ -2,10 +2,10 @@
 from collections.abc import Callable
 from typing import Any
 
-from jobkit import store
-from jobkit.interview import tables
-from jobkit.resumes import tables as resume_tables
-from jobkit.user import tables as user_tables
+from jk import store
+from jk.interview import tables
+from jk.resumes import tables as resume_tables
+from jk.user import tables as user_tables
 from tests.interview.test_tables import CARD, ENGAGEMENT, PROGRESS, STORY, session
 
 ENTRY = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "question": "q", "answer": "a full answer",

@@ -84,7 +84,7 @@ Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Code
 ### macOS and Linux
 
 1. Marketplace registration, in Claude Code: `/plugin marketplace add themodelsway/jobkit`
-2. Plugin installation: `/plugin install jobkit@jobkit`
+2. Plugin installation: `/plugin install jobkit@themodelsway`
 3. A new session makes the installed skills available; requests use plain language (see [Quick start](#quick-start)).
 
 ### Windows
@@ -100,16 +100,16 @@ Setup installs [uv](https://docs.astral.sh/uv/) when it is missing. [What setup 
 ### After installing
 
 - **Skills installed:** `jobkit:interview-prep` (mock interview), `jobkit:tutor` (teaching and readiness reports) and `jobkit:resume-workflows` (add a resume, tailor a resume for a job posting).
-- **Update:** `/plugin marketplace update jobkit`, then `/plugin update jobkit@jobkit`, then restart Claude Code. The next time a skill starts it notices the commands are older and offers to update them.
-- **Remove:** `/plugin uninstall jobkit@jobkit`. `~/.jobkit` and your data are left alone, and so are the commands (see [Removing the commands](#removing-the-commands)).
-- **Trying it from a checkout:** `claude --plugin-dir .` loads the three skills for one session.
+- **Update:** `/plugin marketplace update themodelsway`, then `/plugin update jobkit@themodelsway`, then restart Claude Code. The next time a skill starts it notices the commands are older and offers to update them.
+- **Remove:** `/plugin uninstall jobkit@themodelsway`. `~/.jobkit` and your data are left alone, and so are the commands (see [Removing the commands](#removing-the-commands)).
+- **Trying it from a checkout:** `claude --plugin-dir plugins/jobkit` loads the three skills for one session.
 
 ## Install on Codex
 
 Codex support is for the Codex command line on macOS and Linux, running locally.
 
 1. Marketplace registration: `codex plugin marketplace add themodelsway/jobkit`
-2. Plugin installation: `codex plugin add jobkit@jobkit`
+2. Plugin installation: `codex plugin add jobkit@themodelsway`
 3. Starting `codex` makes the installed skills available; requests use plain language (see [Quick start](#quick-start)).
 
 Codex runs commands in a sandbox that can read your files but, by default, cannot write outside the folder you started it in and cannot go online. jobkit keeps its data in `~/.jobkit`, so allow that one folder. Either approve it when Codex asks, or add this to `~/.codex/config.toml`, with the full path that `echo ~/.jobkit` prints in a terminal:
@@ -122,22 +122,22 @@ writable_roots = ["FULL-PATH-OF-YOUR-HOME-FOLDER/.jobkit"]
 The first-time setup also downloads and installs software (see [What setup installs](#what-setup-installs)), which the sandbox blocks: approve that step when Codex asks. If it was blocked, the skill says that setup did not finish; allow it and ask again, and it carries on from where it stopped. If a save is blocked later, the skill says that nothing was saved and names the folder to allow. Do not turn the sandbox off for this.
 
 - **Skills installed:** the same three, `interview-prep`, `tutor` and `resume-workflows`, from the same files as in Claude Code.
-- **Update:** `codex plugin marketplace upgrade jobkit`, then `codex plugin add jobkit@jobkit` again. The next time a skill starts it offers to update the commands.
-- **Remove:** `codex plugin remove jobkit@jobkit`, and `codex plugin marketplace remove jobkit` to forget the marketplace. Your data and the commands are left alone.
+- **Update:** `codex plugin marketplace upgrade themodelsway`, then `codex plugin add jobkit@themodelsway` again. The next time a skill starts it offers to update the commands.
+- **Remove:** `codex plugin remove jobkit@themodelsway`, and `codex plugin marketplace remove themodelsway` to forget the marketplace. Your data and the commands are left alone.
 
 ## What setup installs
 
-The first time a skill runs, in either app, it says it needs to set up a small helper and asks whether that is OK. On a no it installs nothing. On a yes it runs `setup/install` (`setup/install.ps1` on Windows), which installs exactly this:
+The first time a skill runs, in either app, it says it needs to set up a small helper and asks whether that is OK. On a no it installs nothing. On a yes it runs `setup/install` from the plugin folder (`setup/install.ps1` on Windows), which installs exactly this:
 
 | What | Version | From | When |
 |---|---|---|---|
 | [uv](https://docs.astral.sh/uv/), the installer tool | 0.13.7, the same on every system | astral.sh | only if uv is not on the computer |
-| Python | 3.14 (the exact version is in `.python-version`) | uv's own Python builds | if uv does not already have that version |
-| Python packages | the exact versions in `setup/constraints.txt` | PyPI | always |
+| Python | 3.14 (the exact version is in `plugins/jobkit/.python-version`) | uv's own Python builds | if uv does not already have that version |
+| Python packages | the exact versions in `plugins/jobkit/setup/constraints.txt` | PyPI | always |
 | the jobkit commands | the plugin's version | the plugin's own files | always |
 
 - **Own Python not required.** Setup uses a separate Python installation managed by uv, apart from any Python already on the computer; nothing else uses it. `uv python list --only-installed` lists Python installations managed by uv.
-- A uv that is already on the computer is used as it is and never replaced. If it is older than the minimum in `pyproject.toml` (`required-version`), setup stops and says so; uv must be updated before setup is requested again.
+- A uv that is already on the computer is used as it is and never replaced. If it is older than the minimum in `plugins/jobkit/pyproject.toml` (`required-version`), setup stops and says so; uv must be updated before setup is requested again.
 - Setup never downgrades: if the installed commands are newer than the plugin, it changes nothing.
 - It does not edit your shell settings. The commands go in uv's tool folder and the skills run them by full path.
 - If setup stops half way (for example offline), what it already installed stays; asking again finishes it.
@@ -157,15 +157,27 @@ Uninstalling a plugin leaves the commands, because the other app may still use t
 
 ## Installing from a checkout
 
-Installing from `themodelsway/jobkit` needs nothing special. Codex copies the plugin's whole folder, so its installed copy also holds the repository's `.git` folder; that is harmless. A local-folder installation from a working checkout (for example while developing) also copies `.venv` and `tmp/`. A clean copy excludes those folders. The copy script needs Git and Python 3.11 or newer, on macOS, Linux or Windows:
+Installing from the `themodelsway/jobkit` repository requires no extra steps. The plugin is the `plugins/jobkit/` folder of the repository, so the installed copy holds that folder and not the contributor files at the repository root (tests, documentation, OpenSpec files). A local-folder installation from a working checkout (for example while developing) must be added as a marketplace, not as the plugin folder alone, and a plain copy of the checkout also carries `.git`, `.venv` and `tmp/`. A clean copy holds the two marketplace catalogs and the plugin, without those folders or any ignored file. The copy script needs Git and Python 3.11 or newer, on macOS, Linux or Windows (on Windows, use the `py -3` launcher or any Python 3.11 or newer):
 
 ```
-python3 setup/clean_copy.py FULL-PATH-OF-A-NEW-FOLDER
+python3 tools/clean_copy.py FULL-PATH-OF-A-NEW-FOLDER
 ```
 
-The copy holds the tracked files and new files Git does not ignore, and nothing else. The folder is then added as the marketplace, with `/plugin marketplace add FULL-PATH-OF-A-NEW-FOLDER` in Claude Code or `codex plugin marketplace add FULL-PATH-OF-A-NEW-FOLDER` in Codex, and installation proceeds as above. A local marketplace cannot be upgraded in place: an update means deleting the folder, running the script again and adding it again.
+The copy holds the tracked files and new files Git does not ignore, and nothing else. It must be a new or empty folder outside the checkout. The folder (not the plugin folder inside it) is then added as the marketplace, with `/plugin marketplace add FULL-PATH-OF-A-NEW-FOLDER` in Claude Code or `codex plugin marketplace add FULL-PATH-OF-A-NEW-FOLDER` in Codex, and installation proceeds as above. A local marketplace cannot be upgraded in place: an update means deleting the folder, running the script again and adding it again; editing the checkout does not change an installed copy.
 
 ## For contributors and command-line users
+
+### Using the commands without a plugin
+
+The commands can be installed on their own, the same way the plugin's setup installs them. From a checkout, with [uv](https://docs.astral.sh/uv/) available:
+
+```
+uv tool install --constraints plugins/jobkit/setup/constraints.txt ./plugins/jobkit
+jobkit init
+profile --help
+```
+
+uv installs all twelve commands in its tool folder (`uv tool dir --bin` prints it). Direct invocation requires that folder on the shell search path; if `jobkit` is not found, run `uv tool update-shell` and open a new terminal. With the folder on the search path, no `uv run` and no project option are needed. The constraints file gives the same exact dependency versions as the plugin install. To remove them: `uv tool uninstall jobkit`. Contributors who edit the code use the checkout setup below instead, because an installed copy does not follow later edits.
 
 ### Setup from the command line
 
@@ -182,9 +194,9 @@ Optional tools, by system:
 | poppler (PDF reading) | `brew install poppler` | `sudo apt install poppler-utils` | `sudo dnf install poppler-utils` | `sudo pacman -S poppler` |
 | gitleaks (pre-commit secret scan) | `brew install gitleaks` | see the [gitleaks releases](https://github.com/gitleaks/gitleaks/releases) | see the releases | `sudo pacman -S gitleaks` |
 
-On Windows neither is needed to try jobkit. Without `pdftotext` the PDF reader falls back to `pypdf`, which works with no extra install; poppler stays preferred when it is present. On 13 real PDF resumes the `pypdf` layout gave the same employers, date lines and bullet counts as poppler.
+On Windows neither is needed to try jobkit. Without `pdftotext` the PDF reader falls back to `pypdf`, which works with no extra install; poppler stays preferred when it is present. In testing, the `pypdf` layout gave the same employers, date lines and bullet counts as poppler.
 
-The examples below use `uv run <command>`, the same on macOS, Linux and Windows. The pre-commit hook and the skills run in Git Bash on Windows.
+The examples below use `uv run <command>`, the same on macOS, Linux and Windows. Run them from the repository root: its `pyproject.toml` is a uv workspace around `plugins/jobkit`, so the one `uv.lock` and `.venv` are there. The pre-commit hook and the skills run in Git Bash on Windows.
 
 The home folder and database are created once (`~/.jobkit`, or the folder named by `JOBKIT_HOME`):
 
@@ -227,17 +239,17 @@ Save the name and contact line once with `profile header set NAME CONTACT_LINE` 
 | `prep`, `arch`, `lead` | Stories, drill cards and the leadership question set. |
 | `sessions`, `readiness` | Practice sessions and the readiness report. |
 
-For the top commands to explore profile settings, interview preparation and tutoring progress, see [docs/explore.md](docs/explore.md). Full reference: [docs/manual.md](docs/manual.md) (how to use each skill, and every command and option under the skill that uses it) and [docs/references/data-structures.md](docs/references/data-structures.md) (the stored data). Every command has `--help`, and the verbs are the same everywhere: `init`, `status`, `list`, `show ID`, `next`, `set ID FIELD VALUE`, `for-jd JD`. Messages go to stdout, problems to stderr with exit status 1. Commands are also available as `uv run python -m jobkit.<group>.<tool>`.
+For the top commands to explore profile settings, interview preparation and tutoring progress, see [docs/explore.md](docs/explore.md). Full reference: [docs/manual.md](docs/manual.md) (how to use each skill, and every command and option under the skill that uses it) and [docs/references/data-structures.md](docs/references/data-structures.md) (the stored data). Every command has `--help`, and the verbs are the same everywhere: `init`, `status`, `list`, `show ID`, `next`, `set ID FIELD VALUE`, `for-jd JD`. Messages go to stdout, problems to stderr with exit status 1. Commands are also available as `uv run python -m jk.<group>.<tool>`.
 
 ### Layout
 
-The whole repository is the plugin, so an install copies all of it. What is used at run time is `skills/`, `src/`, `setup/`, the manifests and the project files `pyproject.toml`, `uv.lock` and `.python-version`, because the plugin builds its commands from them. Everything else is for contributors.
+The plugin is the `plugins/jobkit/` folder, which holds everything used at run time: the skills, the commands and their project files, the installers and the manifests. The repository root holds the two marketplace catalogs and everything for contributors, none of which an installed plugin needs.
 
-**Used at run time**
+**The plugin (`plugins/jobkit/`)**
 
 ```
 skills/                  the three skills: interview-prep, tutor, resume-workflows (with their guides)
-src/jobkit/              the commands (Python package)
+src/jk/              the commands (Python package)
   common.py, base.py       helpers every tool shares: home folder, errors, exit status, one transaction per command
   store.py, schema.py      the database: connection, transactions, numbered schema upgrades, backup and restore
   records.py, export.py    the kinds of stored data, and `jobkit export`
@@ -249,19 +261,30 @@ src/jobkit/              the commands (Python package)
 setup/                   the helper setup the skills ask for, only with the user's yes
   install                  macOS and Linux
   install.ps1              Windows
-  constraints.txt          the exact package versions setup installs (generated by `setup/pins.py`)
-  pins.py, clean_copy.py   contributor scripts: regenerate the pins; make a clean copy for a local install
-.claude-plugin/          plugin and marketplace manifests for Claude Code
+  constraints.txt          the exact package versions setup installs (generated by `tools/pins.py`)
+pyproject.toml, .python-version   the package and the Python version
 plugin.json              plugin manifest for Codex
-.agents/plugins/         marketplace manifest for Codex
+.claude-plugin/          plugin manifest for Claude Code
+LICENSE, README.md       a copy of the license (a test keeps it equal to the root one) and a short usage page
+```
+
+**Repository root**
+
+```
+.claude-plugin/          marketplace catalog for Claude Code (source: ./plugins/jobkit)
+.agents/plugins/         marketplace catalog for Codex (source: ./plugins/jobkit)
+README.md, LICENSE       the documentation and the canonical license
 ```
 
 **For contributors only**
 
 ```
-tests/                   mirrors src/jobkit; every test runs in a throw-away home folder
+tests/                   mirrors plugins/jobkit/src/jk; every test runs in a throw-away home folder
 openspec/specs/          the behaviour each area promises (requirements and scenarios)
 docs/                    manual.md (index), guides/ (one page per skill, with its commands), references/ (the stored data)
+tools/                   pins.py (regenerate the pinned versions), clean_copy.py (clean marketplace copy for a local install)
+pyproject.toml, uv.lock       the contributor workspace: one lockfile and one environment around plugins/jobkit
+pyrightconfig.json, ruff.toml, .pylintrc   type-check and lint settings
 .claude/skills/          OpenSpec workflow skills for working on this repository in Claude Code
 .githooks/               the pre-commit hook
 AGENTS.md, CLAUDE.md     guidance for coding agents (CLAUDE.md imports AGENTS.md)
@@ -277,12 +300,12 @@ AGENTS.md, CLAUDE.md     guidance for coding agents (CLAUDE.md imports AGENTS.md
 
 ```
 uv run python -m unittest discover -s tests -t .    # unit and end-to-end tests (synthetic fixtures)
-uv run pyright                                      # type check
-uv run ruff check src tests                         # lint (ruff.toml)
-uv run pylint src                                   # deeper lint (.pylintrc)
+uv run pyright --project pyrightconfig.json         # type check (--project here is pyright's own option)
+uv run ruff check plugins/jobkit/src tests tools    # lint (ruff.toml)
+uv run pylint --rcfile .pylintrc plugins/jobkit/src # deeper lint (.pylintrc)
 ```
 
-**Versions.** The version lives in `pyproject.toml`; `plugin.json` and `.claude-plugin/plugin.json` must carry the same one (the tests check). After `uv lock`, regenerate the pinned versions with `uv run python setup/pins.py`. A change to any pin (`setup/constraints.txt`, `.python-version`, the uv version at the top of both installers) needs a new version in `pyproject.toml`, so installed helpers are offered the update; the tests check this too.
+**Versions.** The version lives in `plugins/jobkit/pyproject.toml`; `plugins/jobkit/plugin.json` and `plugins/jobkit/.claude-plugin/plugin.json` must carry the same one (the tests check). After `uv lock`, regenerate the pinned versions with `uv run python tools/pins.py`. A change to any pin (`plugins/jobkit/setup/constraints.txt`, `plugins/jobkit/.python-version`, the uv version at the top of both installers) needs a new version in `plugins/jobkit/pyproject.toml`, so installed helpers are offered the update; the tests check this too.
 
 A pre-commit hook runs gitleaks (secret scan of the staged changes), the personal-terms check ([manual](docs/manual.md#for-contributors-keeping-personal-data-out-of-commits)), ruff, pyright and the tests before every commit. Enable it once per clone:
 
@@ -290,7 +313,7 @@ A pre-commit hook runs gitleaks (secret scan of the staged changes), the persona
 git config core.hooksPath .githooks
 ```
 
-New tools follow the same shape (`build_parser()`, `main(argv) -> int`, typed functions) and need a `[project.scripts]` entry in `pyproject.toml`. Conventions for contributors and for coding agents are in `AGENTS.md`, which `CLAUDE.md` imports (the plugin's skills carry their own rules, because a plugin does not load either file); the promised behaviour is in `openspec/specs/`.
+New tools follow the same shape (`build_parser()`, `main(argv) -> int`, typed functions) and need a `[project.scripts]` entry in `plugins/jobkit/pyproject.toml`. Conventions for contributors and for coding agents are in `AGENTS.md`, which `CLAUDE.md` imports (the plugin's skills carry their own rules, because a plugin does not load either file); the promised behaviour is in `openspec/specs/`.
 
 ## Privacy
 

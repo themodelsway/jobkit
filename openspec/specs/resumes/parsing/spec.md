@@ -1,7 +1,7 @@
 # resumes/parsing Specification
 
 ## Purpose
-Parse the text of one resume into structured pieces (companies with roles and bullets, summaries, skills, certifications, education). Implemented in `src/jobkit/resumes/parse_resume.py` as pure functions.
+Parse the text of one resume into structured pieces (companies with roles and bullets, summaries, skills, certifications, education). Implemented in `plugins/jobkit/src/jk/resumes/parse_resume.py` as pure functions.
 
 ## Requirements
 

@@ -1,9 +1,9 @@
-"""Tests for src/jobkit/resumes/lines.py: the line-length limit and the checks on a proposed shorter wording."""
+"""Tests for plugins/jobkit/src/jk/resumes/lines.py: the line-length limit and the checks on a proposed shorter wording."""
 import unittest
 from unittest import mock
 
-from jobkit.common import ToolError
-from jobkit.resumes import build_resume as br, curate, lines, resume_data as rd
+from jk.common import ToolError
+from jk.resumes import build_resume as br, curate, lines, resume_data as rd
 from tests.resumes.test_resume_pipeline import PipelineCase
 
 ORIGINAL = ("Designed request throttling with Redis and Kafka during a platform upgrade; "

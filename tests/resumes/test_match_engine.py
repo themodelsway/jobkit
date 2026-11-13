@@ -5,7 +5,7 @@ import unittest
 from decimal import Decimal
 from unittest import mock
 
-from jobkit.resumes import match_engine as me, match_report as mrep
+from jk.resumes import match_engine as me, match_report as mrep
 
 D = Decimal
 EXEC = me.BANDS["executive"]

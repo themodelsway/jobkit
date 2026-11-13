@@ -8,11 +8,11 @@ jobkit provides three skills for Claude Code and Codex. Requests use plain langu
 | tutor | Teaching before quizzing, and interview readiness reports. | [tutor.md](guides/tutor.md) |
 | resume-workflows | Resume import, tailoring for a job posting, and match scoring (early preview). | [resume-workflows.md](guides/resume-workflows.md) |
 
-The pages in `skills/` are the agent's instructions; these pages are for users of the app. Settings and interview progress can be checked from the command line with the [top commands to explore](explore.md).
+The pages in `plugins/jobkit/skills/` are the agent's instructions; these pages are for users of the app. Settings and interview progress can be checked from the command line with the [top commands to explore](explore.md).
 
 ## Running the commands directly
 
-Twelve commands are installed by `uv sync` into `.venv`. The commands run from the project folder as `uv run <command>`, or as `uv run python -m jobkit.<group>.<tool>`. `--help` works on every command and subcommand.
+Twelve commands are installed by `uv sync` into `.venv`. The commands run from the repository root as `uv run <command>`, or as `uv run python -m jk.<group>.<tool>`. `--help` works on every command and subcommand.
 
 Conventions shared by all commands:
 

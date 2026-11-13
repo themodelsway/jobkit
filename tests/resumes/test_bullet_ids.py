@@ -2,9 +2,9 @@
 import contextlib
 import io
 
-from jobkit.resumes import process_resumes as proc
-from jobkit.resumes import resume_data as rd
-from jobkit.resumes import tables
+from jk.resumes import process_resumes as proc
+from jk.resumes import resume_data as rd
+from jk.resumes import tables
 from tests.resumes.test_integrity import RebuildCase
 
 BULLET = "Reduced page load time by 30 percent across twelve services using caching and query tuning."

@@ -1,13 +1,13 @@
 {
-  "name": "jobkit",
+  "name": "themodelsway",
   "owner": {
-    "name": "jobkit"
+    "name": "themodelsway"
   },
   "description": "Resume and interview-prep helpers that store your data on your own computer.",
   "plugins": [
     {
       "name": "jobkit",
-      "source": "./",
+      "source": "./plugins/jobkit",
       "description": "Build tailored resumes from your own resumes and practise for interviews. Your data is stored on your own computer."
     }
   ]

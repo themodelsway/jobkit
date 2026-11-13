@@ -1,4 +1,4 @@
-"""Tests for src/jobkit/common.py. Run: .venv/bin/python -m unittest discover -s tests -t ."""
+"""Tests for plugins/jobkit/src/jk/common.py. Run: uv run python -m unittest discover -s tests -t ."""
 import argparse
 import contextlib
 import io
@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from jobkit import common
-from jobkit.common import ToolError
+from jk import common
+from jk.common import ToolError
 
 
 class HomeTests(unittest.TestCase):

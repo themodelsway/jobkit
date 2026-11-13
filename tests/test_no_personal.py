@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jobkit import store
+from jk import store
 from tests import REAL_HOME
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,7 +83,7 @@ def terms_check_on_copy(home: Path) -> subprocess.CompletedProcess[str]:
             target.close()
             source.close()
         env = {**os.environ, "JOBKIT_HOME": folder}
-        return subprocess.run([sys.executable, "-m", "jobkit.user.profile", "terms", "check", "--all"], cwd=ROOT, env=env,
+        return subprocess.run([sys.executable, "-m", "jk.user.profile", "terms", "check", "--all"], cwd=ROOT, env=env,
                               capture_output=True, text=True, check=False)
 
 

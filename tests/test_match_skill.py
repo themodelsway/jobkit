@@ -4,11 +4,11 @@ import re
 import unittest
 from pathlib import Path
 
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_score as ms
+from jk.resumes import match_engine as me
+from jk.resumes import match_score as ms
 
-ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills" / "resume-workflows"
+PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins" / "jobkit"
+SKILL = PLUGIN_ROOT / "skills" / "resume-workflows"
 
 
 def section() -> list[str]:

@@ -5,7 +5,7 @@ import unittest
 from typing import Any
 from unittest import mock
 
-from jobkit.resumes import parse_resume as pr, query_resume as qr, tables
+from jk.resumes import parse_resume as pr, query_resume as qr, tables
 from tests.resumes.match_fixtures import jd_from_bullets, line, role
 from tests.resumes.test_resume_pipeline import PipelineCase
 from tests.support import HomeCase

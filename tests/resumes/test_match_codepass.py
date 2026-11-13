@@ -6,8 +6,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from jobkit.common import ToolError
-from jobkit.resumes import match_codepass as cp, match_engine as me, match_facts as mf, match_request as mr
+from jk.common import ToolError
+from jk.resumes import match_codepass as cp, match_engine as me, match_facts as mf, match_request as mr
 from tests.resumes.match_fixtures import facts, request
 
 FACTS = facts()

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jobkit import store
+from jk import store
 from tests import REAL_HOME
 
 

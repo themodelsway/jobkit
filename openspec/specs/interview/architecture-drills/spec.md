@@ -1,7 +1,7 @@
 # aws/architecture-drills Specification
 
 ## Purpose
-Keep architecture drill cards (services, decision pairs, scenarios) for one or more technologies and the user's confidence, stored in the database. Implemented in `src/jobkit/interview/arch.py` and `tracks.py`; AWS is the bundled example (`src/jobkit/interview/aws/arch_seed.py`); other technologies are track seeds stored in the database.
+Keep architecture drill cards (services, decision pairs, scenarios) for one or more technologies and the user's confidence, stored in the database. Implemented in `plugins/jobkit/src/jk/interview/arch.py` and `tracks.py`; AWS is the bundled example (`plugins/jobkit/src/jk/interview/aws/arch_seed.py`); other technologies are track seeds stored in the database.
 
 ## Requirements
 

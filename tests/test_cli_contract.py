@@ -1,5 +1,5 @@
 """Contract tests for the command-line tools: every tool answers --help, and the AWS seed data is well formed.
-Run: .venv/bin/python -m unittest discover -s tests -t ."""
+Run: uv run python -m unittest discover -s tests -t ."""
 import importlib
 import subprocess
 import sys
@@ -8,13 +8,13 @@ import unittest
 from collections import Counter
 from pathlib import Path
 
-from jobkit.interview.aws import arch_seed as seed
+from jk.interview.aws import arch_seed as seed
 
-ROOT = Path(__file__).resolve().parents[1]
+PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins" / "jobkit"
 
-TOOLS = ["jobkit.user.profile", "jobkit.resumes.process_resumes", "jobkit.resumes.query_resume",
-         "jobkit.resumes.build_resume", "jobkit.resumes.lines", "jobkit.resumes.match_score", "jobkit.interview.arch", "jobkit.interview.lead",
-         "jobkit.interview.prep", "jobkit.interview.sessions", "jobkit.interview.readiness", "jobkit.admin"]
+TOOLS = ["jk.user.profile", "jk.resumes.process_resumes", "jk.resumes.query_resume",
+         "jk.resumes.build_resume", "jk.resumes.lines", "jk.resumes.match_score", "jk.interview.arch", "jk.interview.lead",
+         "jk.interview.prep", "jk.interview.sessions", "jk.interview.readiness", "jk.admin"]
 
 
 class HelpTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class HelpTests(unittest.TestCase):
                 self.assertTrue(p.stdout.startswith("usage:"))
 
     def test_entry_points_name_each_tool_main(self):
-        scripts = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["scripts"]
+        scripts = tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["scripts"]
         self.assertEqual(sorted(v.split(":")[0] for v in scripts.values()), sorted(TOOLS))
         for target in scripts.values():
             module, func = target.split(":")

@@ -1,0 +1,10 @@
+{
+  "pythonVersion": "3.14",
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": ["plugins/jobkit/src/jk"],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportUnusedCoroutine": "error",
+  "reportUnnecessaryTypeIgnoreComment": "warning"
+}

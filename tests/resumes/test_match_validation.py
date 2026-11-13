@@ -4,10 +4,10 @@ import copy
 import unittest
 from pathlib import Path
 
-from jobkit import common
-from jobkit.resumes import match_engine as me
-from jobkit.resumes import match_facts as mf
-from jobkit.resumes import match_request as mr
+from jk import common
+from jk.resumes import match_engine as me
+from jk.resumes import match_facts as mf
+from jk.resumes import match_request as mr
 from tests.resumes.match_fixtures import facts, request
 
 FACTS = facts()

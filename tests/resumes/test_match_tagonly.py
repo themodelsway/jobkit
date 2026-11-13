@@ -3,11 +3,11 @@ import copy
 import unittest
 from types import SimpleNamespace
 
-from jobkit import common
-from jobkit.resumes import match_codepass as cp
-from jobkit.resumes import match_facts as mf
-from jobkit.resumes import match_score as ms
-from jobkit.resumes import tables
+from jk import common
+from jk.resumes import match_codepass as cp
+from jk.resumes import match_facts as mf
+from jk.resumes import match_score as ms
+from jk.resumes import tables
 from tests.resumes.match_fixtures import facts
 from tests.resumes.test_match_score import POSTING, MatchCase, seed
 
