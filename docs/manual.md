@@ -54,6 +54,8 @@ The home folder and its database. Standard library only.
 | `jobkit export` | `--format json\|md`, `--only KIND`, `-o DIR` | The way to look at stored data. Prints all of it (or one kind) as JSON (default) or Markdown; with `-o` writes one file per kind into `DIR`. Never changes the database and writes nothing unless `-o` is given. Kinds: `stories`, `engagements`, `themes`, `arch-catalog`, `arch-progress`, `arch-tracks`, `lead-questions`, `lead-progress`, `lead-scope`, `sessions`, `settings`, `employers`, `open-items`, `terms`, `resume-companies`, `resume-skills`, `resume-profile`, `resume-index`, `resume-ledger`, `resume-unparsed`, `curated`, `curation-themes`. |
 | `jobkit backup` | `-o FILE`, `--restore FILE` | Write a consistent copy of the database to `backup/` (or `FILE`), also while other commands are running. `--restore FILE` replaces the database with a backup after saving the current one. The file is first checked on a temporary copy (integrity, upgrade, every table, column and protective trigger, no broken references, every stored record readable); a file that is damaged, incomplete, not a jobkit database, or from a newer version is refused and nothing is changed. A refusal names the table, never the record's content. |
 
+The first command after an update that changes the database layout upgrades the database by itself. An existing database is first copied to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db`; if that copy cannot be written, nothing is upgraded. An upgrade cannot be reversed: to go back, run `jobkit backup --restore` with that copy and use the older release. These copies are not removed automatically.
+
 ### `profile`
 
 Per-user settings, stored in the database. Standard library only.

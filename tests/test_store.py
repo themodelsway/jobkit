@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from jk import admin, base, common, schema, store
+from jk.base import ToolError
 from jk.interview import prep, tables
 from tests.support import HomeCase
 
@@ -192,6 +193,78 @@ class SchemaTests(DatabaseFileCase):
         with store.transaction(write=False) as conn:
             self.assertEqual(store.stored_version(conn), store.version())
             conn.execute("SELECT * FROM meta")
+
+    def test_a_failing_step_rolls_back_every_earlier_step(self):
+        store.db_path().parent.mkdir(parents=True)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, 3)
+        steps = list(store.MIGRATIONS)
+        steps[5] = mock.Mock(side_effect=RuntimeError("step failed"))
+        with mock.patch.object(store, "MIGRATIONS", steps):
+            with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+                tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                with self.assertRaisesRegex(RuntimeError, "step failed"):
+                    store.migrate_to(conn, len(steps))
+                self.assertEqual(store.stored_version(conn), 3)
+                self.assertEqual({r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}, tables)
+
+    def test_an_older_database_is_copied_to_backup_before_the_upgrade(self):
+        store.db_path().parent.mkdir(parents=True)
+        old = store.MIGRATIONS.index(schema.step_drop_documents)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, old)
+        store.connect()
+        copies = list(base.backup_dir().glob(f"jobkit-before-upgrade-v{old}-*.db"))
+        self.assertEqual(len(copies), 1)
+        with contextlib.closing(sqlite3.connect(copies[0])) as copy:
+            self.assertEqual(copy.execute("PRAGMA user_version").fetchone()[0], old)
+        self.assertEqual(self.pragma_version(), store.version())
+
+    def test_a_copy_is_never_overwritten_by_one_with_the_same_name(self):
+        base.backup_dir().mkdir(parents=True)
+        with mock.patch.object(store, "stamp", return_value="20260101-000000"):
+            first = store._reserve_backup("jobkit-before-upgrade-v8")
+            first.write_bytes(b"first copy")
+            second = store._reserve_backup("jobkit-before-upgrade-v8")
+        self.assertNotEqual(first, second)
+        self.assertEqual(first.read_bytes(), b"first copy")
+
+    def test_a_command_that_read_a_stale_version_makes_no_copy_and_no_second_upgrade(self):
+        store.create()
+        store.close()
+        real, calls = store.stored_version, []
+
+        def stale_then_real(conn):
+            calls.append(1)
+            return 8 if len(calls) == 1 else real(conn)
+
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            with mock.patch.object(store, "stored_version", side_effect=stale_then_real):
+                self.assertEqual(store.migrate(conn), store.version())
+        self.assertEqual(list(base.backup_dir().glob("jobkit-before-upgrade-*")), [])
+        self.assertEqual(self.pragma_version(), store.version())
+
+    def test_a_backup_folder_that_is_a_file_gives_a_clear_error_and_no_traceback(self):
+        store.db_path().parent.mkdir(parents=True)
+        old = store.MIGRATIONS.index(schema.step_drop_documents)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, old)
+        base.backup_dir().write_text("not a folder", encoding="utf-8")
+        with self.assertRaisesRegex(ToolError, "Could not save a copy.*Nothing was changed"):
+            store.connect()
+        self.assertEqual(self.pragma_version(), old)
+
+    def test_a_new_or_current_database_makes_no_upgrade_copy(self):
+        store.create()
+        store.close()
+        store.connect()
+        self.assertEqual(list(base.backup_dir().glob("jobkit-before-upgrade-*")), [])
+
+    def test_an_empty_version_zero_file_makes_no_upgrade_copy(self):
+        store.db_path().parent.mkdir(parents=True)
+        sqlite3.connect(store.db_path()).close()
+        store.connect()
+        self.assertEqual(list(base.backup_dir().glob("jobkit-before-upgrade-*")), [])
 
     def test_newer_database_is_refused_and_left_alone(self):
         store.create()

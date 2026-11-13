@@ -35,7 +35,7 @@ A command that reads or writes data SHALL stop with a message naming `jobkit ini
 - **THEN** it exits with status 1 and tells the user to run `jobkit init`
 
 ### Requirement: Schema is versioned
-The database SHALL record its schema version, and the system SHALL apply any missing numbered upgrade steps, in order and inside a transaction, before a command runs. A database written by a newer version SHALL be refused with a message.
+The database SHALL record its schema version, and the system SHALL apply any missing numbered upgrade steps, in order and all inside one transaction (all or nothing), before a command runs. A database written by a newer version SHALL be refused with a message.
 
 #### Scenario: Older database
 - **WHEN** a command opens a database with an older schema version
@@ -44,6 +44,29 @@ The database SHALL record its schema version, and the system SHALL apply any mis
 #### Scenario: Newer database
 - **WHEN** the database version is newer than the program knows
 - **THEN** the command exits with status 1 and makes no change
+
+#### Scenario: A step fails part-way
+- **WHEN** one upgrade step fails after earlier steps ran
+- **THEN** every step is rolled back and the database stays at the version it had
+
+### Requirement: A copy is saved before an upgrade
+Before applying upgrade steps to an existing database that holds a schema version, the system SHALL save a consistent copy to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db` under the home folder. The version SHALL be read again after the write lock is taken, so that commands running at the same time upgrade and copy once, and a copy SHALL never overwrite an earlier one. If the copy cannot be written, the system SHALL stop with a message (never a traceback) and leave the database unchanged. A new or empty database SHALL NOT be copied.
+
+#### Scenario: Older database
+- **WHEN** a command opens a database at an older schema version
+- **THEN** a copy at that old version exists in `backup/` before the upgrade steps run
+
+#### Scenario: Another command upgraded first
+- **WHEN** a command read an older version but another command upgraded the database before this one took the write lock
+- **THEN** no copy is made and no second upgrade runs
+
+#### Scenario: Two copies get the same name
+- **WHEN** a copy would have the name of an existing copy
+- **THEN** it gets a different name and the existing copy is unchanged
+
+#### Scenario: Copy cannot be written
+- **WHEN** the copy fails (for example, the disk is full)
+- **THEN** the command exits with status 1, names the cause and the database stays at its old version
 
 ### Requirement: Changes are atomic
 Each command SHALL commit all of its changes together or none of them. A write that fails inside a larger command SHALL leave none of its own changes behind, even when the command handles the failure and carries on.

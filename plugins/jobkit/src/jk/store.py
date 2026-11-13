@@ -3,7 +3,7 @@
   data/jobkit.db under the home folder (`JOBKIT_HOME`, default `~/.jobkit`)
 
 Every command runs in one transaction: its changes are stored together or not at all. Several commands may
-run at the same time (WAL mode and a busy timeout). Schema upgrades are numbered steps in `MIGRATIONS`.
+run at the same time (WAL mode and a busy timeout). Schema upgrades are numbered steps in `MIGRATIONS`, applied together in one transaction.
 Import it as `from jk import store`; it does no work at import time.
 """
 from __future__ import annotations
@@ -74,29 +74,91 @@ def stored_version(conn: sqlite3.Connection) -> int:
 
 
 def migrate(conn: sqlite3.Connection) -> int:
-    """Apply the missing upgrade steps in order, each inside one transaction; return the new version.
+    """Apply the missing upgrade steps in order, all inside one transaction; return the new version.
+
+    The version is read after taking the write lock, so two commands never upgrade (or copy) at once. An
+    existing database is first copied to `backup/` (never for a new or empty one).
 
     Raises:
-        ToolError: the database was written by a newer version of the program.
+        ToolError: the database was written by a newer version of the program, or the copy failed.
     """
-    current = stored_version(conn)
-    if current > version():
-        raise ToolError(f"The database is version {current} but this program only knows version {version()}. "
-                        "Update jobkit; nothing was changed.")
-    return migrate_to(conn, version())
+    if stored_version(conn) == version():
+        return version()                       # nothing to do: take no write lock (readers must not wait)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        current = stored_version(conn)         # read again: another command may have upgraded meanwhile
+        if current == version():
+            conn.execute("COMMIT")
+            return current
+        if current > version():
+            raise ToolError(f"The database is version {current} but this program only knows version "
+                            f"{version()}. Update jobkit; nothing was changed.")
+        if 0 < current < version():
+            _save_before_upgrade(conn, current)
+        _apply_steps(conn, current, version())
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+    return version()
+
+
+def _reserve_backup(label: str) -> Path:
+    """Create an empty file `backup/<label>-<timestamp>[-N].db` that no earlier copy has; return its path."""
+    base.backup_dir().mkdir(parents=True, exist_ok=True)
+    first = default_backup_path(label)
+    for number in range(1, 1000):
+        path = first if number == 1 else first.with_name(f"{first.stem}-{number}{first.suffix}")
+        try:
+            path.open("xb").close()
+        except FileExistsError:
+            continue
+        return path
+    raise FileExistsError(f"too many copies named {first.name}")
+
+
+def _save_before_upgrade(conn: sqlite3.Connection, current: int) -> Path:
+    """Copy the database to `backup/jobkit-before-upgrade-v<current>-<timestamp>.db`; return that file.
+
+    An earlier copy is never overwritten. Raises ToolError if the copy cannot be written.
+    """
+    path: Path | None = None
+    try:
+        path = _reserve_backup(f"jobkit-before-upgrade-v{current}")
+        # A second connection reads the last committed state (WAL readers are not blocked by our write lock;
+        # `conn.backup` on the locked connection itself would wait forever).
+        source_file = conn.execute("PRAGMA database_list").fetchone()[2]
+        with contextlib.closing(sqlite3.connect(source_file, timeout=BUSY_TIMEOUT_MS / 1000)) as source, \
+                contextlib.closing(sqlite3.connect(path)) as target:
+            source.backup(target)
+    except (OSError, sqlite3.Error) as err:
+        if path is not None:
+            with contextlib.suppress(OSError):
+                path.unlink()
+        raise ToolError(f"Could not save a copy of the database before upgrading it ({err}). "
+                        "Nothing was changed.") from err
+    return path
+
+
+def _apply_steps(conn: sqlite3.Connection, start: int, target: int) -> None:
+    """Run the steps from `start` to `target` inside the open transaction, stamping each version."""
+    for number in range(start, target):
+        MIGRATIONS[number](conn)
+        conn.execute(f"PRAGMA user_version={number + 1}")
 
 
 def migrate_to(conn: sqlite3.Connection, target: int) -> int:
-    """Apply upgrade steps until the database is at `target` (each step in its own transaction)."""
-    for number in range(stored_version(conn), target):
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            MIGRATIONS[number](conn)
-            conn.execute(f"PRAGMA user_version={number + 1}")
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
-        conn.execute("COMMIT")
+    """Apply upgrade steps until the database is at `target`, all in one transaction (all or nothing).
+
+    If any step fails, every step is rolled back and the database stays at the version it had.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        _apply_steps(conn, stored_version(conn), target)
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
     return target
 
 
