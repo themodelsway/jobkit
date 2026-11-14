@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any, Final, NamedTuple
 
 from jk import common
@@ -38,8 +39,58 @@ class Difference(NamedTuple):
     visual: str
 
 
+DATE_RE: Final[re.Pattern[str]] = re.compile(r"\d{4}(?:-(?:0[1-9]|1[0-2]))?")
+_QUOTES: Final[dict[int, str]] = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+                                               "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00a0": " "})
+
+
 def _key(text: str) -> str:
+    """Lenient key for pairing employers: letters and digits only (never used to decide that two values agree)."""
     return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def exact(text: str) -> str:
+    """Strict key for wording: keeps digits, decimal points, signs and technical punctuation (`C++`, `C#`); only
+    case, spacing, typographic quotes and dashes and the ends of the line are ignored."""
+    plain = unicodedata.normalize("NFKC", text).translate(_QUOTES)
+    return re.sub(r"\s+", " ", plain).strip().strip(".;,:").casefold()
+
+
+def _closest(text: str, pool: list[str]) -> str | None:
+    """The member of `pool` with the same exact text as `text`, else the most alike one; None for an empty pool."""
+    same = next((p for p in pool if exact(p) == exact(text)), None)
+    if same is not None:
+        return same
+    return max(pool, key=lambda p: pr.similar(p, text), default=None)
+
+
+def _strings(value: Any, path: str) -> list[str]:
+    """`value` as a list of strings; raises ToolError naming `path` when it is not one."""
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise common.ToolError(f"'{path}' must be a list of strings.")
+    return value
+
+
+def _date(value: Any, path: str) -> None:
+    """A role date is YYYY-MM, YYYY, or null (null or absent: a current job's end, or a start the pages do not show)."""
+    if value is not None and not (isinstance(value, str) and DATE_RE.fullmatch(value)):
+        raise common.ToolError(f"'{path}' must be YYYY-MM, YYYY or null, not {value!r}.")
+
+
+def _text(value: Any, path: str) -> None:
+    """An optional text field is a string, null or absent; anything else (a list, a number, false) raises ToolError."""
+    if value is not None and not isinstance(value, str):
+        raise common.ToolError(f"'{path}' must be a string, not {value!r}.")
+
+
+def _check_employer(employer: Any, path: str) -> None:
+    """Check one employer of the reading; raises ToolError naming the field."""
+    if not isinstance(employer, dict) or not isinstance(employer.get("name"), str):
+        raise common.ToolError(f"'{path}' must be an object with a string 'name'.")
+    _text(employer.get("title"), f"{path}.title")
+    _strings(employer.get("bullets", []), f"{path}.bullets")
+    _date(employer.get("start"), f"{path}.start")
+    _date(employer.get("end"), f"{path}.end")
 
 
 def read_reading(raw: str) -> dict[str, Any]:
@@ -53,12 +104,10 @@ def read_reading(raw: str) -> dict[str, Any]:
         raise common.ToolError("The reading must be a JSON object with an 'employers' list "
                                "(see `process-resumes visual schema`).")
     for field in ("skills", "certifications", "education"):
-        if not all(isinstance(item, str) for item in data.get(field, [])):
-            raise common.ToolError(f"'{field}' must be a list of strings.")
-    for employer in data["employers"]:
-        if not isinstance(employer, dict) or not isinstance(employer.get("name"), str) \
-                or not all(isinstance(b, str) for b in employer.get("bullets", [])):
-            raise common.ToolError("Each employer needs a 'name' and a list of string 'bullets'.")
+        _strings(data.get(field, []), field)
+    _text(data.get("summary"), "summary")
+    for number, employer in enumerate(data["employers"]):
+        _check_employer(employer, f"employers[{number}]")
     return data
 
 
@@ -78,21 +127,21 @@ def _bullet_differences(label: str, parsed: list[str], visual: list[str]) -> lis
     out: list[Difference] = []
     left = list(parsed)
     for text in visual:
-        best = max(left, key=lambda p: pr.similar(p, text), default=None)
-        score = pr.similar(best, text) if best is not None else 0.0
-        if best is None or score < SIMILAR_BULLET:
+        best = _closest(text, left)
+        if best is None or pr.similar(best, text) < SIMILAR_BULLET:
             out.append(Difference(label, "missing", "", text))
             continue
         left.remove(best)
-        if _key(best) != _key(text):
+        if exact(best) != exact(text):
             out.append(Difference(label, "different", best, text))
     return out + [Difference(label, "extra", text, "") for text in left]
 
 
 def _role_differences(visual: dict[str, Any], entry: pr.WorkEntry) -> list[Difference]:
+    """Title, dates and bullets of one paired role; the title is compared as wording (`C` and `C++` differ)."""
     label = f"{visual['name']} {visual.get('start') or '?'}"
     out = [Difference(f"{label} {field}", "different", str(entry[field] or ""), str(visual.get(field) or ""))
-           for field in ("title", "start", "end") if _key(str(entry[field] or "")) != _key(str(visual.get(field) or ""))]
+           for field in ("title", "start", "end") if exact(str(entry[field] or "")) != exact(str(visual.get(field) or ""))]
     return out + _bullet_differences(f"{label} bullets", entry["bullets"], visual.get("bullets", []))
 
 
@@ -111,15 +160,18 @@ def _employer_differences(parsed: list[pr.WorkEntry], visual: list[dict[str, Any
 
 
 def _item_differences(section: str, parsed: list[str], visual: list[str]) -> list[Difference]:
-    """Lists of short items (skills, education, certifications): matched by likeness, order ignored."""
+    """Lists of short items (skills, education, certifications): paired by likeness (order ignored), then any
+    pair whose exact text differs is reported."""
     out: list[Difference] = []
     left = list(parsed)
     for text in visual:
-        best = max(left, key=lambda p: pr.similar(p, text), default=None)
+        best = _closest(text, left)
         if best is None or pr.similar(best, text) < SIMILAR_ITEM:
             out.append(Difference(section, "missing", "", text))
-        else:
-            left.remove(best)
+            continue
+        left.remove(best)
+        if exact(best) != exact(text):
+            out.append(Difference(section, "different", best, text))
     return out + [Difference(section, "extra", text, "") for text in left]
 
 
@@ -131,7 +183,7 @@ def compare(parsed: pr.Resume, reading: dict[str, Any]) -> list[Difference]:
     for section in ("certifications", "education"):
         found += _item_differences(section, parsed[section], reading.get(section, []))
     visual_summary = str(reading.get("summary") or "")
-    if visual_summary and pr.similar(parsed["summary"], visual_summary) < SIMILAR_BULLET:
+    if exact(parsed["summary"]) != exact(visual_summary):
         found.append(Difference("summary", "different", parsed["summary"], visual_summary))
     return found
 

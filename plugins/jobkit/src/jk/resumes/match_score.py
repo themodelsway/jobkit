@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """EARLY PREVIEW: rate how well your stored resume lines cover a job posting (a match estimate, not any ATS score).
 
-  match-score extract --jd posting.txt          # the requirements code can rate, or the stored result if seen before
+  match-score extract --jd posting.txt          # the requirements code can rate, the skills, education and
+                                                # certifications to cite, and a posting KEY; or the stored result
   match-score check requests.json --jd posting.txt   # validate pass 1 output; which close calls take a fallback
   match-score run requests.json --jd posting.txt     # score, store and print the report (--json: everything)
+  match-score check - --key KEY                 # the same, with the request on stdin and the posting that
+  match-score run - --key KEY                   # `extract` saved (no file written by the caller)
   match-score list                              # stored results
   match-score show KEY                          # print a stored result again
 
-`requests.json` and the posting may be "-" (standard input), but not both. The score is arithmetic over the
+`requests.json` and the posting may be "-" (standard input), but not both. `extract` saves the posting under
+`output/match/postings/` in the home folder and prints its KEY; `check` and `run` take `--key KEY` in place of `--jd`. The score is arithmetic over the
 requirements the agent rated against your lines; it is a lower and an upper value, never a prediction.
 This is not `query-resume match` (an alias of `for-jd`), which ranks lines and gives no score.
 """
@@ -24,7 +28,7 @@ from typing import Any
 from jk import common
 from jk.resumes import match_bands, match_codepass, match_engine, match_facts, match_flags, match_report
 from jk.resumes import match_request as mr
-from jk.resumes import match_tables
+from jk.resumes import match_postings, match_tables
 
 
 @dataclass
@@ -49,9 +53,13 @@ def _json_text(value: Any) -> str:
 
 
 def _read_posting(args: argparse.Namespace) -> str:
-    """The posting text (`--jd`)."""
+    """The posting text: the one saved under `--key`, or `--jd`."""
+    if getattr(args, "key", None):
+        if args.jd:
+            raise common.ToolError("Give the posting with --jd or --key, not both.")
+        return match_postings.load(args.key)
     if not args.jd:
-        raise common.ToolError("Give the posting with --jd FILE (or - for standard input).")
+        raise common.ToolError("Give the posting with --jd FILE (or - for standard input), or --key KEY.")
     if getattr(args, "requests", None) == "-" and args.jd == "-":
         raise common.ToolError("Only one of the request and the posting can come from standard input.")
     text = common.read_text_arg(args.jd)
@@ -133,18 +141,27 @@ def _rows(prep: Prepared) -> list[dict[str, Any]]:
     return rows
 
 
+def evidence_view(facts: match_facts.ResumeFacts) -> dict[str, Any]:
+    """What pass 1 may cite besides lines: skill names by group (no sources), education in order, certifications."""
+    groups = {group: [skill["name"] for skill in skills] for group, skills in facts.skills.get("groups", {}).items()}
+    return {"skills": groups, "education": list(facts.education), "certifications": list(facts.certifications)}
+
+
 def cmd_extract(args: argparse.Namespace) -> None:
     """Show the stored result for this posting and resume data, or the requirements code can rate."""
     posting = _read_posting(args)
+    posting_key = match_postings.save(posting)
     facts = match_facts.load_facts()
     _, bands_fp = match_bands.load_bands()
     key = _key(posting, facts, bands_fp)
     stored = match_tables.get_latest(key, touch=True)
     if stored is not None:
-        common.emit(_json_text({"key": key, "cached": True, "report": match_report.report(stored)}), args.output)
+        out = {"key": key, "posting": posting_key, "cached": True, "report": match_report.report(stored)}
+        common.emit(_json_text(out), args.output)
         return
     items = match_codepass.code_pass(posting, facts)
-    common.emit(_json_text({"key": key, "cached": False, "code_items": items}), args.output)
+    out = {"key": key, "posting": posting_key, "cached": False, "code_items": items, "evidence": evidence_view(facts)}
+    common.emit(_json_text(out), args.output)
 
 
 def cmd_check(args: argparse.Namespace) -> None:
@@ -168,6 +185,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             "priority_rules_applied": prep.request.rules_applied, "code_pass_notes": prep.code_notes}
     body = match_report.build_body(_rows(prep), result, meta)
     match_tables.prune()
+    match_postings.prune()
     match_tables.save_result(prep.key, body)
     common.emit(_json_text(body) if args.json else match_report.report(body), args.output)
 
@@ -208,6 +226,8 @@ def build_parser() -> argparse.ArgumentParser:
             step.add_argument("requests", help="the requirements JSON from pass 1, or - for stdin")
             step.add_argument("--band", help="use this band instead of the one in the request")
         step.add_argument("--jd", help="the job posting text file, or - for stdin")
+        if name != "extract":
+            step.add_argument("--key", help="the posting KEY that `extract` printed (in place of --jd)")
         step.add_argument("-o", "--output", help="write the output to this file")
         if name == "run":
             step.add_argument("--json", action="store_true", help="print the full result as JSON")

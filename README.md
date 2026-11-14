@@ -31,7 +31,7 @@ jobkit provides three skills for Claude Code and Codex: interview practice, tuto
 
 After installation, Claude Code or Codex accepts requests in plain words from any folder. The first request leads to an offer to set up the helper ([What setup installs](#what-setup-installs)); one yes is needed.
 
-1. **Resume import.** The skill takes the folder that holds the resumes, finds the resume files (PDF, Word, Markdown or text) in it and its subfolders, previews what was found, and then reads them. Resume files are only read, never changed.
+1. **Resume import.** The skill takes the folder that holds the resumes, finds the resume files (PDF, Word, Markdown or text) in it and its subfolders, previews what was found, and then reads them. The jobkit commands only read resume files, and the skills tell the agent never to change them.
 2. **Topic instruction.** The tutor explains a topic, a question or one of the user's stories first, then checks understanding with a short quiz.
 3. **Practice.** A mock interview asks first, gives no hints, then grades the answers. A session can be stopped and resumed later.
 4. **Readiness assessment.** A report shows what has been rehearsed, what is solid and what is still untested, optionally for a supplied job posting.
@@ -45,6 +45,9 @@ Each step above is one of the three skills. The three skills share one datastore
 
 - **One store from many resumes.** Every resume is read once, split by employer, and merged. Wording that appears in several resumes is kept once, with its sources.
 - **Incremental.** Files that have not changed are skipped; new files are added; deleted or renamed files are removed.
+- **Many layouts.** Resumes laid out with a side column (PDF columns, Word text boxes or tables), Markdown tables, headings written many ways (`Experience`, `Career Highlights`), dates such as `09/2021`, `Sep 2021` or `2012`, and several titles at one employer are read. After an update that changes how resumes are read, the next run saves a copy of the data and re-reads every resume once, keeping curation.
+- **Scanned PDFs.** A PDF with no readable text (a scan or a damaged file) is reported with its reason. The skill tells the agent to ask first, and to read its pages as pictures once the user responds with yes; the agent then types out the text and shows it for checking. The commands use the typed-out text only after it is confirmed with `process-resumes visual confirm`, which the skill tells the agent to run once the user agrees with the text.
+- **Checking a PDF against its pages.** For a PDF that reads as text, the parse can be compared with a reading of its pages; the skill tells the agent to do this only when the user asks. The agent shows each difference with both versions for the user to decide. Agreed corrections are kept in the data folder and used until the PDF changes; the jobkit commands do not write to the resume file.
 - **Wrong figures can be flagged.** A figure known to be wrong can be listed, so lines that use it are marked and left out of matching.
 
 ### Learning with the tutor
@@ -68,7 +71,7 @@ A report of coverage and evidence per area, optionally limited to one job postin
 Resume tailoring and match scoring are early previews. Their output requires review before use.
 
 - **Tailoring.** Given a job posting, it builds a resume from the stored lines. It ranks the lines per employer, suggests opening summaries, lists the skills the posting asks for that no stored line supports, and writes a Markdown draft. The draft requires review before use.
-- **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired.
+- **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The first step saves the posting in the data folder, so the later steps name it instead of passing it again; a saved posting unused for 30 days is removed.
 
 ## Supported apps and systems
 
@@ -100,6 +103,7 @@ Setup installs [uv](https://docs.astral.sh/uv/) when it is missing. [What setup 
 ### After installing
 
 - **Skills installed:** `jobkit:interview-prep` (mock interview), `jobkit:tutor` (teaching and readiness reports) and `jobkit:resume-workflows` (add a resume, tailor a resume for a job posting).
+- **Helpers installed:** `resume-visual-scanner` (reads the pages of a PDF as pictures, once the user responds with yes to a visual reading) and `jd-matcher` (the first rating pass of a match score). The skills tell the agent to hand work to them, to keep page images and long postings out of the main conversation, and to do the work itself when the app cannot run them.
 - **Update:** `/plugin marketplace update themodelsway`, then `/plugin update jobkit@themodelsway`, then restart Claude Code. The next time a skill starts it notices the commands are older and offers to update them.
 - **Remove:** `/plugin uninstall jobkit@themodelsway`. `~/.jobkit` and your data are left alone, and so are the commands (see [Removing the commands](#removing-the-commands)).
 - **Trying it from a checkout:** `claude --plugin-dir plugins/jobkit` loads the three skills for one session.
@@ -121,13 +125,13 @@ writable_roots = ["FULL-PATH-OF-YOUR-HOME-FOLDER/.jobkit"]
 
 The first-time setup also downloads and installs software (see [What setup installs](#what-setup-installs)), which the sandbox blocks: approve that step when Codex asks. If it was blocked, the skill says that setup did not finish; allow it and ask again, and it carries on from where it stopped. If a save is blocked later, the skill says that nothing was saved and names the folder to allow. Do not turn the sandbox off for this.
 
-- **Skills installed:** the same three, `interview-prep`, `tutor` and `resume-workflows`, from the same files as in Claude Code.
+- **Skills installed:** the same three, `interview-prep`, `tutor` and `resume-workflows`, from the same files as in Claude Code. An installed Codex plugin does not include the two helpers; the skills then use a separate helper where Codex can run one, or do that work themselves.
 - **Update:** `codex plugin marketplace upgrade themodelsway`, then `codex plugin add jobkit@themodelsway` again. The next time a skill starts it offers to update the commands.
 - **Remove:** `codex plugin remove jobkit@themodelsway`, and `codex plugin marketplace remove themodelsway` to forget the marketplace. Your data and the commands are left alone.
 
 ## What setup installs
 
-The first time a skill runs, in either app, it says it needs to set up a small helper and asks whether that is OK. On a no it installs nothing. On a yes it runs `setup/install` from the plugin folder (`setup/install.ps1` on Windows), which installs exactly this:
+The first time a skill runs, in either app, the skill tells the agent to say that a small helper needs to be set up and to ask whether that is OK, to install nothing on a no, and once the user responds with yes to run `setup/install` from the plugin folder (`setup/install.ps1` on Windows). That installer installs exactly this:
 
 | What | Version | From | When |
 |---|---|---|---|
@@ -181,7 +185,7 @@ uv installs all twelve commands in its tool folder (`uv tool dir --bin` prints i
 
 ### Setup from the command line
 
-Requirements: macOS, Linux or Windows with Git for Windows (see above), [uv](https://docs.astral.sh/uv/) (it installs the pinned Python), and gitleaks for contributors who commit. poppler is optional and only improves PDF reading.
+Requirements: macOS, Linux or Windows with Git for Windows (see above), [uv](https://docs.astral.sh/uv/) (it installs the pinned Python), and gitleaks for contributors who commit. poppler is optional: it improves PDF reading and draws the page pictures for a visual reading of any PDF (without it, pictures can be taken only from a plain scan).
 
 ```
 uv sync                       # creates .venv and installs the commands into it
@@ -191,7 +195,7 @@ Optional tools, by system:
 
 | Tool | macOS | Debian, Ubuntu | Fedora, RHEL | Arch |
 |---|---|---|---|---|
-| poppler (PDF reading) | `brew install poppler` | `sudo apt install poppler-utils` | `sudo dnf install poppler-utils` | `sudo pacman -S poppler` |
+| poppler (PDF reading and page pictures) | `brew install poppler` | `sudo apt install poppler-utils` | `sudo dnf install poppler-utils` | `sudo pacman -S poppler` |
 | gitleaks (pre-commit secret scan) | `brew install gitleaks` | see the [gitleaks releases](https://github.com/gitleaks/gitleaks/releases) | see the releases | `sudo pacman -S gitleaks` |
 
 On Windows neither is needed to try jobkit. Without `pdftotext` the PDF reader falls back to `pypdf`, which works with no extra install; poppler stays preferred when it is present. In testing, the `pypdf` layout gave the same employers, date lines and bullet counts as poppler.
@@ -232,9 +236,9 @@ Save the name and contact line once with `profile header set NAME CONTACT_LINE` 
 
 | Command | What it does |
 |---|---|
-| `process-resumes` | Reads resumes from the resume folder, finds the employers on its own, and builds the resume data. `--survey` previews without writing; `--force` rebuilds. |
+| `process-resumes` | Reads resumes from the resume folder, finds the employers on its own, and builds the resume data. `--survey` previews without writing; `--force` rebuilds. `curate` changes the hand curation (several entries at once from standard input); `visual` handles PDFs read from their pages (`list`, `render`, `text`, `schema`, `compare`, `confirm`). |
 | `query-resume` | `for-jd` ranks lines for a posting; `search`, `review` and `stats` filter lines, list items that need a human look and show counts. |
-| `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model rates each requirement against the lines; the command does the arithmetic. |
+| `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model rates each requirement against the lines; the command does the arithmetic. `extract` saves the posting, and the later steps can name it with `--key`. |
 | `build-resume JD` | Writes a tailored Markdown resume. Name and contact come from the saved header (`profile header`), never from the resume data. |
 | `prep`, `arch`, `lead` | Stories, drill cards and the leadership question set. |
 | `sessions`, `readiness` | Practice sessions and the readiness report. |
@@ -249,6 +253,7 @@ The plugin is the `plugins/jobkit/` folder, which holds everything used at run t
 
 ```
 skills/                  the three skills: interview-prep, tutor, resume-workflows (with their guides)
+agents/                  the two helpers for Claude Code: resume-visual-scanner, jd-matcher
 src/jk/              the commands (Python package)
   common.py, base.py       helpers every tool shares: home folder, errors, exit status, one transaction per command
   store.py, schema.py      the database: connection, transactions, numbered schema upgrades, backup and restore
@@ -258,7 +263,7 @@ src/jk/              the commands (Python package)
   resumes/                 reading, parsing, querying and building resumes, and the match score (`match_*` files)
   interview/               stories, leadership questions, drill cards, practice sessions and readiness
   interview/aws/           the one bundled example track; others are added with `arch track add`
-setup/                   the helper setup the skills ask for, only with the user's yes
+setup/                   the helper setup the skills ask for; the skills tell the agent to run it once the user responds with yes
   install                  macOS and Linux
   install.ps1              Windows
   constraints.txt          the exact package versions setup installs (generated by `tools/pins.py`)
@@ -286,6 +291,7 @@ tools/                   pins.py (regenerate the pinned versions), clean_copy.py
 pyproject.toml, uv.lock       the contributor workspace: one lockfile and one environment around plugins/jobkit
 pyrightconfig.json, ruff.toml, .pylintrc   type-check and lint settings
 .claude/skills/          OpenSpec workflow skills for working on this repository in Claude Code
+.codex/agents/           the two helpers for Codex in this checkout (a test keeps their rules equal to the plugin's)
 .githooks/               the pre-commit hook
 AGENTS.md, CLAUDE.md     guidance for coding agents (CLAUDE.md imports AGENTS.md)
 ```
@@ -319,7 +325,7 @@ New tools follow the same shape (`build_parser()`, `main(argv) -> int`, typed fu
 
 jobkit data is stored in the `~/.jobkit` folder (or the folder named by `JOBKIT_HOME`). Your own resume files are read from where you keep them.
 
-When a skill runs, the app (Claude Code or Codex) gives its model what the task needs, such as resume lines, a job posting or your practice answers, and the model reads them wherever that provider runs it. How that content is handled, kept or used is decided by the model provider (Anthropic for Claude Code, OpenAI for Codex) and by the privacy settings you have configured with them, not by jobkit.
+When a skill runs, the app (Claude Code or Codex) gives its model what the task needs, such as resume lines, a job posting or your practice answers, and the model reads them wherever that provider runs it. The skills tell the agent to ask first, and to give pictures of a PDF's pages to the model once the user responds with yes. This rests on the agent following its instructions; the commands themselves do not check for a yes. Page images that `process-resumes visual render` writes go to `~/.jobkit/output/visual/pages/`, and `visual confirm` removes them. How that content is handled, kept or used is decided by the model provider (Anthropic for Claude Code, OpenAI for Codex) and by the privacy settings you have configured with them, not by jobkit.
 
 Setup downloads software as listed in [What setup installs](#what-setup-installs).
 

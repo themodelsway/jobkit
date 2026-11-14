@@ -16,7 +16,7 @@ Questions like "how many people have you led" need exact numbers per role. Ask f
 2. Ask the question as an interviewer would. One question at a time, no hints.
 3. After the user answers, grade briefly: structure (principle then example), ownership ("I" vs "we"), a measurable result, honesty about what went wrong, and length (about 2 minutes spoken).
 4. Probe for each of the three companies that `lead show` lists, in turn ("Do you have an example from <company>?"). If a candidate story in `prep` is already `done`, reuse its STAR instead of asking again; if it is empty or draft, finish it through the normal story flow so one story serves both the theme and this question.
-5. Never invent details. If the user has no real example for a company, record none and move on. Ask before saving anything that is not on a resume (client names, confidential figures).
+5. Never invent details. If the user has no real example for a company, record none and move on. If they never had such a role there, ask for the reason in their words and run `lead skip ID COMPANY REASON`, so the company counts as covered and shows as not applicable instead of staying a gap. Ask before saving anything that is not on a resume (client names, confidential figures).
 6. Log the full answer to the session (`sessions log ... --answer -`) with a confidence of 0, 1 or 2, then ask whether to go deeper or move on.
 
 ## Order

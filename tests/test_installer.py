@@ -181,6 +181,12 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertEqual((result.stdout.strip(), result.returncode), (f"ok:{self.fake / 'tools'}", 0), result.stderr)
         self.assertIn("tool install --force", self.log("uv"))
 
+    def test_the_release_before_visual_render_and_batch_curation_is_upgraded(self):
+        """0.3.1 lacks `visual render`, `visual compare`, `curate themes` and `match-score --key`, which the skills use."""
+        self.add_uv()
+        self.add_helper("0.3.1")
+        self.assertTrue(self.run_script("--check").stdout.startswith("older:"))
+
     def test_missing_uv_is_downloaded_at_the_fixed_version(self):
         write_script(self.bin / "curl", FAKE_CURL)
         result = self.run_script()

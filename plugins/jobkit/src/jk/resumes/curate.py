@@ -7,8 +7,10 @@ and summary angles.
 from __future__ import annotations
 
 import argparse
+import shlex
 from typing import Any, Final, NamedTuple
 
+from jk import common
 from jk.base import ToolError
 from jk.resumes import lines as line_rules
 from jk.resumes import resume_data as rd
@@ -85,6 +87,10 @@ def add_entry(spec: Spec, items: Any, values: list[str], options: argparse.Names
             line_rules.require_acceptable(values[0], values[1])
         items[values[0]] = values[1]
     elif spec.shape == "map-list":
+        if spec.key == "summary_angles":
+            bad = [v for v in values[1:] if v not in rd.SUMMARY_ANGLES]
+            if bad:
+                raise ToolError(f"Unknown summary angle {', '.join(bad)}. Use only: {', '.join(rd.SUMMARY_ANGLES)}.")
         items[values[0]] = values[1:]
     else:
         group = items.setdefault(values[0], [])
@@ -112,8 +118,48 @@ def remove_entry(spec: Spec, items: Any, keys: list[str]) -> bool:
     return found
 
 
+def unknown_theme_note(spec: Spec, rows: list[list[str]]) -> str:
+    """A warning for themes no tool acts on (they are kept, but drive no questions and no matching)."""
+    if spec.key != "themes":
+        return ""
+    other = sorted({v for row in rows for v in row[1:] if v not in rd.KNOWN_THEMES})
+    if not other:
+        return ""
+    which = f"{other[0]} is not a theme" if len(other) == 1 else f"{', '.join(other)} are not themes"
+    return (f" Note: {which} the tools use, so they add no lead questions, typical questions "
+            "or matching. Run `curate themes` for the ones that do.")
+
+
+def print_themes() -> None:
+    """The themes and summary angles the tools act on."""
+    print("Themes: " + ", ".join(rd.KNOWN_THEMES))
+    print("Summary angles: " + ", ".join(rd.SUMMARY_ANGLES))
+
+
+def batch_entries(values: list[str]) -> list[list[str]]:
+    """The entries to add: the one given, or one per line of standard input when the only value is `-`
+    (quotes group words, `#` starts a comment)."""
+    if values != ["-"]:
+        return [values]
+    rows: list[list[str]] = []
+    for number, line in enumerate(common.read_text_arg("-").splitlines(), 1):
+        try:
+            row = shlex.split(line, comments=True)
+        except ValueError as error:
+            raise ToolError(f"Line {number} of the entries: {error} (quote a name that holds `#` or spaces, "
+                            "and close every quote).") from error
+        if row:
+            rows.append(row)
+    if not rows:
+        raise ToolError("Standard input had no entries.")
+    return rows
+
+
 def cmd_curate(args: argparse.Namespace) -> None:
     """List, add or remove curation entries."""
+    if args.action == "themes":
+        print_themes()
+        return
     if args.action == "list":
         for kind in [args.kind] if args.kind else KINDS:
             rows = lines(kind)
@@ -125,8 +171,11 @@ def cmd_curate(args: argparse.Namespace) -> None:
     data = load(spec)
     items = container(data, spec)
     if args.action == "add":
-        add_entry(spec, items, args.values, args)
-        done = f"Added {args.kind}: {' '.join(args.values)}."
+        rows = batch_entries(args.values)
+        for row in rows:
+            add_entry(spec, items, row, args)
+        done = f"Added {len(rows)} {args.kind} entries." if len(rows) > 1 else f"Added {args.kind}: {' '.join(rows[0])}."
+        done += unknown_theme_note(spec, rows)
         if spec.key in ("certifications", "education"):
             done += f" Once there is any entry, your {spec.key} list replaces the list parsed from your resumes."
     else:
@@ -141,6 +190,7 @@ def add_parser(sub: Any) -> None:
     """Register `curate list|add|rm` on a subparsers action."""
     curate = sub.add_parser("curate", help="list, add or remove curation entries")
     actions = curate.add_subparsers(dest="action", required=True)
+    actions.add_parser("themes", help="list the themes and summary angles the tools act on")
     listing = actions.add_parser("list")
     listing.add_argument("kind", nargs="?", choices=KINDS)
     for name in ("add", "rm"):

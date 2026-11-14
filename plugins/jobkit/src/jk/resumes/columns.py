@@ -8,7 +8,8 @@ A resume with a side column puts both columns on the same text lines:
 
 Read line by line, the work heading is buried and the side column is mixed into the main one. `split_columns`
 finds the vertical gap shared by the lines of a column layout and returns the text one column after another, the
-narrower column (usually the side bar) first so a main column that continues on a plain next page stays in order.
+side bar first and the main column (the one with the work-history heading, else the one with more text) last, so a
+main column that continues on a plain next page stays in order.
 A page without a gutter is returned unchanged. Library module with no file access.
 """
 from __future__ import annotations
@@ -122,9 +123,19 @@ def _weight(lines: list[str]) -> int:
     return sum(len(line.replace(" ", "")) for line in lines)
 
 
+def _holds_work(lines: list[str]) -> bool:
+    """True when a column has the work-history heading."""
+    return any(heading_key(line) == "work" for line in lines)
+
+
 def _emit(left: list[str], right: list[str], depth: int) -> list[str]:
-    """The two columns of one block, the one with less text first; each may split again."""
-    columns = [right, left] if _weight(right) < _weight(left) else [left, right]
+    """The two columns of one block, the main column last; each may split again. The main column is the one with the
+    work-history heading, so work that continues below the block or on the next page follows it; when neither or
+    both have it, the one with more text."""
+    if _holds_work(left) != _holds_work(right):
+        columns = [right, left] if _holds_work(left) else [left, right]
+    else:
+        columns = [right, left] if _weight(right) < _weight(left) else [left, right]
     out: list[str] = []
     for column in columns:
         out += _split(column, depth - 1) if depth > 0 else column

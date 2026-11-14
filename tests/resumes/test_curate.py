@@ -1,6 +1,7 @@
 """Tests for `process-resumes curate` (plugins/jobkit/src/jk/resumes/curate.py): every kind applies on rebuild and can be removed."""
 import contextlib
 import io
+from unittest import mock
 
 from jk.resumes import curate, process_resumes as proc, resume_data as rd, tables
 from tests.resumes.test_extract import as_txt
@@ -151,12 +152,81 @@ class AppliesOnRebuildTests(CurateCase):
     def test_summary_angle(self):
         data = {"companies": {}, "skills": {"groups": {}}, "profile": {**rd.empty_profile(),
                 "summaries": [{"id": "sum-1", "text": "Engineer.", "angles": []}]}}
-        self.curate("add", "summary-angle", "sum-1", "cloud", "data")
+        self.curate("add", "summary-angle", "sum-1", "focus-1", "focus-2")
         proc.apply_themes(data)
-        self.assertEqual(data["profile"]["summaries"][0]["angles"], ["cloud", "data"])
+        self.assertEqual(data["profile"]["summaries"][0]["angles"], ["focus-1", "focus-2"])
         self.curate("rm", "summary-angle", "sum-1")
         proc.apply_themes(data)
-        self.assertEqual(data["profile"]["summaries"][0]["angles"], ["cloud", "data"])      # kept: nothing overrides it
+        self.assertEqual(data["profile"]["summaries"][0]["angles"], ["focus-1", "focus-2"])      # kept: nothing overrides it
+
+
+class ThemeListTests(CurateCase):
+    def test_the_lists_match_the_tables_that_use_them(self):
+        from jk.interview import lead, prep
+        from jk.resumes import query_resume as qr
+        used = set(qr.THEME_HINTS) | set(prep.QUESTIONS) | {t for s in lead.SEED for t in s.themes}
+        self.assertEqual(set(rd.KNOWN_THEMES), used)
+        self.assertEqual(set(rd.SUMMARY_ANGLES), set(qr.ANGLE_HINTS))
+
+    def test_themes_verb_lists_both(self):
+        code, out, _ = self.curate("themes")
+        self.assertEqual(code, 0)
+        self.assertIn("team-leadership", out)
+        self.assertIn("focus-1", out)
+
+    def test_unknown_theme_is_kept_with_a_warning(self):
+        bullet = self.bullet()["id"]
+        code, out, _ = self.curate("add", "theme", bullet, "leadership", "mentoring")
+        self.assertEqual(code, 0)
+        self.assertIn("leadership is not a theme the tools use", out)
+        self.assertNotIn("mentoring is not", out)
+        self.assertEqual(self.curate("add", "theme", bullet, "mentoring")[1].count("Note:"), 0)
+
+    def test_unknown_summary_angle_is_refused(self):
+        code, _, err = self.curate("add", "summary-angle", "sum-1", "leadership")
+        self.assertNotEqual(code, 0)
+        self.assertIn("Unknown summary angle leadership", err)
+
+
+class BatchTests(CurateCase):
+    def batch(self, kind, text):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), mock.patch("sys.stdin", io.StringIO(text)):
+            try:
+                code = proc.main(["curate", "add", kind, "-"])
+            except SystemExit as exc:
+                code = exc.code
+        return code, out.getvalue(), err.getvalue()
+
+    def test_many_themes_in_one_call(self):
+        bullet = self.bullet()["id"]
+        code, out, err = self.batch("theme", f"# tags\n{bullet} mentoring budget-financial\nother-id mentoring leadership\n")
+        self.assertEqual(code, 0, err)
+        self.assertIn("Added 2 theme entries.", out)
+        self.assertEqual(out.count("Note:"), 1)
+        self.assertIn("leadership is not a theme", out)
+        themes = tables.load_curation("themes")["themes"]
+        self.assertEqual(themes[bullet], ["mentoring", "budget-financial"])
+        self.assertEqual(themes["other-id"], ["mentoring", "leadership"])
+
+    def test_an_unclosed_quote_is_a_command_error_naming_the_line(self):
+        bullet = self.bullet()["id"]
+        code, _, err = self.batch("theme", f"{bullet} mentoring\n{bullet} \"unterminated\n")
+        self.assertEqual(code, 1)
+        self.assertIn("Line 2", err)
+        self.assertNotIn("Traceback", err)
+
+    def test_one_bad_line_saves_nothing(self):
+        bullet = self.bullet()["id"]
+        code, _, err = self.batch("summary-angle", f"{bullet} focus-1\n{bullet} nonsense\n")
+        self.assertNotEqual(code, 0)
+        self.assertIn("Unknown summary angle nonsense", err)
+        self.assertNotIn(bullet, (tables.load_curation("themes") or {}).get("summary_angles", {}))
+
+    def test_quotes_group_words_and_empty_input_is_refused(self):
+        self.assertEqual(self.batch("education", '"BSc Example Degree"\n"MSc Other Degree"\n')[0], 0)
+        self.assertEqual(tables.load_curation("curated")["education"], ["BSc Example Degree", "MSc Other Degree"])
+        self.assertNotEqual(self.batch("theme", "\n  \n")[0], 0)
 
 
 class SurviveAndOrphanTests(CurateCase):

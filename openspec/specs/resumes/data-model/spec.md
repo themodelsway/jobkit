@@ -112,6 +112,17 @@ The system SHALL keep curation in the database, apply it after every rebuild, an
 - **WHEN** the only curated education entry is removed and the data is rebuilt
 - **THEN** the education parsed from the resumes is back
 
+### Requirement: Themes and summary angles come from one list
+The system SHALL keep one list of the themes the tools act on (lead questions, typical questions, JD matching) and one of the summary angles, and SHALL show both with `process-resumes curate themes`. `curate add theme` SHALL store any theme but SHALL warn when one is not on the list, because it drives no questions or matching; `curate add summary-angle` SHALL refuse an angle that is not on the list.
+
+#### Scenario: Unknown theme
+- **WHEN** a bullet is tagged with a theme that is not on the list
+- **THEN** the tag is stored and the command warns that no tool uses it
+
+#### Scenario: Unknown summary angle
+- **WHEN** a summary is given an angle that is not on the list
+- **THEN** the command refuses it and names the angles that exist
+
 ### Requirement: Quality words are tags, not skills
 The system SHALL treat Security, Performance, Scalability, High Availability and Cost Efficiency as bullet tags only.
 

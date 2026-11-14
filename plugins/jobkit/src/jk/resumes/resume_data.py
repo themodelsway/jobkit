@@ -16,6 +16,18 @@ TEXT_DIR: Final[Path] = common.output_dir()
 MISSING_DATA: Final[str] = "No resume data yet: run `process-resumes` first."
 
 
+# Themes the tools act on (lead questions, typical questions, JD matching) and the summary angles `for-jd` ranks by.
+# `tests/resumes/test_curate.py` keeps these equal to the tables that use them.
+KNOWN_THEMES: Final[tuple[str, ...]] = (
+    "topic-01", "topic-02", "topic-03", "topic-04", "topic-05", "budget-financial",
+    "topic-06", "topic-07", "delivery-leadership", "topic-08", "executive-advisory", "topic-09",
+    "topic-10", "topic-12", "topic-11", "governance-compliance", "topic-13", "mentoring",
+    "topic-14", "topic-15", "topic-16", "topic-17", "topic-18", "topic-19", "topic-20",
+    "stakeholder-alignment", "strategy-roadmap", "team-leadership", "vendor-management", "workshops",
+)
+SUMMARY_ANGLES: Final[tuple[str, ...]] = (
+    "focus-1", "focus-2", "focus-3", "focus-4", "topic-17",
+)
 LINE_LIMIT: Final[int] = 200        # most characters in one resume line (an experience line)
 LINE_WARN: Final[int] = 250         # beyond this a line is far over the limit and is flagged as such
 SUMMARY_LIMIT: Final[int] = 400     # most characters in the summary: two lines

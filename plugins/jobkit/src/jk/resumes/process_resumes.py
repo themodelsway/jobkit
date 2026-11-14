@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -674,7 +673,7 @@ def cmd_process(args: argparse.Namespace) -> None:
 
 
 def cmd_visual(args: argparse.Namespace) -> None:
-    """The `visual` verbs: list, confirm, schema and compare (see visual.py)."""
+    """The `visual` verbs: list, render, confirm, schema, text and compare (see visual.py)."""
     if args.action == "schema":
         print(visual_compare.READING_SCHEMA)
         return
@@ -682,12 +681,13 @@ def cmd_visual(args: argparse.Namespace) -> None:
     files = list_resumes(config.dirs)
     names = {p: (rel(p, config.root), transcript_name(rel(p, config.root))) for p in files}
     if args.action == "confirm":
-        visual.cmd_confirm(names, args.file)
+        visual.cmd_confirm(names, args.file, args.remove)
+    elif args.action == "render":
+        visual.cmd_render(names, args.file)
     elif args.action == "text":
-        visual.cmd_text(names, args.file)
+        visual.cmd_text(names, args.file, args.layout)
     elif args.action == "compare":
-        reading = sys.stdin.read() if args.reading == "-" else Path(args.reading).read_text(encoding="utf-8")
-        visual.cmd_compare(names, args.file, reading)
+        visual.cmd_compare(names, args.file, common.read_text_arg(args.reading))
     else:
         visual.cmd_list(visual.pending(files, names))
 

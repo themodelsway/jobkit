@@ -324,21 +324,23 @@ class CommandNameTests(unittest.TestCase):
 
 
 class SharedTextTests(unittest.TestCase):
-    def test_visual_scanner_helper_keeps_the_skill_rules(self):
-        """The helper definitions for both tools carry the same reading rules as the skill (one source of truth)."""
+    def test_helpers_keep_the_skill_rules(self):
+        """Each helper definition, for both tools, carries the same rules as the skill (one source of truth)."""
         import tomllib  # pylint: disable=import-outside-toplevel
 
         def block(text: str, name: str) -> str:
             return " ".join(shared_block(text, name).split())
         skill = skill_text("resume-workflows")
-        claude = (PLUGIN_ROOT / "agents" / "resume-visual-scanner.md").read_text(encoding="utf-8")
-        codex = tomllib.loads((REPO_ROOT / ".codex" / "agents" / "resume-visual-scanner.toml").read_text(encoding="utf-8"))
-        self.assertTrue(claude.startswith("---\nname: resume-visual-scanner\n"))
-        self.assertEqual(codex["name"], "resume-visual-scanner")
-        self.assertIn("`resume-visual-scanner`", skill)
-        for name in ("visual-transcript", "visual-json"):
-            self.assertEqual(block(claude, name), block(skill, name), name)
-            self.assertEqual(block(codex["developer_instructions"], name), block(skill, name), name)
+        helpers = {"resume-visual-scanner": ("visual-transcript", "visual-json"), "jd-matcher": ("match-pass-one",)}
+        for helper, blocks in helpers.items():
+            claude = (PLUGIN_ROOT / "agents" / f"{helper}.md").read_text(encoding="utf-8")
+            codex = tomllib.loads((REPO_ROOT / ".codex" / "agents" / f"{helper}.toml").read_text(encoding="utf-8"))
+            self.assertTrue(claude.startswith(f"---\nname: {helper}\n"), helper)
+            self.assertEqual(codex["name"], helper)
+            self.assertIn(f"`{helper}`", skill)
+            for name in blocks:
+                self.assertEqual(block(claude, name), block(skill, name), name)
+                self.assertEqual(block(codex["developer_instructions"], name), block(skill, name), name)
 
     def test_shared_blocks_are_identical(self):
         for block in SHARED:
@@ -347,7 +349,7 @@ class SharedTextTests(unittest.TestCase):
 
     def test_rules_block_has_the_five_rules(self):
         rules = shared_block(skill_text("tutor"), "rules")
-        for phrase in ("only through the commands", "read-only", "Never invent", "phone number", "~/.jobkit/output"):
+        for phrase in ("only through the commands", "read-only", "Never invent", "phone number", "JOBKIT_HOME"):
             self.assertIn(phrase, rules)
 
     def test_preflight_asks_before_installing(self):

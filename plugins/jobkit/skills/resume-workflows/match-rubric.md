@@ -84,7 +84,7 @@ Merely vague wording is not a flag: decide it with the rules above. Set the requ
 
 ## Finding evidence
 
-Run `query-resume for-jd` once on the whole posting to see the best lines per company (line ids are printed under the company name), and `query-resume search` for specific words. Read skills, education and certifications with `jobkit export --only resume-skills` and `--only resume-profile`. Cite with:
+Run `query-resume for-jd` once on the whole posting to see the best lines per company (line ids are printed under the company name), and `query-resume search` for specific words. Skills, education and certifications are in the `evidence` that `match-score extract` printed (skill names by group, education in order, certifications): do not export them. Cite with:
 
 - `bullet:BULLET_ID` (a line; use `bullet:COMPANY_ID:BULLET_ID` only if the command says two companies share an id),
 - `skill:NAME`, `education:N` (1 is the first education entry), `certification:NAME`, `role:COMPANY_ID`.

@@ -21,12 +21,13 @@ from typing import Any, Final, Literal, TypedDict
 
 from jk.resumes import dates
 from jk.resumes.extract import is_contact_line
-from jk.resumes.headings import COMBINED, LOOKUP, heading_key, inline_heading, is_unknown_heading
+from jk.resumes.headings import (COMBINED, JOB_LABELS, LOOKUP, heading_key, inline_heading, is_unknown_heading,
+                                  normalise)
 from jk.resumes.work_layout import (BULLETS, HEADER_PREFIX, MAX_HEADLINE_CHARS, SEP, SUB_MARK, can_be_company_line,
                                     employer_by_context, is_location, is_title_line, plausible_company, structure_work_lines)
 
 ZERO_WIDTH: Final[dict[int, None]] = dict.fromkeys(map(ord, "\u200b‌‍﻿"))
-PARSER_VERSION: Final[int] = 3           # raise it when reading or parsing changes what a resume file yields: the next
+PARSER_VERSION: Final[int] = 4           # raise it when reading or parsing changes what a resume file yields: the next
                                          # `process-resumes` run then backs up the data and rebuilds it from the files
 SIMILAR_THRESHOLD: Final[float] = 0.92   # used by the merge step: near-identical bullets become variants
 SKILL_SECTIONS: Final[tuple[str, ...]] = ("skills", "skills_leadership", "skills_technical")
@@ -170,15 +171,47 @@ def _starts_unknown_section(lines: list[str], index: int) -> bool:
     return not any(dates.find_date_range(line) for line in following)
 
 
+def _job_label(lines: list[str], index: int) -> bool:
+    """True when a heading inside the work history is a label jobs carry ('Technologies', 'Accomplishments' on a
+    line of its own) and a dated employer follows before the next heading that is not such a label, so the work
+    history goes on after it. A label after the last job still starts its own section."""
+    if normalise(lines[index]) not in JOB_LABELS:
+        return False
+    for line in lines[index + 1:]:
+        if heading_key(line) and normalise(line) not in JOB_LABELS:
+            return False
+        if dates.find_date_range(line):
+            return True
+    return False
+
+
+def _label_line(lines: list[str], index: int) -> tuple[str | None, int | None]:
+    """A job label kept in the work history, written as the one-line form 'Technologies: Redis, Go' with the line
+    below it, and the index of that line; (None, None) when bullets follow (the label is dropped, they stay in the
+    job)."""
+    below = next((i for i in range(index + 1, len(lines)) if lines[i].strip()), None)
+    if below is None or lines[below].strip()[0] in BULLETS:
+        return None, None
+    return f"{lines[index].strip().rstrip(':')}: {lines[below].strip()}", below
+
+
 def split_sections(lines: Iterable[str]) -> dict[str, list[str]]:
     """Return {section_key: [lines]}; text before the first heading is 'header'. A known heading whose content is
     not stored starts the section 'other'; an unknown ALL-CAPS heading inside the work history does too and is
-    named in the '_unknown' entry. 'Skills: Python, Java' starts the skills section with its content."""
+    named in the '_unknown' entry. 'Skills: Python, Java' starts the skills section with its content; a job label
+    inside the work history ('Technologies' above its list) stays in the job, like 'Technologies: Redis, Go'."""
     rows = list(lines)
     sections: dict[str, list[str]] = {"header": []}
-    current = "header"
+    current, used = "header", -1
     for index, line in enumerate(rows):
+        if index == used:
+            continue
         key = heading_key(line)
+        if key and current == "work" and _job_label(rows, index):
+            merged, below = _label_line(rows, index)
+            sections["work"] += [merged] if merged else []
+            used = below if below is not None else used
+            continue
         inline = None if key else inline_heading(line, in_work=current == "work")
         if key:
             current = key

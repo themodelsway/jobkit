@@ -176,7 +176,7 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
   "people": [ { "role": "Product owner", "note": "..." } ],
   "counters": { "f": 1, "d": 1 }, "updated": "<timestamp>" }
 ```
-- `facts[].basis`: `stated`, `estimate`, `unsure`, `verified-doc` (needs `source`), `proposed` (an assistant suggestion, never your claim). Only `stated`, `estimate` and `verified-doc` may back a story.
+- `facts[].basis`: `stated`, `estimate`, `unsure`, `verified-doc` (needs `source`), `proposed` (an agent suggestion, never your claim). Only `stated`, `estimate` and `verified-doc` may back a story.
 - `decisions[].ownership`: `mine`, `team`, `client`, `shared`, `unsure`. Claims about your own part need `mine` or `shared`.
 - `counters` keep ids unique: the id of a removed fact or decision is never reused.
 

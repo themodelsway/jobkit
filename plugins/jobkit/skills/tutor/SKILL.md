@@ -1,15 +1,15 @@
 ---
 name: tutor
-description: Tutor and readiness coach for interview prep. Use when the user wants to learn, be taught or have something explained (services and decision pairs like ALB vs NLB or Format A vs Format B, leadership answers like roadmapping, mentoring, conflict, prioritization, or how to build a STAR story), or asks how prepared they are, what to work on next, or for a readiness report. Teaches first, then checks understanding with a short quiz. For being quizzed or mock-interviewed use interview-prep instead.
+description: Tutor and readiness coach for interview prep. Use to learn or have something explained (services, decision pairs like ALB vs NLB, leadership answers, building a STAR story), or to ask how prepared you are or what to work on next. Not for being quizzed (use interview-prep).
 ---
 
 # Tutor and readiness
 
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
-Do the technical steps yourself and quietly. The user only sees the lines that start with `>`.
+Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep FOLDER and carry on.
 1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. PLUGIN below is the folder two levels above this skill file (it holds `setup`). Put these paths in quotes, since they may contain spaces.
-2. Check the helper. The session's environment says which kind of computer this is:
+2. Check the helper. The session's environment says which kind of computer this is; if it does not, run `uname -s` (`Darwin` is macOS, `Linux` is Linux, a name starting `MINGW`, `MSYS` or `CYGWIN`, or no `uname` at all, is Windows):
    - macOS or Linux: run `sh "PLUGIN/setup/install" --check`.
    - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "PLUGIN/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
      > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
@@ -17,7 +17,7 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
    The command prints one line:
    - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
    - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
-     > I need to install the Jobkit engine, so that your resumes, tutor and proactive day are organized and used by your agent. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
+     > I need to install the Jobkit engine, which keeps your resumes and interview practice organized. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
      - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
        > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
 
@@ -28,10 +28,10 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
    - `unsupported`: install nothing, say the next line and stop:
      > Sorry, this isn't available with this app on this kind of computer yet.
 3. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
-4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved, never suggest turning the app's protections off, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
+4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved and never suggest turning the app's protections off. If you can ask the user to approve running that one command again with wider permissions (the app's own one-off approval, for that command only), ask that first and run it again if they agree. If you cannot, or they decline, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
    > I wasn't allowed to save that, so nothing was saved. Please allow me to write to this folder, then ask me again: DATA_FOLDER
-5. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
-6. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
+5. Run `jobkit status && profile status` as one command (each by its full path, as in step 3). If it says there is no database, run `jobkit init` and then `profile status`. Do not mention any of this.
+6. From the `profile status` output: if there is no resume data yet, set up the resumes, one question at a time:
    1. Ask:
       > Where do you keep your resumes? You can drag the folder here or tell me its name.
    2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
@@ -67,7 +67,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 
 Three topics, all backed by the same stored data: architecture, leadership and STAR stories, plus a readiness report. Interview practice (ask first, no hints, grade) belongs to `interview-prep`; this skill explains first.
 
-## Sessions (always first)
+## Sessions (before any lesson; a readiness report needs none)
 1. `sessions list`; ask whether to start a new lesson session or continue one. Never guess:
    > Do you want to start a new lesson, or pick up one you did before?
 2. New: `sessions new "title" --mode tutor --topic architecture|leadership|stories [--area A] [--tier N] [--kind service|pair|scenario] [--category C] [--company C] [--order default|random] [--count N] [--only-open]`. Solid items follow the weak ones in the queue; `--only-open` leaves them out. Ask whether to begin with what they know least or mix it up, unless already said. Continue: `sessions resume ID`.
@@ -103,12 +103,12 @@ For architecture cards: `arch show ID` first. If the card says NEVER verified or
 3. Help the user find their own principle and examples: ask what they do in practice, then which of their most recent jobs (`lead profile show` lists them) fits. Save the principle with `lead set ID principle "..."` and examples with `lead example ID COMPANY FIELD VALUE` only in their words and after their confirmation. Scope numbers (team size, budget) come only from them via `lead profile set`.
 4. Quiz: they answer the question as in an interview; give brief feedback on structure, "I" vs "we", a result with a number, honesty, length.
 
-## Lesson: STAR stories (one story at a time)
-1. `prep next` or `prep show ID`. Teach what each part of STAR is for, starting from the user's resume line: Situation (context in one or two sentences), Task (what was yours), Action (what you personally did; "I" not "we"), Result (a number, plus what you learned or would change).
+## Lesson: stories (one story at a time)
+1. `prep next` or `prep show ID`. Run `prep styles` to see the style in force (`profile set answer_style star|soar|carl`; if `profile status` shows it as not set, offer the three in plain words and save the choice). Teach what each part is for, starting from the user's resume line. Star: Situation (context in one or two sentences), Task (what was yours), Action (what you personally did; "I" not "we"), Result (a number, plus what you learned or would change). Soar replaces the task with an obstacle (what stood in the way); carl is Challenge (the situation and task together), Action, Result, Learning (what they took from it).
 2. Help them find missing pieces with questions, one at a time (what was at stake, who disagreed, what did you decide, how was it measured). Never fill facts yourself. If something differs from the resume line, ask which is right.
-3. Tighten their words into 1-2 sentences per part, read it back, and save with `prep set` after their okay. Status `done` only when situation, task, action and result are filled and confirmed.
+3. Tighten their words into 1-2 sentences per part, read it back, and save with `prep set` after their okay. Status `done` only when every part of the style in force is filled and confirmed (`prep set ... status done` is refused otherwise, with the missing part named). Save the spoken versions with `prep set ID spoken.60s|spoken.2min`, and likely questions or words to avoid with `likely_questions` and `never_say`, only in the user's words.
 4. Quiz: they tell the story aloud from the prompt "Tell me about a time you...", then give feedback on length, ownership and result.
-5. Record facts, not just prose. When the user describes a project, keep it as an engagement: `prep engagement add`, then `fact add ENG "text" --basis stated|estimate|unsure` for each thing they said (their words, one fact each), `decision add` for choices they made (ownership `mine` only if they said so), `link STORY ENG --facts ...`, `metric add --basis measured|estimated|stated|unknown` for numbers. Things you suggested (design options, doc facts) are `--basis proposed` or `verified-doc --source URL`, never `stated`. If the user says "if I remember" or "I believe", the basis is `unsure`. Resolve open questions with `followup resolve ... --answer` in their words.
+5. Record facts, not just prose. When the user describes a project, keep it as an engagement: `prep engagement add ID --company C --title T`, then `prep fact add ENG "text" --basis stated|estimate|unsure` for each thing they said (their words, one fact each), `prep decision add ENG --what W [--why Y] [--ownership mine|team|client|shared|unsure]` for choices they made (`mine` only if they said so), `prep link STORY ENG --facts ...`, `prep metric add STORY --name N --value V --basis measured|estimated|stated|unknown` for numbers. Things you suggested (design options, doc facts) are `--basis proposed` or `verified-doc --source URL`, never `stated`. If the user says "if I remember" or "I believe", the basis is `unsure`. Resolve open questions with `prep followup resolve STORY INDEX_OR_TEXT --answer A` in their words.
 6. `prep validate STORY` before marking done: errors (unsure or proposed fact in use, a forbidden term, a missing part) block `done`; warnings (a number without a metric, an estimate not hedged, an action that says "we" a lot, spoken text too long) are advice to pass on in plain words. `prep export --story ID --format md` gives a one-page cheat sheet to show them; `prep search TEXT` finds earlier facts.
 
 ## Quiz and wrap-up (all topics)
@@ -124,8 +124,8 @@ For architecture cards: `arch show ID` first. If the card says NEVER verified or
 
 <!-- shared:rules -->
 ## Rules
-- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read it with `jobkit export` and summarise it in plain words.
+- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarise it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
-- Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit/output`).
+- Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.
 <!-- /shared:rules -->

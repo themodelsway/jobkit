@@ -570,3 +570,68 @@ class FollowUpRegressionTests(unittest.TestCase):
                 document = extract.extract(path)
         self.assertEqual(document.column_pages, (1,))
         self.assertEqual([j[4] for j in jobs(parse(document.layout_text))], [2, 1])
+
+
+HEAVY_SIDE = ["SKILLS", "Distributed Systems, Cloud Platforms, Service Reliability",
+              "Technical Programme Management, Planning and Prioritisation",
+              "Software Design, API Design, Data Transformation",
+              "Infrastructure Automation, Containers, Continuous Delivery",
+              "Observability, Reliability Engineering, Incident Analysis",
+              "Data Modelling, Query Optimisation, Systems Integration",
+              "Incident Management, Capacity Planning, Disaster Recovery",
+              "Continuous Delivery, Test Automation, Release Management"]
+SHORT_WORK = ["WORK EXPERIENCE", "Northwind Traders   2021 - Present", "Senior Engineer", "• Built a shared cache.",
+              "• Cut service latency.", "• Added contract tests.", "• Led platform upgrades.", "• Shipped triage tools."]
+NEXT_PAGE = "• Built a queue.\nFabrikam Inc   2018 - 2020\nEngineer\n• Built a pipeline.\n"
+
+
+class SecondReviewTests(unittest.TestCase):
+    """Findings RV-09 and RV-10 of the second review (all data fictional)."""
+
+    def test_rv09_a_text_heavy_side_bar_on_either_side_comes_before_the_work_column(self):
+        for left, right, width in ((SHORT_WORK, HEAVY_SIDE, 40), (HEAVY_SIDE, SHORT_WORK, 64)):
+            first = columns.split_columns(page(left, right, width=width))
+            self.assertNotEqual(first, page(left, right, width=width))
+            result = parse(first + NEXT_PAGE)
+            self.assertEqual(jobs(result), [("northwind-traders", "Senior Engineer", "2021", None, 6),
+                                            ("fabrikam-inc", "Engineer", "2018", "2020", 1)], width)
+            skills = [s["name"] for g in result["skills"].values() for s in g]
+            self.assertFalse([s for s in skills if "Fabrikam" in s or "queue" in s], skills)
+
+    def test_rv09_without_a_work_heading_the_heavier_column_is_still_last(self):
+        main = ["PROJECTS" if line == "WORK EXPERIENCE" else line for line in MAIN]
+        for left, right, width in ((SIDE, main, 34), (main, SIDE, 56)):
+            stripped = [line.strip() for line in columns.split_columns(page(left, right, width=width)).splitlines()]
+            self.assertLess(stripped.index("SKILLS"), stripped.index("PROJECTS"), width)
+
+    def test_rv10_a_job_label_on_its_own_line_keeps_the_later_employers(self):
+        for label in ("Technologies", "Tech Stack", "Accomplishments", "Tools"):
+            text = ("Work Experience\nNorthwind Traders   09/2021 - Present\nSenior Engineer\n• Built a cache.\n"
+                    f"{label}\nRedis, Go\nFabrikam Inc   01/2018 - 08/2021\nEngineer\n• Built a queue.\n")
+            with tempfile.TemporaryDirectory() as tmp:
+                md, txt = Path(tmp) / "r.md", Path(tmp) / "r.txt"
+                md.write_text(text, encoding="utf-8")
+                txt.write_text(text, encoding="utf-8")
+                docx = write_docx(Path(tmp) / "r.docx", "".join(para(line) for line in text.splitlines()))
+                texts = [extract.extract(path).text for path in (txt, md, docx)]
+            inline = parse(text.replace(f"{label}\nRedis", f"{label}: Redis"))
+            for extracted in texts:
+                result = parse(extracted)
+                self.assertEqual([j[0] for j in jobs(result)], ["northwind-traders", "fabrikam-inc"], label)
+                self.assertEqual(result["work"], inline["work"], label)
+                self.assertEqual((result["skills"], result["profile_points"]), ({}, []), label)
+
+    def test_rv10_bullets_under_a_job_label_stay_in_the_job(self):
+        result = parse("Work Experience\nNorthwind Traders   09/2021 - Present\nSenior Engineer\nAccomplishments\n"
+                       "• Built a cache.\n• Cut cost by 20%.\nFabrikam Inc   01/2018 - 08/2021\nEngineer\n• Built a queue.\n")
+        self.assertEqual([e["bullets"] for e in result["work"]], [["Built a cache.", "Cut cost by 20%."], ["Built a queue."]])
+        self.assertEqual(result["problems"], [])
+
+    def test_rv10_a_label_after_the_last_job_and_clear_exits_still_end_the_work_history(self):
+        result = parse("Work Experience\nNorthwind Traders   09/2021 - Present\nSenior Engineer\n• Built a cache.\n"
+                       "Technologies\nRedis, Go\n\nEducation\nBS Computer Science   2010 - 2014\n")
+        self.assertEqual(result["work"][0]["bullets"], ["Built a cache."])
+        self.assertEqual([s["name"] for g in result["skills"].values() for s in g], ["Redis", "Go"])
+        result = parse("Work Experience\nNorthwind Traders   09/2021 - Present\nSenior Engineer\n• Built a cache.\n"
+                       "Technical Skills\nPython, Go\nFabrikam Inc   01/2018 - 08/2021\n")
+        self.assertEqual(len(result["work"]), 1)

@@ -38,11 +38,15 @@ The system SHALL provide `layout_text` in which a date range is separated from i
 - **THEN** the extracted line has a gap of three spaces before the date range
 
 ### Requirement: PDF text is column-safe and normalised
-The system SHALL split a PDF page that has columns (a side bar beside the main column) at the gutter shared by its lines and read the columns one after another, the narrower first, so a main column that continues on the next page stays in order; full-width text ends a column block. Right-aligned dates, locations and aligned titles without a column SHALL NOT make a gutter; a short block counts as columns when each side has section headings of its own. The system SHALL unfold ligatures (NFKC), turn other list glyphs (dashes, arrows, squares, symbol-font glyphs) into `•`, and remove page numbers, footers repeated on two or more pages and headers repeated from page 1. For such a PDF `text` and `layout_text` SHALL both be the column-by-column text, with list markers normalised again after the columns are split so a right-column dash bullet is a bullet.
+The system SHALL split a PDF page that has columns (a side bar beside the main column) at the gutter shared by its lines and read the columns one after another, the side bar first and the main column last, so a main column that continues below the columns or on the next page stays in order. The main column is the one with the work-history heading; only when neither or both have it is it the one with more text; full-width text ends a column block. Right-aligned dates, locations and aligned titles without a column SHALL NOT make a gutter; a short block counts as columns when each side has section headings of its own. The system SHALL unfold ligatures (NFKC), turn other list glyphs (dashes, arrows, squares, symbol-font glyphs) into `•`, and remove page numbers, footers repeated on two or more pages and headers repeated from page 1. For such a PDF `text` and `layout_text` SHALL both be the column-by-column text, with list markers normalised again after the columns are split so a right-column dash bullet is a bullet.
 
 #### Scenario: Side bar
 - **WHEN** a PDF has skills in a left or right side bar beside the work history
 - **THEN** the work history, the skills and the other side-bar sections each parse as their own section
+
+#### Scenario: Side bar with more text than the work column
+- **WHEN** a side bar holds more text than the work column beside it and the work continues on the next page
+- **THEN** the side bar is read first, and the next page's bullets and employers stay in the work history
 
 ### Requirement: Docx structure is flattened to readable lines
 The system SHALL read docx files without third-party libraries, keeping paragraphs, line breaks, tabs, table cells, list items (as `•` bullets), content controls and the text of text boxes anchored in body paragraphs, and SHALL ignore headers and footers.
@@ -116,26 +120,54 @@ When extraction yields no usable text, the system SHALL fail that file with a me
 - **THEN** the file is reported unreadable with a message that it looks scanned and has no text layer
 
 ### Requirement: A visual reading can be compared with the parse
-The system SHALL print the JSON shape of a visual reading (`process-resumes visual schema`) and SHALL compare a reading in that shape (`visual compare FILE --reading JSON`) with a fresh parse of the same PDF, reporting employers, titles, dates, bullets, skills, certifications, education and summary that only one side has or that differ, each with both versions. It SHALL NOT change any stored data or merge wording, and a transcript confirmed for the PDF SHALL be used in place of the PDF text, whether the parser could read the PDF or not.
+The system SHALL print the JSON shape of a visual reading (`process-resumes visual schema`) and SHALL compare a reading in that shape (`visual compare FILE --reading JSON`) with a fresh parse of the same PDF, reporting employers, titles, dates, bullets, skills, certifications, education and summary that only one side has or that differ, each with both versions. It SHALL NOT change any stored data or merge wording. Items are paired by likeness (roles by employer and start date) and then compared exactly, job titles included (digits, decimal points, signs and punctuation such as `C++` count; only case, spacing, typographic quotes and dashes and trailing punctuation do not), and a summary present on one side only is a difference. A reading with a wrong shape SHALL be refused naming the field. A transcript confirmed for the PDF SHALL be used in place of the PDF text, whether the parser could read the PDF or not.
 
 #### Scenario: Parser missed a bullet
 - **WHEN** the visual reading has a bullet the parse lacks
 - **THEN** the report lists it as missing from the parser, with the visual text
 
+#### Scenario: Close but different
+- **WHEN** the readings differ only by `BS` and `MS`, `C` and `C++`, `1.5` and `15`, or `Associate` and `Professional`
+- **THEN** each is reported as a difference with both versions
+
+#### Scenario: Correction that loses work bullets
+- **WHEN** a transcript for a PDF the parser could read drops a role or a work bullet of the PDF's own text (roles paired by employer and start date, bullets within a role by likeness, so a bullet moved to another employer counts even when the totals agree, and a reworded bullet does not)
+- **THEN** `visual confirm` refuses it, lists each dropped role and bullet, and points to `visual text FILE --layout`
+
+#### Scenario: Agreed removal
+- **WHEN** the user agreed to remove an erroneous role or bullet and `visual confirm FILE --remove TEXT` names each dropped item as listed
+- **THEN** the transcript is confirmed and the removed items are recorded beside it; a `--remove` that names no dropped item is refused
+
 #### Scenario: Corrected reading
 - **WHEN** the agreed text is saved and confirmed for a PDF the parser could read
 - **THEN** the next run parses that text instead of the PDF text, until the PDF changes
 
-### Requirement: A PDF the parser cannot read may be read visually, only with the user's agreement
-The system SHALL mark a PDF with no text layer, or one that cannot be opened as a PDF, as needing a visual reading (and no other failure, such as a Word file or a PDF that parsed but is not a resume), say so in its message, `--survey` and the unparsed report, and SHALL NOT read it visually by itself. `process-resumes visual list` SHALL list such files with the PDF path and the path for the transcript under `output/visual/` in the home folder. A transcript SHALL be used in place of the PDF text only after `process-resumes visual confirm FILE`, which ties it to the checksum of the PDF as it is then; editing a transcript SHALL NOT change which PDF it is tied to, and after the PDF is replaced the old transcript SHALL NOT be used until a new one is confirmed. The ledger SHALL record the transcript checksum and its state, so a transcript that becomes confirmed is read even when its text is unchanged. Each source path SHALL have its own transcript name, and the resume folder SHALL never be written.
+### Requirement: A PDF the parser cannot read may be read visually, once the user responds with yes
+The system SHALL mark a PDF with no text layer, or one that cannot be opened as a PDF, as needing a visual reading (and no other failure, such as a Word file or a PDF that parsed but is not a resume), say so in its message, `--survey` and the unparsed report, and SHALL NOT read it visually by itself. `process-resumes visual list` SHALL list such files with the PDF path and the path for the transcript under `output/visual/` in the home folder. A transcript SHALL be used in place of the PDF text only after `process-resumes visual confirm FILE`, which ties it to the checksum of the PDF as it is then; editing a transcript SHALL NOT change which PDF it is tied to, and after the PDF is replaced the old transcript SHALL NOT be used until a new one is confirmed. The ledger SHALL record the transcript checksum and its state, so a transcript that becomes confirmed is read even when its text is unchanged. Each source path SHALL have its own transcript name, and the resume folder SHALL never be written. For an agent that cannot open a PDF's pages itself, `process-resumes visual render FILE` SHALL write the pages as images under `output/visual/pages/` in the home folder and print their paths, drawing them with `pdftoppm` when installed and otherwise copying out the embedded JPEG only of a plain scan (each page's parsed content draws one unmasked JPEG in gray or RGB over the whole page and nothing else: no text, tiles, clip, vector painting, graphics state, annotations, crop box or rotation), and SHALL say how to install poppler when neither works; a PDF of more than 30 pages SHALL be refused with a message, never cut short; confirming the transcript SHALL remove those images.
 
 #### Scenario: Scan found
 - **WHEN** a PDF has no text layer
-- **THEN** the report names it as needing a visual reading and nothing is read visually until the user agrees
+- **THEN** the report names it as needing a visual reading, the command reads nothing visually, and the skill tells the agent to ask first and read the pages only once the user responds with yes
 
 #### Scenario: Transcript saved
 - **WHEN** a transcript exists for such a PDF
 - **THEN** the next run parses the transcript as that file's text and a later change to the transcript reprocesses the file
+
+#### Scenario: Pages as images
+- **WHEN** the agent cannot open a PDF's pages and runs `visual render` for a scanned PDF
+- **THEN** one image per page is written under `output/visual/pages/`, their paths are printed, and they are removed when the transcript is confirmed
+
+#### Scenario: A page that is not a plain scan
+- **WHEN** poppler is not installed and a page holds several image tiles, any text, a clip, vector painting over the image, annotations, a rotation, or an image that does not exactly cover the page
+- **THEN** the command fails with the poppler advice and returns no part of a page
+
+#### Scenario: A long PDF
+- **WHEN** a PDF has more than 30 pages
+- **THEN** the command fails naming the limit and writes no images
+
+#### Scenario: No way to draw the pages
+- **WHEN** poppler is not installed and the PDF has no embedded JPEG page images
+- **THEN** the command fails with a message that says how to install poppler and writes no images
 
 #### Scenario: Other failures
 - **WHEN** a docx cannot be opened

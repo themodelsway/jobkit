@@ -8,7 +8,7 @@ jobkit provides three skills for Claude Code and Codex. Requests use plain langu
 | tutor | Teaching before quizzing, and interview readiness reports. | [tutor.md](guides/tutor.md) |
 | resume-workflows | Resume import, tailoring for a job posting, and match scoring (early preview). | [resume-workflows.md](guides/resume-workflows.md) |
 
-The pages in `plugins/jobkit/skills/` are the agent's instructions; these pages are for users of the app. Settings and interview progress can be checked from the command line with the [top commands to explore](explore.md).
+The pages in `plugins/jobkit/skills/` are the agent's instructions; these pages are for users of jobkit. Settings and interview progress can be checked from the command line with the [top commands to explore](explore.md).
 
 ## Running the commands directly
 
@@ -73,7 +73,7 @@ Per-user settings, stored in the database. Standard library only.
 
 ## For contributors: keeping personal data out of commits
 
-This section is for contributors who commit to this repository. Users of the app who only use the skills can skip it.
+This section is for contributors who commit to this repository. Users of jobkit who only use the skills can skip it.
 
 Committed files must hold nothing personal: the contributor's name, phone, email, LinkedIn, resume folder, employers, clients or products. The pre-commit hook and `tests/test_no_personal.py` enforce it against a list of personal terms kept in the contributor's own database (`~/.jobkit`), never in the repository.
 

@@ -3,12 +3,13 @@ import contextlib
 import copy
 import io
 import json
+import os
 import unittest
 from datetime import date
 from unittest import mock
 
 from jk import records, store
-from jk.resumes import match_bands as mb, match_engine as me, match_facts as mf, match_score as ms, match_tables, tables
+from jk.resumes import match_bands as mb, match_engine as me, match_facts as mf, match_postings, match_score as ms, match_tables, tables
 from tests.resumes.match_fixtures import facts, request
 from tests.support import HomeCase
 
@@ -214,6 +215,63 @@ class RunTests(MatchCase):
         code, out, err = self.cli("run", "-", "--jd", self.posting, stdin=self.requests.read_text(encoding="utf-8"))
         self.assertEqual(code, 0, err)
         self.assertIn("How well", out)
+
+
+class PostingKeyTests(MatchCase):
+    def extract_stdin(self):
+        code, out, err = self.cli("extract", "--jd", "-", stdin=POSTING)
+        self.assertEqual(code, 0, err)
+        return json.loads(out)
+
+    def test_extract_saves_the_posting_and_prints_its_key(self):
+        data = self.extract_stdin()
+        self.assertRegex(data["posting"], r"^[0-9a-f]{16}$")
+        saved = match_postings.folder() / f"{data['posting']}.txt"
+        self.assertEqual(saved.read_text(encoding="utf-8"), POSTING)
+
+    def test_check_and_run_take_the_request_on_stdin_and_the_key(self):
+        key = self.extract_stdin()["posting"]
+        body = json.dumps(request())
+        code, out, err = self.cli("check", "-", "--key", key, stdin=body)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(json.loads(out)["valid"])
+        code, out, err = self.cli("run", "-", "--key", key, "--json", stdin=body)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)["key"], self.run_json()["key"])
+
+    def test_unknown_or_malformed_key_is_a_clear_error(self):
+        for bad in ("0123456789abcdef", "../../etc/passwd"):
+            code, _, err = self.cli("check", self.requests, "--key", bad)
+            self.assertEqual(code, 1)
+            self.assertIn("No saved posting", err)
+
+    def test_key_and_jd_together_are_refused(self):
+        key = self.extract_stdin()["posting"]
+        code, _, err = self.cli("check", self.requests, "--key", key, "--jd", self.posting)
+        self.assertEqual(code, 1)
+        self.assertIn("not both", err)
+
+    def test_old_postings_are_removed_when_a_run_finishes(self):
+        key = self.extract_stdin()["posting"]
+        saved = match_postings.folder() / f"{key}.txt"
+        old = saved.stat().st_mtime - 40 * 86400
+        os.utime(saved, (old, old))
+        self.run_json()
+        self.assertFalse(saved.exists())
+
+
+class EvidenceViewTests(MatchCase):
+    def test_extract_lists_skill_names_education_and_certifications_without_sources(self):
+        data = json.loads(self.cli("extract", "--jd", self.posting)[1])
+        view = data["evidence"]
+        self.assertEqual(set(view), {"skills", "education", "certifications"})
+        names = [n for group in view["skills"].values() for n in group]
+        self.assertTrue(names and all(isinstance(n, str) for n in names))
+        self.assertNotIn("sources", json.dumps(view))
+
+    def test_a_stored_result_needs_no_evidence_view(self):
+        self.run_json()
+        self.assertNotIn("evidence", json.loads(self.cli("extract", "--jd", self.posting)[1]))
 
 
 class OriginTests(MatchCase):

@@ -1,15 +1,15 @@
 ---
 name: interview-prep
-description: Mock-interview practice: asks first, no hints, then grades. Use when the user wants to be quizzed or practise answers (architecture for AWS, Acme Data, Google Cloud or another chosen technology, leadership questions, STAR stories), resume an earlier practice session, or see what to rehearse for a job posting. To be taught or to check how prepared they are use the tutor skill instead. Asks one question at a time; sessions, stories and progress are saved through the sessions, arch, lead and prep commands.
+description: Mock-interview practice: asks first, no hints, then grades. Use to be quizzed or practise answers (architecture, leadership questions, STAR stories), continue an earlier session, or see what to rehearse for a posting. Not for being taught or a readiness report (use tutor).
 ---
 
 # Interview practice
 
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
-Do the technical steps yourself and quietly. The user only sees the lines that start with `>`.
+Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep FOLDER and carry on.
 1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. PLUGIN below is the folder two levels above this skill file (it holds `setup`). Put these paths in quotes, since they may contain spaces.
-2. Check the helper. The session's environment says which kind of computer this is:
+2. Check the helper. The session's environment says which kind of computer this is; if it does not, run `uname -s` (`Darwin` is macOS, `Linux` is Linux, a name starting `MINGW`, `MSYS` or `CYGWIN`, or no `uname` at all, is Windows):
    - macOS or Linux: run `sh "PLUGIN/setup/install" --check`.
    - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "PLUGIN/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
      > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
@@ -17,7 +17,7 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
    The command prints one line:
    - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
    - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
-     > I need to install the Jobkit engine, so that your resumes, tutor and proactive day are organized and used by your agent. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
+     > I need to install the Jobkit engine, which keeps your resumes and interview practice organized. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
      - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
        > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
 
@@ -28,10 +28,10 @@ Do the technical steps yourself and quietly. The user only sees the lines that s
    - `unsupported`: install nothing, say the next line and stop:
      > Sorry, this isn't available with this app on this kind of computer yet.
 3. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
-4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved, never suggest turning the app's protections off, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
+4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved and never suggest turning the app's protections off. If you can ask the user to approve running that one command again with wider permissions (the app's own one-off approval, for that command only), ask that first and run it again if they agree. If you cannot, or they decline, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
    > I wasn't allowed to save that, so nothing was saved. Please allow me to write to this folder, then ask me again: DATA_FOLDER
-5. Run `jobkit status`. If it says there is no database, run `jobkit init`. Do not mention either.
-6. Run `profile status`. If there is no resume data yet, set up the resumes, one question at a time:
+5. Run `jobkit status && profile status` as one command (each by its full path, as in step 3). If it says there is no database, run `jobkit init` and then `profile status`. Do not mention any of this.
+6. From the `profile status` output: if there is no resume data yet, set up the resumes, one question at a time:
    1. Ask:
       > Where do you keep your resumes? You can drag the folder here or tell me its name.
    2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
@@ -70,8 +70,10 @@ Stories, answers and progress are personal data kept on the user's computer. Rea
 ## Commands
 - `prep status`: filled vs empty stories per company
 - `prep next [--company COMPANY-ID]`: next unfinished story (prints the resume line, figures and current answers)
-- `prep show STORY_ID`
-- `prep set STORY_ID FIELD "VALUE"`: FIELD is situation, task, action, result, metric, lessons, notes, follow_ups (use ` | ` between several) or status (empty, draft, done)
+- `prep show STORY_ID [--style star|soar|carl]`
+- `prep set STORY_ID FIELD "VALUE" [--style S]`: FIELD is situation, task, action, result, metric, lessons, notes, follow_ups, likely_questions, never_say, also_themes (lists: use ` | ` between items), spoken.60s, spoken.2min (the spoken versions, kept as written) or status (empty, draft, done). A style also names its own parts: obstacle (soar), challenge and learning (carl).
+- `prep styles`: the three answer styles (star, soar, carl) and the one in force: `--style`, then the saved `profile set answer_style`, then star. `status done` is accepted only when the story is complete in that style; if it is refused, the message names the missing part, so ask for that part.
+- `prep new STORY_ID --company C --theme T`: an extra story beyond the ones `prep init` makes. `prep list [--company C]` lists every story. `prep evidence STORY` shows the dates it was practised.
 - `prep for-jd -`: stories ranked for a job posting (posting on stdin), with typical questions and the unfinished ones
 - `prep init`: add stories for new resume lines or themes (never overwrites answers)
 
@@ -79,7 +81,7 @@ Stories, answers and progress are personal data kept on the user's computer. Rea
 Every practice run belongs to a session, so the user can start fresh or go back to an old one.
 1. Run `sessions list`. Ask whether to start a new session or continue one. Never guess which:
    > Do you want to start a new practice session, or pick up one you did before?
-2. Before a new session, run `profile status`. If the retest window says it is the default (not set), ask once, and save the answer with `profile set reassess_days N` (a whole number of days, 1 to 365; if the user has no preference, keep the default and do not ask again):
+2. Before a new session, use the `profile status` output from the preflight (run it again only if a setting just changed). If the retest window says it is the default (not set), ask once, and save the answer with `profile set reassess_days N` (a whole number of days, 1 to 365; if the user has no preference, keep the default and do not ask again):
    > How many days should pass before I offer to re-check an answer you did well on? Most people pick 30.
    Then run `readiness --due`. If it lists items, say how many and how old the oldest is, and ask:
    > N of your good answers are older than D days. Do you want to re-check those first?
@@ -104,7 +106,7 @@ Flow: the session's next item, then `arch show ID`, ask one question, wait for t
 People-leadership questions (roadmapping, prioritization, mentoring, conflict, team size, execution, influence), each tied to STAR examples from the three most recent companies. Read `leadership.md` (in this skill's folder) first. Commands (`lead`): `status`, `next [--category C] [--order default|random]`, `show ID`, `list`, `set ID principle|notes|confidence VALUE`, `example ID COMPANY FIELD VALUE`, `profile show|set`, `init`. Start with `sessions new "title" --mode leadership [--category C] [--order random]`.
 
 ## Filling in stories
-1. Run `status`, then `next` (use `--company` if the user names one; start with the most recent job).
+1. Run `prep status`, then `prep next` (use `--company` if the user names one; start with the most recent job).
 2. Show the story's resume line and figures in two lines, then ask **one question at a time**, in this order. Put each in plain words, for example:
    > What was the situation? What was going on when this started?
    > What was your part in it?
@@ -112,8 +114,11 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
    > What was the result? A number helps.
    > What went wrong, or what would you do differently?
    Then the tough follow-up questions an interviewer would ask.
+   If `profile status` shows the answer style as "not set", ask once and save the choice with `profile set answer_style star|soar|carl` (run `prep styles` for the parts of each):
+   > Stories can be shaped three ways. Situation, task, action, result is a clear sequence that suits most questions. Situation, obstacle, action, result suits a story about overcoming something. Challenge, action, result, learning suits a story where what you learned matters as much as what happened. Which do you want to use? Most people start with the first.
+   Ask for the parts of the style in force, with the same plain-words questions (an obstacle is what stood in the way, a learning is what they took from it). In `soar` or `carl` the story is done when its own parts are filled, not necessarily situation and task.
 3. Do not make up details. If an answer is vague, ask one follow-up ("how was that measured?", "what did you do versus the team?"). Never copy facts from other stories or from your own assumptions.
-4. After each answer, save it with `prep set`. When situation, task, action and result are all filled, tighten them into one or two sentences each, read the finished story back, and on the user's okay set status to `done`.
+4. After each answer, save it with `prep set`. When every part of the style in force is filled, tighten them into one or two sentences each, read the finished story back, and on the user's okay set status to `done`.
 5. Offer the next story only after the current one is done. Stop when the user says to.
 6. If the user's answer differs from the resume line (for example a different number), ask which is right before saving:
    > Your resume says X but you just said Y. Which one is right?
@@ -128,8 +133,8 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 
 <!-- shared:rules -->
 ## Rules
-- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read it with `jobkit export` and summarise it in plain words.
+- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarise it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
-- Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit/output`).
+- Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.
 <!-- /shared:rules -->
