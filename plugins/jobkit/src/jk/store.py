@@ -122,9 +122,16 @@ def _save_before_upgrade(conn: sqlite3.Connection, current: int) -> Path:
 
     An earlier copy is never overwritten. Raises ToolError if the copy cannot be written.
     """
+    return save_committed_copy(conn, f"jobkit-before-upgrade-v{current}", "upgrading it")
+
+
+def save_committed_copy(conn: sqlite3.Connection, label: str, action: str) -> Path:
+    """Copy the last committed state of the database to `backup/<label>-<timestamp>.db` and return that file; safe
+    while `conn` holds the write lock. An earlier copy is never overwritten. Raises ToolError (saying that nothing
+    was changed before `action`) if the copy cannot be written."""
     path: Path | None = None
     try:
-        path = _reserve_backup(f"jobkit-before-upgrade-v{current}")
+        path = _reserve_backup(label)
         # A second connection reads the last committed state (WAL readers are not blocked by our write lock;
         # `conn.backup` on the locked connection itself would wait forever).
         source_file = conn.execute("PRAGMA database_list").fetchone()[2]
@@ -135,7 +142,7 @@ def _save_before_upgrade(conn: sqlite3.Connection, current: int) -> Path:
         if path is not None:
             with contextlib.suppress(OSError):
                 path.unlink()
-        raise ToolError(f"Could not save a copy of the database before upgrading it ({err}). "
+        raise ToolError(f"Could not save a copy of the database before {action} ({err}). "
                         "Nothing was changed.") from err
     return path
 

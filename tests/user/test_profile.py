@@ -4,6 +4,7 @@ import io
 import re
 import unittest
 
+from jk.interview import styles
 from jk.user import profile as up, tables as utables
 from tests.support import HomeCase
 
@@ -165,6 +166,39 @@ class RetestWindowTests(ProfileCase):
         for good in ("1", "365"):
             self.assertEqual(self.run_cli("set", "reassess_days", good)[0], 0)
             self.assertEqual(up.reassess_days(), int(good))
+
+
+class AnswerStyleTests(ProfileCase):
+    def test_default_is_star_and_status_says_so(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertIsNone(up.answer_style())
+        self.assertIn("answer style: star (default, not set)", self.run_cli("status")[1])
+
+    def test_set_stores_the_style_and_status_shows_it(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(self.run_cli("set", "answer_style", "carl")[0], 0)
+        self.assertEqual(up.answer_style(), "carl")
+        self.assertIn("answer style: carl\n", self.run_cli("status")[1])
+
+    def test_a_value_is_accepted_in_any_letter_case(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.assertEqual(self.run_cli("set", "answer_style", "SOAR")[0], 0)
+        self.assertEqual(up.answer_style(), "soar")
+
+    def test_invalid_value_names_the_styles_and_changes_nothing(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.run_cli("set", "answer_style", "soar")
+        for bad in ("bogus", "", "star soar"):
+            code, _, err = self.run_cli("set", "answer_style", bad)
+            self.assertEqual(code, 1, bad)
+            self.assertIn("star, soar, carl", err)
+            self.assertEqual(up.answer_style(), "soar", bad)
+
+    def test_an_option_overrides_the_default_for_that_run_only(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        self.run_cli("set", "answer_style", "carl")
+        self.assertEqual(styles.in_force("soar"), "soar")
+        self.assertEqual(up.answer_style(), "carl")
 
 
 class ProfileInitTests(HomeCase):

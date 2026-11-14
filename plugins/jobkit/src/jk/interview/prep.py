@@ -6,10 +6,15 @@ Stories (STAR narratives)
   prep status            # stories per company: how many are filled
   prep list [--company <company-id>]    # every story: id, status, headline
   prep next [--company <company-id>]   # next empty story to work on (prints it)
-  prep show STORY_ID
-  prep set STORY_ID FIELD VALUE
+  prep show STORY_ID [--style star|soar|carl]
+  prep set STORY_ID FIELD VALUE [--style star|soar|carl] [--merge]
         FIELD: situation task action result metric lessons notes status | spoken.60s spoken.2min
                follow_ups likely_questions never_say also_themes   (lists: separate items with ' | ')
+               a style's own part names: obstacle (soar), challenge and learning (carl)
+        A style is a view of one stored story: obstacle is the task, learning is the lessons, and a challenge is
+        the situation followed by the task. Saving a challenge writes the situation; when the task has text it is
+        refused unless --merge is given, which empties the task. Spoken versions are shown as written.
+  prep styles            # the three answer styles with their parts and a use for each
   prep new STORY_ID --company C --theme T [--headline H] [--engagement E]   # extra story beyond the skeleton
   prep for-jd jd.txt     # ("-" = stdin) stories ranked for a job description (+ typical questions)
 
@@ -34,9 +39,12 @@ Linking, numbers, follow-ups
 
 Reading and checking
   prep search TEXT                           # across stories and engagements
-  prep validate [ID]                         # errors block 'done'; warnings are advice; exit 1 on errors
-  prep export [--story S | --engagement E] [--format json|md] [-o FILE]
+  prep validate [ID] [--style S]             # errors block 'done'; warnings are advice; exit 1 on errors
+  prep export [--story S | --engagement E] [--format json|md] [--style S] [-o FILE]
   prep evidence STORY                        # dates the story was practised in sessions (read-only)
+
+The style in force is --style, then the profile's answer_style, then star. A story marked done must be complete in
+the style in force; a story already done stays valid while it is complete in any style.
 
 Fact basis: stated (user said it), estimate, unsure (user doubts it), verified-doc (needs a URL), proposed (an
 idea the assistant suggested; never the user's claim). Only stated, estimate and verified-doc may back a story.
@@ -55,7 +63,7 @@ from typing import Any, Final, TypedDict, cast
 from jk import common
 from jk.common import ToolError
 from jk.interview import story_model as sm
-from jk.interview import tables
+from jk.interview import styles, tables
 from jk.interview.story_model import Engagement, Story
 from jk.resumes import query_resume as qr
 from jk.resumes.resume_data import Bullet, Company, newest_start
@@ -167,10 +175,10 @@ def eng_of(story: Story, engs: Iterable[Engagement]) -> Engagement | None:
     return next((e for e in engs if e["id"] == story["engagement"]), None)
 
 
-def health(story: Story, engs: Iterable[Engagement] | None = None) -> Health:
-    """Read-only summary of the v2 fields of one story."""
+def health(story: Story, engs: Iterable[Engagement] | None = None, style: str | None = None) -> Health:
+    """Read-only summary of the v2 fields of one story, judged in the style in force."""
     eng = eng_of(story, engagements() if engs is None else engs)
-    issues = sm.validate_story(story, eng)
+    issues = sm.validate_story(story, eng, styles.in_force(style))
     facts = sm.fact_map(eng)
     return {"errors": [m for level, m in issues if level == "error"],
             "warnings": [m for level, m in issues if level == "warn"],
@@ -308,23 +316,35 @@ def cmd_list(args: argparse.Namespace) -> None:
             print(f"  {story['id']:<40} {story['status']:<6} {story['headline'][:70]}")
 
 
-def show(story: Story, eng: Engagement | None = None) -> None:
-    """Print one story with its numbers, spoken versions and facts."""
+def _style_lines(story: Story, style: str) -> list[str]:
+    """The text of the story grouped as the parts of `style`, then the stored fields no part reads."""
+    fields: Mapping[str, Any] = story
+    chosen = styles.get(style)
+    lines = [f"  {part.name}: {styles.part_text(part, story) or '-'}" for part in chosen.parts]
+    covered = styles.stored_fields(style)
+    return lines + [f"  {name}: {fields[name] or '-'}" for name in FIELDS if name not in covered]
+
+
+def show(story: Story, eng: Engagement | None = None, style: str | None = None) -> None:
+    """Print one story with its numbers, spoken versions and facts, grouped as the style in force."""
     story = sm.normalize_story(story)
     fields: Mapping[str, Any] = story
+    chosen = styles.in_force(style)
     print(f"[{story['id']}] {story['company_name']} | {story['theme']} | status: {story['status']}")
     print(f"  resume line: {story['headline']}")
     if story["metrics_on_resume"]:
         print("  metrics on resume: " + ", ".join(story["metrics_on_resume"]))
     if story["engagement"]:
         print(f"  engagement: {story['engagement']}" + (f" ({eng['title']})" if eng and eng.get("title") else ""))
-    for name in FIELDS:
-        print(f"  {name}: {fields[name] if fields[name] else '-'}")
+    print(f"  style: {chosen}")
+    print("\n".join(_style_lines(story, chosen)))
     if story["metrics"]:
         print("  numbers: " + "; ".join(f"{m['name']} = {m['value']} ({m['basis']})" for m in story["metrics"]))
     for key in sm.SPOKEN_LIMITS:
         if story["spoken"].get(key):
             print(f"  spoken {key}: {story['spoken'][key]}")
+    if any(story["spoken"].get(key) for key in sm.SPOKEN_LIMITS):
+        print(f"  (spoken versions are shown as written; they are not rearranged to {chosen})")
     for name in ("likely_questions", "never_say", "also_themes"):
         if fields[name]:
             print(f"  {name}: " + " | ".join(fields[name]))
@@ -335,6 +355,13 @@ def show(story: Story, eng: Engagement | None = None) -> None:
     print("  follow_ups: " + (" | ".join(story["follow_ups"]) or "-"))
     if story["resolved"]:
         print("  resolved: " + " | ".join(f"{r['q']} -> {r['answer']}" for r in story["resolved"]))
+
+
+def cmd_styles(args: argparse.Namespace) -> None:
+    """The three answer styles."""
+    del args
+    print("\n".join(styles.listing()))
+    print(f"In force: {styles.in_force()} (--style, then the profile's answer_style, then star).")
 
 
 def cmd_next(args: argparse.Namespace) -> None:
@@ -350,22 +377,45 @@ def cmd_next(args: argparse.Namespace) -> None:
 def cmd_show(args: argparse.Namespace) -> None:
     """Show one story."""
     story = find(stories(), args.id, "story")
-    show(story, eng_of(story, engagements()))
+    show(story, eng_of(story, engagements()), args.style)
 
 
 # ---- stories: write ------------------------------------------------------------------------------------------------
 
-def set_status_done(story: dict[str, Any], previous: str) -> None:
-    """Refuse to mark a story done while it has rule errors (the story is restored before failing)."""
-    errors = [m for level, m in sm.validate_story(cast(Story, story), eng_of(cast(Story, story), engagements()))
-              if level == "error"]
+def set_status_done(story: dict[str, Any], previous: str, style: str) -> None:
+    """Refuse to mark a story done while it has rule errors in the style in force (the status is restored first)."""
+    errors = [m for level, m in sm.validate_story(cast(Story, story), eng_of(cast(Story, story), engagements()),
+                                                  style, marking=True) if level == "error"]
     if errors:
         story["status"] = previous           # nothing was saved yet; the file is untouched
         raise ToolError("Cannot mark done:\n  " + "\n  ".join(errors))
 
 
-def apply_field(story: dict[str, Any], field: str, value: str) -> None:
-    """Set one field of a story from the command line."""
+def _is_part_name(field: str) -> bool:
+    """Whether `field` is the name of a part in any style."""
+    return any(part.name == field for style in styles.STYLES.values() for part in style.parts)
+
+
+def _set_text(story: dict[str, Any], field: str, value: str, style: str) -> str:
+    """Set one text field or style part; return the message for the user."""
+    if field == "status":
+        if value not in sm.STATUSES:
+            raise ToolError("status must be empty, draft or done")
+        previous = story["status"]
+        story["status"] = value
+        if value == "done":
+            set_status_done(story, previous, style)
+    else:
+        story[field] = value
+    return f"Updated {story['id']}.{field}"
+
+
+def apply_field(story: dict[str, Any], field: str, value: str, style: str | None = None, merge: bool = False) -> str:
+    """Set one field of a story from the command line; return the message for the user.
+
+    A part name of a style (obstacle, challenge, learning, or any part when `--style` is given) is saved to the
+    stored field it maps to. The stored field names keep working as before when no style is given.
+    """
     if field in sm.LIST_FIELDS:
         story[field] = split_list(value)
     elif field.startswith("spoken."):
@@ -373,31 +423,29 @@ def apply_field(story: dict[str, Any], field: str, value: str) -> None:
         if key not in sm.SPOKEN_LIMITS:
             raise ToolError("spoken field must be spoken.60s or spoken.2min")
         story["spoken"][key] = value
+    elif _is_part_name(field) and (style is not None or field not in sm.STAR):
+        return f"Updated {story['id']}: " + styles.save_part(story, styles.in_force(style), field, value, merge)
     elif field in FIELDS or field == "status":
-        if field == "status" and value not in sm.STATUSES:
-            raise ToolError("status must be empty, draft or done")
-        previous = story["status"]
-        story[field] = value
-        if field == "status" and value == "done":
-            set_status_done(story, previous)
+        return _set_text(story, field, value, styles.in_force(style))
     else:
         raise ToolError(f"Unknown field {field}")
+    return f"Updated {story['id']}.{field}"
 
 
 def cmd_set(args: argparse.Namespace) -> None:
-    """Set a story field (STAR text, spoken versions, lists, status)."""
+    """Set a story field (STAR text, spoken versions, lists, status) or a part of the style in force."""
     data = load_story_data()
     story = find(data["stories"], args.id, "story")
-    apply_field(story, args.field, args.value)
+    message = apply_field(story, args.field, args.value, args.style, args.merge)
     if args.field != "status" and story["status"] == "empty":
         story["status"] = "draft"
     touch(story)
     save_stories(data)
-    print(f"Updated {args.id}.{args.field}")
-    for level, message in sm.validate_story(story, eng_of(story, engagements())):
+    print(message)
+    for level, text in sm.validate_story(story, eng_of(story, engagements()), styles.in_force(args.style)):
         if level == "error" and story["status"] != "done" and (
-                "never_say" in message or "basis" in message or "does not exist" in message):
-            print("  Note:", message)
+                "never_say" in text or "basis" in text or "does not exist" in text):
+            print("  Note:", text)
 
 
 def cmd_new(args: argparse.Namespace) -> None:
@@ -438,7 +486,7 @@ def cmd_link(args: argparse.Namespace) -> None:
     touch(story)
     save_stories(data)
     print(f"Linked {story['id']} -> {eng['id']}; facts: {', '.join(story['uses_facts']) or '-'}")
-    for level, message in sm.validate_story(story, eng):
+    for level, message in sm.validate_story(story, eng, styles.in_force()):
         if level == "error":
             print("  Note:", message)
 
@@ -689,13 +737,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     """Check stories and engagements against the rules; status 1 when there are errors."""
     ss, es = stories_if_any(), engagements()
     emap = {e["id"]: e for e in es}
+    style = styles.in_force(args.style)
     problems: list[sm.Issue] = []
     for eng in es:
         if not args.id or args.id == eng["id"]:
             problems += sm.validate_engagement(eng)
     for story in ss:
         if not args.id or args.id == story["id"] or args.id == story["engagement"]:
-            problems += sm.validate_story(story, emap.get(story["engagement"] or ""))
+            problems += sm.validate_story(story, emap.get(story["engagement"] or ""), style)
     if args.id and not any(x["id"] == args.id for x in [*ss, *es]):
         raise ToolError(f"No story or engagement {args.id}")
     errors = [m for level, m in problems if level == "error"]
@@ -717,7 +766,9 @@ def export_text(args: argparse.Namespace) -> str:
     if args.story:
         story = find(ss, args.story, "story")
         eng = eng_of(story, es)
-        return sm.render_story_md(story, eng) if args.format == "md" else dump_json([story], [eng] if eng else [])
+        if args.format == "md":
+            return sm.render_story_md(story, eng, styles.in_force(args.style))
+        return dump_json([story], [eng] if eng else [])
     if args.format == "md":
         raise ToolError("--format md needs --story")
     if args.engagement:
@@ -772,6 +823,11 @@ def _actions(sub: Any, name: str) -> Any:
     return sub.add_parser(name).add_subparsers(dest="action", required=True)
 
 
+def _style_option(parser: argparse.ArgumentParser) -> None:
+    """The `--style` option: star, soar or carl (default: the profile's answer_style, then star)."""
+    parser.add_argument("--style", help="answer style: " + ", ".join(styles.names()) + " (default: the profile's, then star)")
+
+
 def _add_story_parsers(sub: Any) -> None:
     sub.add_parser("init", aliases=["skeleton"]).set_defaults(fn=cmd_init)
     sub.add_parser("status").set_defaults(fn=cmd_status)
@@ -783,11 +839,16 @@ def _add_story_parsers(sub: Any) -> None:
     nxt.set_defaults(fn=cmd_next)
     shower = sub.add_parser("show")
     shower.add_argument("id")
+    _style_option(shower)
     shower.set_defaults(fn=cmd_show)
     setter = sub.add_parser("set")
     for name in ("id", "field", "value"):
         setter.add_argument(name)
+    _style_option(setter)
+    setter.add_argument("--merge", action="store_true",
+                        help="save a challenge over a task: the new text becomes the situation and the task is emptied")
     setter.set_defaults(fn=cmd_set)
+    sub.add_parser("styles").set_defaults(fn=cmd_styles)
     for_jd = sub.add_parser("for-jd")
     for_jd.add_argument("jd", help="job description file, or - for stdin")
     for_jd.add_argument("--top", type=int, default=8)
@@ -903,11 +964,13 @@ def _add_read_parsers(sub: Any) -> None:
     search.set_defaults(fn=cmd_search)
     validate = sub.add_parser("validate")
     validate.add_argument("id", nargs="?")
+    _style_option(validate)
     validate.set_defaults(fn=cmd_validate)
     export = sub.add_parser("export")
     export.add_argument("--story")
     export.add_argument("--engagement")
     export.add_argument("--format", choices=["json", "md"], default="json")
+    _style_option(export)
     export.add_argument("-o", "--output")
     export.set_defaults(fn=cmd_export)
     evidence = sub.add_parser("evidence")

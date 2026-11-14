@@ -202,11 +202,11 @@ class MarkdownTests(ExtractCase):
         out = self.md("| Acme Corp | 03/2021 - Present |\n|---|---|\n| jane@example.com | 12345, Exampleville, GA |\n")
         self.assertEqual([line for line in out if line.strip()], ["Acme Corp   03/2021 - Present"])
 
-    def test_grid_table_keeps_multi_line_cells_separate(self):
+    def test_grid_table_with_headings_is_read_column_by_column(self):
         grid = ("+------------+------------+\n| Skills     | Tools      |\n+============+============+\n"
                 "| - Python   | - Docker   |\n|            |            |\n| - Go       | - Make     |\n+------------+------------+\n")
         out = [line for line in self.md(grid) if line.strip()]
-        self.assertEqual(out, ["Skills   Tools", "• Python", "• Go", "• Docker", "• Make"])
+        self.assertEqual(out, ["Skills", "• Python", "• Go", "Tools", "• Docker", "• Make"])
 
 
 class DocxTests(ExtractCase):

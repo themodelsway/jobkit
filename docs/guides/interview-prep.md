@@ -24,7 +24,7 @@ Requests use plain language and fall into these categories:
 
 - **Technical questions.** Cards for services, decision pairs (comparisons of alternatives and the conditions for choosing each) and scenarios, for the technologies named. Facts used for grading come from the vendor's own documentation, not from memory.
 - **Leadership questions.** Roadmapping, mentoring, conflict, prioritisation and more. Each is tied to examples from the most recent employers.
-- **Stories.** The skill walks through each story one question at a time (situation, the user's part, the actions, the result with a number, what would change) and saves the answers as it goes. It asks before saving anything that is not already on a resume.
+- **Stories.** The skill walks through each story one question at a time (situation, the user's part, the actions, the result with a number, what would change) and saves the answers as it goes. It asks before saving anything that is not already on a resume. Answers can be structured as STAR, SOAR or CARL; see [Answer styles](#answer-styles).
 - **A job posting.** Given a posting, the skill ranks the stories for it, reports which are unfinished and which requirements have no story, then rehearses the questions typically asked.
 
 At the end, the skill closes the session. Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
@@ -45,13 +45,14 @@ STAR stories and engagements, stored in the database.
 | `prep status` | none | Stories per employer, and how many are filled. |
 | `prep list` | `[--company ID]` | Every story: id, status, headline. |
 | `prep next` | `[--company ID]` | Print the next empty story to work on. |
-| `prep show` | `STORY_ID` | Print one story. |
-| `prep set` | `STORY_ID FIELD VALUE` | Set a field. `FIELD`: `situation task action result metric lessons notes status`, `spoken.60s`, `spoken.2min`, or a list field (`follow_ups likely_questions never_say also_themes`, items separated by ` \| `). `status` is `empty`, `draft` or `done`; `done` is blocked while `validate` reports errors. |
+| `prep show` | `STORY_ID [--style S]` | Print one story, grouped as the parts of the style. Nothing stored changes. |
+| `prep set` | `STORY_ID FIELD VALUE [--style S] [--merge]` | Set a field. `FIELD`: `situation task action result metric lessons notes status`, `spoken.60s`, `spoken.2min`, a list field (`follow_ups likely_questions never_say also_themes`, items separated by ` \| `), or a part name of a style (`obstacle`, `challenge`, `learning`). `status` is `empty`, `draft` or `done`; `done` needs every part of the style in force and is blocked while `validate` reports errors. A part is saved to the stored field it maps to, and the message names that field. A part that does not belong to the style is an error that lists the parts that do. `--merge` is explained under [Answer styles](#answer-styles). |
+| `prep styles` | none | List the three answer styles with their parts and a use for each, and the style in force. |
 | `prep new` | `STORY_ID --company ID --theme T [--headline H] [--engagement E]` | Add a story beyond the generated ones. |
 | `prep for-jd` | `JD [--top N]` | Rank stories for a job description (default 8), with typical questions. |
 | `prep search` | `TEXT` | Search stories and engagements. |
-| `prep validate` | `[ID]` | Check one story or all. Errors block `done` and exit 1; warnings are advice. |
-| `prep export` | `[--story S \| --engagement E] [--format json\|md] [-o FILE]` | Export to JSON (default) or Markdown. |
+| `prep validate` | `[ID] [--style S]` | Check one story or all. Errors block `done` and exit 1; warnings are advice. A story already `done` is valid while it is complete in any style; a part missing in the style in force is a warning. |
+| `prep export` | `[--story S \| --engagement E] [--format json\|md] [--style S] [-o FILE]` | Export to JSON (default) or Markdown. The Markdown cheat sheet uses the headings of the style. |
 | `prep evidence` | `STORY` | Dates the story was practised in sessions (read-only). |
 
 **Engagements** (one real project, reusable by several stories)
@@ -79,6 +80,31 @@ STAR stories and engagements, stored in the database.
 | `prep metric rm` | `STORY NAME` | Remove a metric. |
 | `prep followup add` | `STORY "question"` | Add a follow-up question. |
 | `prep followup resolve` | `STORY INDEX_OR_TEXT [--answer A]` | Mark one answered, with the answer given. |
+
+#### Answer styles
+
+A story is stored once, and a style is a labelled view of it. No story is rewritten per style, and showing a story in any style leaves the stored text unchanged.
+
+| Style | Parts in order | Use |
+|---|---|---|
+| `star` | Situation, Task, Action, Result | A clear sequence for most behavioural questions. The style when none is chosen. |
+| `soar` | Situation, Obstacle, Action, Result | When overcoming something is the point of the story. |
+| `carl` | Challenge, Action, Result, Learning | When what was learned matters as much as what happened. |
+
+How the parts map onto the stored story:
+
+| Part | Stored field |
+|---|---|
+| Obstacle (`soar`) | `task` |
+| Challenge (`carl`) | `situation` followed by `task` |
+| Learning (`carl`) | `lessons` |
+| Situation, Action, Result | themselves, in every style |
+
+- **Style in force.** The `--style` option, then the answer style saved in the profile (`profile set answer_style`), then `star`.
+- **Saving a challenge never repeats text.** A challenge is saved as the `situation`. When the `task` already has text, the save is refused, and the message offers two ways forward: set the `situation` and `task` separately, or save again with `--merge`. A merge stores the new text as the `situation`, empties the `task` and says so. A challenge that was shown, edited and saved with `--merge` reads back as exactly the edited text.
+- **Done.** Marking a story `done` needs every part of the style in force. A story already `done` stays valid while it is complete in at least one of the three styles, so changing the default style never turns a valid story into an error; the gaps in the style in force are warnings.
+- **Unchanged in every style.** Fact and metric rules, the hedging rule for estimated numbers, the warning when "we" outnumbers "I" in the action, and the word limits of the spoken versions. Spoken versions are shown as written, with a note, and are not rearranged to the style.
+- **Stored field names.** `situation`, `task`, `action` and `result` keep working in `prep set` when no `--style` is given.
 
 ### `arch`
 

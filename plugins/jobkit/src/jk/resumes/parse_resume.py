@@ -19,16 +19,16 @@ from difflib import SequenceMatcher
 from hashlib import sha1
 from typing import Any, Final, Literal, TypedDict
 
+from jk.resumes import dates
 from jk.resumes.extract import is_contact_line
+from jk.resumes.headings import COMBINED, LOOKUP, heading_key, inline_heading, is_unknown_heading
+from jk.resumes.work_layout import (BULLETS, HEADER_PREFIX, MAX_HEADLINE_CHARS, SEP, SUB_MARK, can_be_company_line,
+                                    employer_by_context, is_location, is_title_line, plausible_company, structure_work_lines)
 
-BULLETS: Final[str] = "•●§▪◦"
 ZERO_WIDTH: Final[dict[int, None]] = dict.fromkeys(map(ord, "\u200b‌‍﻿"))
-SUB_MARK: Final[str] = "\x00SUB"          # prefix for 'o' sub-points, folded into the bullet above them
-# A dash between employer and title: an en/em dash, or a hyphen with spaces around it (not Acme-Labs).
-SEP: Final[str] = r"(?:\s*[–—]\s*|\s+-\s+)"
+PARSER_VERSION: Final[int] = 3           # raise it when reading or parsing changes what a resume file yields: the next
+                                         # `process-resumes` run then backs up the data and rebuilds it from the files
 SIMILAR_THRESHOLD: Final[float] = 0.92   # used by the merge step: near-identical bullets become variants
-MAX_COMPANY_WORDS: Final[int] = 7
-MAX_HEADLINE_CHARS: Final[int] = 60
 SKILL_SECTIONS: Final[tuple[str, ...]] = ("skills", "skills_leadership", "skills_technical")
 
 # canonical company id -> (display name, header regex); filled by set_companies(). The regex must match the
@@ -36,28 +36,6 @@ SKILL_SECTIONS: Final[tuple[str, ...]] = ("skills", "skills_leadership", "skills
 COMPANIES: dict[str, tuple[str, str]] = {}
 COMPANY_RES: dict[str, re.Pattern[str]] = {}
 
-HEADINGS: Final[dict[str, str]] = {
-    "professional summary": "summary",
-    "summary": "summary",
-    "profile": "profile",
-    "skills": "skills",
-    "leadership": "skills_leadership",
-    "leadership skills": "skills_leadership",
-    "technical": "skills_technical",
-    "technical skills": "skills_technical",
-    "certifications": "certifications",
-    "education": "education",
-    "work history": "work",
-    "work experience": "work",
-    "projects": "projects",
-}
-
-DATE_RE: Final = re.compile(
-    r"^(?P<s>\d{2}/\d{4})\s*[–—-]\s*(?P<e>\d{2}/\d{4}|Present|Current)$", re.I)
-TRAILING_DATE_RE: Final = re.compile(
-    r"^(?P<l>.*?\S)\s{2,}(?P<d>\d{2}/\d{4}\s*[–—-]\s*(?:\d{2}/\d{4}|Present|Current))\s*$", re.I)
-ROLE_PREFIX: Final = re.compile(r"role\s*:", re.I)
-HEADER_PREFIX: Final = re.compile(r"(role|client)\s*:", re.I)
 
 GROUPS: Final[dict[str, str]] = {
     "leadership skills": "Leadership",
@@ -72,12 +50,22 @@ GROUPS: Final[dict[str, str]] = {
     "observability solutions": "Observability",
     "observability": "Observability",
     "languages": "Languages",
+    "programming languages": "Languages",
+    "cloud": "Cloud",
+    "cloud platforms": "Cloud",
+    "databases": "Data",
+    "database": "Data",
     "storage": "Data",
     "analytics": "Data",
     "database systems": "Data",
     "bigdata": "Data",
     "big data": "Data",
 }
+MAX_LABEL_CHARS: Final[int] = 40
+MAX_LABEL_WORDS: Final[int] = 5
+WIDE_GAP_RE: Final = re.compile(r"\s{3,}")   # the gap between cells of a table row or columns of a list
+GAP_RE: Final = re.compile(r"\s{2,}")        # a narrower gap counts too in a line that has no other separator
+MAX_SKILL_CHARS: Final[int] = 60          # a longer "skill" is a sentence that wandered into the skills section
 STOP_SKILLS: Final[frozenset[str]] = frozenset({"solutions", "solution", "strategy", "cloud strategy", "other"})
 
 METRIC_RE: Final = re.compile(
@@ -164,57 +152,64 @@ def join_lines(lines: Iterable[str]) -> str:
 
 
 def norm_date(text: str) -> str | None:
-    """'MM/YYYY' -> 'YYYY-MM'; Present/Current -> None."""
-    if text.lower() in ("present", "current"):
-        return None
-    month, year = text.split("/")
-    return f"{year}-{month}"
+    """One end of a date range as 'YYYY-MM' ('YYYY' when only a year is given); Present, Current and the like -> None."""
+    return dates.parse_date(text)
+
+
+def _is_company_header(line: str) -> bool:
+    """True when the line matches a known employer (the registry installed by set_companies)."""
+    return any(regex.match(line.strip()) for regex in COMPANY_RES.values())
+
+
+def _starts_unknown_section(lines: list[str], index: int) -> bool:
+    """True when an ALL-CAPS short line inside the work history is a section heading we do not know (and not an
+    employer: an employer line has a date range within the next lines)."""
+    if not is_unknown_heading(lines[index]) or _is_company_header(lines[index]) or is_title_line(lines[index]):
+        return False                       # a job title in capitals (below its dated employer) is not a heading
+    following = [line for line in lines[index + 1:index + 8] if line.strip()][:3]
+    return not any(dates.find_date_range(line) for line in following)
 
 
 def split_sections(lines: Iterable[str]) -> dict[str, list[str]]:
-    """Return {section_key: [lines]} using HEADINGS; text before the first heading is 'header'."""
+    """Return {section_key: [lines]}; text before the first heading is 'header'. A known heading whose content is
+    not stored starts the section 'other'; an unknown ALL-CAPS heading inside the work history does too and is
+    named in the '_unknown' entry. 'Skills: Python, Java' starts the skills section with its content."""
+    rows = list(lines)
     sections: dict[str, list[str]] = {"header": []}
     current = "header"
-    for line in lines:
-        key = HEADINGS.get(line.strip().lower())
+    for index, line in enumerate(rows):
+        key = heading_key(line)
+        inline = None if key else inline_heading(line, in_work=current == "work")
         if key:
             current = key
             sections.setdefault(current, [])
-            continue
-        sections.setdefault(current, []).append(line)
+        elif inline:
+            current = inline[0]
+            sections.setdefault(current, []).append(inline[1])
+        elif current == "work" and _starts_unknown_section(rows, index):
+            sections.setdefault("_unknown", []).append(line.strip())
+            current = "other"
+            sections.setdefault(current, [])
+        else:
+            sections.setdefault(current, []).append(line)
+    return sections
+
+
+CERT_RE: Final = re.compile(r"certif|licen[cs]e|\b(?:AWS|Azure|GCP|CCNA|CISSP|PMP|CKA|CKAD|TOGAF|Scrum)\b", re.I)
+
+
+def route_combined(sections: dict[str, list[str]]) -> dict[str, list[str]]:
+    """A combined 'Education and Certifications' block: lines that name a certification go to certifications, the
+    others to education."""
+    for line in sections.pop(COMBINED, []):
+        sections.setdefault("certifications" if CERT_RE.search(line) else "education", []).append(line)
     return sections
 
 
 def layout_work_lines(lines: Iterable[str]) -> list[str]:
-    """Prepare `pdftotext -layout` lines for parse_work: a right-aligned date after the company name goes on
-    its own line, and 'o' sub-points are marked so they are folded into the bullet above them."""
-    out: list[str] = []
-    for raw in lines:
-        match = TRAILING_DATE_RE.match(raw.rstrip())
-        if match and match["l"].lstrip()[:1] not in BULLETS:
-            out += [match["l"].strip(), match["d"].strip()]
-        elif re.match(r"^\s{4,}o\s+\S", raw):
-            out.append(SUB_MARK + raw.strip()[1:].strip())
-        else:
-            out.append(raw)
-    return out
-
-
-TITLE_WORDS: Final = re.compile(
-    r"\b(?:engineer|developer|manager|director|architect|consultant|analyst|lead|head|officer|president"
-    r"|administrator|specialist|programmer|scientist|designer|owner|supervisor|vp)\b", re.I)
-
-
-def _is_title_line(line: str) -> bool:
-    """True for a line that reads as a job title on its own: a title word and no employer-title dash."""
-    return bool(TITLE_WORDS.search(line)) and not re.search(SEP, line)
-
-
-def _can_be_company_line(line: str) -> bool:
-    """True when a line could be an employer name sitting above a title line."""
-    return (line[0] not in BULLETS and not line.startswith(SUB_MARK) and not DATE_RE.match(line)
-            and not HEADER_PREFIX.match(line) and not line.endswith(".")
-            and _plausible_company(clean(line).strip(" ,")))
+    """Prepare work-history lines for parse_work (every format): dates on their own line below a header written in
+    any common shape, titles and employers in the order employer, title, places dropped (see work_layout)."""
+    return structure_work_lines(lines)
 
 
 def _header_line_index(lines: list[str], date_index: int) -> int | None:
@@ -224,37 +219,45 @@ def _header_line_index(lines: list[str], date_index: int) -> int | None:
     j = date_index - 1
     while j >= 0 and HEADER_PREFIX.match(lines[j]):
         j -= 1
-    if j < 0 or lines[j][0] in BULLETS or lines[j].startswith(SUB_MARK) or DATE_RE.match(lines[j]):
+    if j < 0 or lines[j][0] in BULLETS or lines[j].startswith(SUB_MARK) or dates.is_date_line(lines[j]):
         return None
-    if j == date_index - 1 and j > 0 and _is_title_line(lines[j]) and _can_be_company_line(lines[j - 1]):
+    if j == date_index - 1 and j > 0 and is_title_line(lines[j]) and can_be_company_line(lines[j - 1]):
         return j - 1
     return j
 
 
-def _plausible_company(name: str) -> bool:
-    return (1 < len(name) < MAX_HEADLINE_CHARS and name[0].isalnum() and (name[0].isupper() or name[0].isdigit())
-            and len(name.split()) <= MAX_COMPANY_WORDS)
+def _employer_by_header(lines: list[str], header: int, date_index: int, name: str) -> bool:
+    """True when `name`, which holds a title word, is the employer of the header block: a clearer title stands in the
+    header itself ('Principal Labs – Senior Engineer'), between the header and the dates, or just after the dates."""
+    title_part = re.split(SEP, lines[header], maxsplit=1)[1:]
+    between = lines[header + 1:date_index]
+    after = lines[date_index + 1:date_index + 2]
+    return any(employer_by_context(name, other) for other in [*title_part, *between, *after]
+               if other and other[0] not in BULLETS)
 
 
 def discover_companies(layout_text: str) -> dict[str, str]:
     """Employer names in one resume's work history, found without any registry: {slug: name}.
     The header is the line just above a date range (skipping Role:/Client: lines), or the line that ends with
-    the date range. Review the result: a company written two ways ("X" and "X, Parent") shows up as two."""
+    the date range. A job title or a place is never taken for an employer. Review the result: a company written
+    two ways ("X" and "X, Parent") shows up as two."""
     section = split_sections(layout_text.splitlines()).get("work")
     if not section:
         return {}
-    lines = [line.strip() for line in layout_work_lines(section) if line.strip()]
+    lines = layout_work_lines(section)
     found: dict[str, str] = {}
     for i, line in enumerate(lines):
-        if not DATE_RE.match(line):
+        if not dates.is_date_line(line):
             continue
         header = _header_line_index(lines, i)
         if header is None:
             continue
         name = clean(re.split(SEP, lines[header])[0]).strip(" ,")
-        if _plausible_company(name):
+        if plausible_company(name) and (not is_title_line(name) or _employer_by_header(lines, header, i, name)) \
+                and not is_location(name):
             found.setdefault(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), name)
     return found
+
 
 
 class _WorkParser:
@@ -268,6 +271,8 @@ class _WorkParser:
         self.cur: WorkEntry | None = None
         self.bullet: list[str] | None = None
         self.pre: list[str] = []          # non-bullet lines between the header and the dates
+        self.marked = False               # the current entry has a bullet with a marker
+        self.inferred = False             # the current entry has bullets found only by their line breaks
 
     def feed(self, raw: str) -> None:
         """Consume one line."""
@@ -306,6 +311,7 @@ class _WorkParser:
                     "start": None, "end": None, "dated": False, "bullets": []}
         self.entries.append(self.cur)
         self.pre = []
+        self.marked = self.inferred = False
 
     def _flush_bullet(self) -> None:
         if self.cur is not None and self.bullet is not None:
@@ -318,11 +324,11 @@ class _WorkParser:
         if cur["dated"]:
             self._after_dates(cur, line)
             return
-        match = DATE_RE.match(line)
-        if not match:
+        found = dates.find_date_range(line)
+        if not found or found.before or found.after:
             self._before_dates(cur, line)
             return
-        cur["start"], cur["end"], cur["dated"] = norm_date(match["s"]), norm_date(match["e"]), True
+        cur["start"], cur["end"], cur["dated"] = norm_date(found.start), norm_date(found.end), True
         if not cur["title"] and self.pre:
             cur["title"] = self.pre[0]
 
@@ -342,6 +348,10 @@ class _WorkParser:
             if self.bullet is not None:
                 self.bullet.append(line[len(SUB_MARK):])
             return
+        if dates.is_date_line(line) or heading_key(line):          # structure is never part of a bullet
+            self._flush_bullet()
+            self.problems.append(f"unexpected line in {cur['company_id']}: {line[:60]}")
+            return
         is_role = line.lower().startswith("role:")
         if not cur["title"] and self.bullet is None and line[0] not in BULLETS and not is_role:
             cur["title"] = clean(line)        # layout A: "Company   dates" then the title on the next line
@@ -350,10 +360,25 @@ class _WorkParser:
         elif line[0] in BULLETS:
             self._flush_bullet()
             self.bullet = [line.lstrip(BULLETS + " ")]
-        elif self.bullet is not None:
-            self.bullet.append(line)
+            self.marked = True
         else:
-            self.problems.append(f"stray line in {cur['company_id']}: {line[:60]}")
+            self._continue_bullet(cur, line)
+
+    def _continue_bullet(self, cur: WorkEntry, line: str) -> None:
+        """A line with no marker: the wrapped end of the current bullet or, in an entry that has no markers at all
+        (bullets drawn as shapes, or plain paragraphs), the start of a new bullet found by its line break."""
+        if self.bullet is not None and (self.marked or not self._ends_sentence(self.bullet[-1]) or not line[:1].isupper()):
+            self.bullet.append(line)
+            return
+        self._flush_bullet()
+        self.bullet = [line]
+        if not self.inferred:
+            self.inferred = True
+            self.problems.append(f"{cur['company_id']} {cur['start']}: bullets inferred from line breaks (no bullet marks)")
+
+    @staticmethod
+    def _ends_sentence(text: str) -> bool:
+        return text.rstrip().endswith((".", ";", "%"))
 
 
 def parse_work(lines: Iterable[str], company_res: Mapping[str, re.Pattern[str]] | None = None
@@ -367,7 +392,7 @@ def parse_work(lines: Iterable[str], company_res: Mapping[str, re.Pattern[str]] 
 
 
 def split_items(text: str) -> list[str]:
-    """Split a skills string on , ; and 'and' at paren depth 0; drop 'Label –' prefixes."""
+    """Split a skills string on , ; | · • and 'and' at paren depth 0; drop 'Label –' prefixes."""
     items: list[str] = []
     buf, depth, i = "", 0, 0
     while i < len(text):
@@ -376,7 +401,7 @@ def split_items(text: str) -> list[str]:
             depth += 1
         elif char == ")":
             depth = max(0, depth - 1)
-        if depth == 0 and char in ",;":
+        if depth == 0 and char in ",;|·•":
             items.append(buf)
             buf = ""
         elif depth == 0 and text[i:i + 5] == " and " and buf.strip():
@@ -417,6 +442,8 @@ def bullet_items(lines: Iterable[str]) -> list[str]:
 def _split_label(text: str, labels: list[str]) -> tuple[str, str] | None:
     """Split 'Label: a, b' (or, in some resumes, 'Label, a, b') into (label, rest)."""
     match = re.match(r"^(?P<l>[^:]+?)\s*:\s*(?P<r>.*)$", text)
+    if match and (len(match["l"]) > MAX_LABEL_CHARS or len(match["l"].split()) > MAX_LABEL_WORDS):
+        return None                                   # a sentence with a colon, not "Label: items"
     if not match:
         low = text.lower()
         label = next((x for x in labels if low.startswith(x) and low[len(x):].lstrip()[:1] == ","), None)
@@ -433,33 +460,59 @@ def _add_skills(groups: dict[str, dict[str, set[str]]], group: str, items: Itera
             groups.setdefault(group, {}).setdefault(name, set()).update(alias)
 
 
+def _cells_to_list(text: str) -> str:
+    """'Python   Java' -> 'Python, Java': gaps between table cells become commas. Three spaces always do; two do only
+    in a line with no comma, semicolon or bar of its own (text from a poor conversion has double spaces inside names)."""
+    return (GAP_RE if not re.search(r"[,;|·•]", text) else WIDE_GAP_RE).sub(", ", text)
+
+
+def _skill_entries(lines: Iterable[str]) -> list[str]:
+    """One string per skills entry: each bullet, and each unmarked line before the first bullet (a wrapped line that
+    continues a list joins the line above, shown by the line above: a trailing comma, semicolon, 'and' or open
+    bracket; a lowercase name such as 'nginx' is a skill of its own). Cells of one table row, 2 or more spaces
+    apart, become a list, in marked entries too."""
+    leading, bullets = _split_bullets(lines)
+    entries: list[str] = []
+    for line in leading:
+        text = clean(_cells_to_list(line.strip()))
+        previous = entries[-1] if entries else ""
+        if previous and (previous.endswith((",", ";", "/", "&")) or previous.lower().endswith((" and", " or"))
+                         or previous.count("(") > previous.count(")")):
+            entries[-1] = f"{previous} {text}"
+        else:
+            entries.append(text)
+    marked = [join_lines(_cells_to_list(line) for line in b) for b in bullets]
+    return [entry for entry in entries + marked if entry]
+
+
 def parse_skills(sections: Mapping[str, list[str]]) -> tuple[dict[str, list[SkillItem]], list[str]]:
-    """Return {group: [{'name', 'aliases'}]} and a list of problems (unknown group labels)."""
+    """Return {group: [{'name', 'aliases'}]} and a list of problems (unknown group labels, sentences in skills)."""
     groups: dict[str, dict[str, set[str]]] = {}
     problems: list[str] = []
     labels = sorted(GROUPS, key=len, reverse=True)
     for key in SKILL_SECTIONS:
-        for text in (join_lines(b) for b in _split_bullets(sections.get(key, []))[1]):
-            if key == "skills_leadership":
-                _add_skills(groups, "Leadership", split_items(text))
-                continue
-            labelled = _split_label(text, labels)
-            if labelled is None:     # unlabeled list, e.g. "Agile methodologies, CI/CD": sorted by your skill curation
-                _add_skills(groups, "Unsorted", split_items(text))
-                continue
-            label, rest = labelled
-            group = GROUPS.get(label.lower())
-            if group is None:
-                problems.append(f"unknown skill group label: {label}")
-                group = "Unsorted"
-            _add_skills(groups, group, split_items(rest))
+        for text in _skill_entries(sections.get(key, [])):
+            group, rest = "Leadership", text
+            labelled = None if key == "skills_leadership" else _split_label(text, labels)
+            if labelled is not None:
+                group = GROUPS.get(labelled[0].lower(), "")
+                rest = labelled[1]
+                if not group:
+                    problems.append(f"unknown skill group label: {labelled[0]}")
+            elif key != "skills_leadership":
+                group = "Unsorted"    # unlabeled list, e.g. "Agile methodologies, CI/CD": sorted by your skill curation
+            items = split_items(rest)
+            long = [item for item in items if len(item) > MAX_SKILL_CHARS]
+            if long:
+                problems.append(f"skills item looks like a sentence, not a skill: {long[0][:60]}")
+            _add_skills(groups, group or "Unsorted", [item for item in items if item not in long])
     skills = {g: [SkillItem(name=n, aliases=sorted(a)) for n, a in items.items()] for g, items in groups.items()}
     return skills, problems
 
 
 def _work_lines(sections: Mapping[str, list[str]], layout_text: str) -> list[str]:
     """Lines of the work history: from the layout text when it has them (it keeps each bullet next to its marker)."""
-    lines = sections["work"]
+    lines = layout_work_lines(sections["work"])
     if layout_text:
         layout_work = split_sections(layout_text.splitlines()).get("work")
         if layout_work:
@@ -467,11 +520,27 @@ def _work_lines(sections: Mapping[str, list[str]], layout_text: str) -> list[str
     return [line for line in lines if not is_contact_line(line)]    # PDFs are not cleaned on extraction
 
 
+HAS_CONTACT_RE: Final = re.compile(r"[\w.+-]+@[\w-]+\.|\d{3}[ .)-]+\d{3}[ .-]\d{4}|linkedin\.com", re.I)
+
+
+def _header_skip(header: list[str]) -> int:
+    """How many lines at the top of a file without a summary heading are the name and what goes with it: two (the
+    name and a contact or title line), but one when the second line is already running text (a long line or one that
+    ends with a full stop), so a name followed directly by the summary keeps its summary."""
+    if len(header) < 2:
+        return len(header)
+    second = header[1].strip()
+    prose = ((len(second) >= MAX_HEADLINE_CHARS or second.endswith(".")) and not HAS_CONTACT_RE.search(second)
+             and not is_location(second))
+    return 1 if prose else 2
+
+
 def _summary_and_headline(sections: Mapping[str, list[str]]) -> tuple[str, str]:
-    """(summary text, headline). Layout A has no summary heading: skip the name and contact lines, and treat a
-    short first line without a full stop as a headline."""
+    """(summary text, headline). Layout A has no summary heading: skip the name and contact lines, drop contact and
+    place lines, and treat a short first line without a full stop as a headline."""
     header = [line for line in sections.get("header", []) if line.strip()]
-    summary_lines = [line for line in sections.get("summary") or header[2:] if not is_contact_line(line)]
+    summary_lines = [line for line in sections.get("summary") or header[_header_skip(header):]
+                     if not is_contact_line(line) and not is_location(line.strip())]
     headline = ""
     if not sections.get("summary") and summary_lines:
         first = summary_lines[0].strip()
@@ -480,30 +549,83 @@ def _summary_and_headline(sections: Mapping[str, list[str]]) -> tuple[str, str]:
     return join_lines(summary_lines), headline
 
 
+DEGREE_RE: Final = re.compile(
+    r"\b(?:bachelor|master|mba|ph\.?d|doctor|diploma|associate|b\.?s\.?c?|m\.?s\.?c?|b\.?tech|m\.?tech|b\.?e|m\.?e)\b",
+    re.I)
+
+
+def list_items(lines: Iterable[str], split_degrees: bool = False) -> list[str]:
+    """Items of a section that is a list (education, projects): each bullet, then the unmarked lines before the first
+    bullet as one item. With `split_degrees`, an unmarked line that starts with a degree name when the item already
+    holds one starts a new item, so two degrees written one under the other are two items. Blank lines mean nothing:
+    PDF text has them between pieces of one line."""
+    leading, bullets = _split_bullets(lines)
+    items: list[str] = []
+    current: list[str] = []
+    for line in leading:
+        if split_degrees and current and DEGREE_RE.match(line.strip()) and DEGREE_RE.search(" ".join(current)):
+            items.append(join_lines(current))
+            current = []
+        current.append(line)
+    items.append(join_lines(current))
+    return [item for item in items + [join_lines(b) for b in bullets] if item]
+
+
+def _glued_heading(text: str) -> str | None:
+    """A section heading written in capitals inside a line of text ('... quality gates. AWARDS'), else None."""
+    return next((name for name in LOOKUP if len(name) >= 6 and name.upper() in text), None)
+
+
+def _diagnostics(sections: Mapping[str, list[str]], work: Iterable[WorkEntry], points: list[str]) -> list[str]:
+    """Problems that point at a parse gone wrong: an unknown heading that ended the work history, a heading glued into a
+    bullet, a section that has a heading but no content, profile points that read like a skills list."""
+    found = [f'unknown heading "{name}" ended the work history' for name in sections.get("_unknown", [])]
+    for entry in work:
+        glued = next((g for b in entry["bullets"] if (g := _glued_heading(b))), None)
+        if glued:
+            found.append(f'{entry["company_id"]} {entry["start"]}: a bullet contains the heading "{glued}"')
+    empty = [key for key in ("certifications", "education", "projects") if key in sections
+             and not any(line.strip() for line in sections[key])]
+    if any(key in sections for key in SKILL_SECTIONS) and not any(line.strip() for key in SKILL_SECTIONS
+                                                                 for line in sections.get(key, [])):
+        empty.append("skills")
+    found += [f"section {key} has a heading but no content" for key in empty]
+    if len(points) >= 3 and sum(len(point.split()) <= 4 for point in points) * 2 >= len(points):
+        found.append("profile points look like a skills list (most are 1-4 words)")
+    return found
+
+
 def parse_resume(text: str, layout_text: str = "",
                  company_res: Mapping[str, re.Pattern[str]] | None = None) -> ParsedResume:
     """Parse one resume. `text` is normal reading-order text (summary, skills, certifications ...);
     `layout_text` is the same PDF from `pdftotext -layout`, used for the work history because it keeps every
     bullet's text next to its marker (reading-order text can detach bullets across columns/pages)."""
-    sections = split_sections(text.splitlines())
+    sections = route_combined(split_sections(text.splitlines()))
     if "work" not in sections:
         return {"is_resume": False, "problems": ["no work-experience heading found"]}
     work, work_problems = parse_work(_work_lines(sections, layout_text), company_res)
+    if not work and layout_text:             # the layout text gave no job: try the reading-order text of the section
+        plain, plain_problems = parse_work(_work_lines(sections, ""), company_res)
+        if plain:
+            work, work_problems = plain, [*plain_problems, "work history read from the reading-order text"]
+    if not work and not any(dates.find_date_range(line) for line in sections["work"]):
+        return {"is_resume": False, "problems": ["work-experience heading found, but no dated entries under it"]}   # a form
     if not work:
         work_problems.append("work-experience section found, but no known employer in it")
     skills, skill_problems = parse_skills(sections)
     summary, headline = _summary_and_headline(sections)
+    points = [p for p in bullet_items(sections.get("profile", [])) if p not in BULLETS]
     return {
         "is_resume": True,
         "work": work,
         "skills": skills,
         "summary": summary,
         "headline": headline,
-        "profile_points": [p for p in bullet_items(sections.get("profile", [])) if p not in BULLETS],
+        "profile_points": points,
         "certifications": bullet_items(sections.get("certifications", [])),
-        "education": [e for e in [join_lines(sections.get("education", []))] if e],
-        "projects": [e for e in [join_lines(sections.get("projects", []))] if e],
-        "problems": work_problems + skill_problems,
+        "education": list_items(sections.get("education", []), split_degrees=True),
+        "projects": list_items(sections.get("projects", [])),
+        "problems": work_problems + skill_problems + _diagnostics(sections, work, points),
     }
 
 

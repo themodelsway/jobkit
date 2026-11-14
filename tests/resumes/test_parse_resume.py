@@ -164,8 +164,8 @@ class MergeTests(unittest.TestCase):
     def test_skills_and_summary_merge(self):
         data = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
         names = {g: [s["name"] for s in v] for g, v in data["skills"]["groups"].items()}
-        self.assertIn("SQL", names["Unsorted"])
-        sql = next(s for s in data["skills"]["groups"]["Unsorted"] if s["name"] == "SQL")
+        self.assertIn("SQL", names["Data"])
+        sql = next(s for s in data["skills"]["groups"]["Data"] if s["name"] == "SQL")
         self.assertEqual(sql["aliases"], ["Structured Query Language"])
         self.assertEqual(len(data["profile"]["summaries"]), 1)
         self.assertEqual(data["profile"]["headlines"], ["Senior Software Engineer"])

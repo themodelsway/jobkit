@@ -57,12 +57,22 @@ The system SHALL re-process only new or changed resume files, using the ledger, 
 - **WHEN** the tool runs again with no file changes
 - **THEN** no resume is re-parsed
 
+### Requirement: A parser change rebuilds the data once
+The system SHALL record the parser version the stored resume data was built with. When that version differs from the running one (or none was recorded and data or a ledger exists, so files that all failed are retried too), the next `process-resumes` run SHALL first save a copy of the database to `backup/` and then rebuild the data from the resume files once, keeping curation, and say so. Survey SHALL NOT do this.
+
+#### Scenario: Parser upgraded
+- **WHEN** the plugin is updated to a parser with a new version and `process-resumes` runs
+- **THEN** a copy of the database is saved, every resume is read again, and the next run finds 0 new or changed files
+
 ### Requirement: Survey writes nothing
-The system SHALL show what each resume parses into with `--survey` and SHALL NOT change any stored data or write any file in that mode.
+The system SHALL show what each resume parses into with `--survey` and SHALL NOT change any stored data or write any file in that mode. For a PDF it SHALL name the pages that were read as columns.
 
 #### Scenario: Survey run
 - **WHEN** `--survey` is used
 - **THEN** the database and `output/` are unchanged
+
+### Requirement: Dates may be a year
+A role's start and end SHALL be `YYYY-MM`, or `YYYY` when the resume gives only a year; a year SHALL display as a year and count as June in month arithmetic. Several roles of one employer, each with its own dates, SHALL be stored as separate roles of that employer.
 
 ### Requirement: One job is one role
 The system SHALL keep one role per job. Roles of one employer with the same start date and the same end date are one role, and so are two with the same start date where one resume says `Present` and another gives an end date. Roles with the same start date and different real end dates stay separate.

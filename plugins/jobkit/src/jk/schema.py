@@ -242,6 +242,24 @@ CREATE TABLE term (
 """)
 
 
+def step_target_research(conn: sqlite3.Connection) -> None:
+    """Version 13: researched companies and their facts, and the style and company each new log entry records.
+
+    Nothing existing is rewritten. Log rows written before this step have no style and no company (NULL).
+    """
+    run_script(conn, """
+CREATE TABLE target_company (
+  key TEXT PRIMARY KEY, name TEXT NOT NULL, outcome TEXT NOT NULL, researched TEXT NOT NULL,
+  style TEXT, style_basis TEXT, body TEXT NOT NULL);
+CREATE TABLE target_fact (
+  company_key TEXT NOT NULL REFERENCES target_company(key) ON DELETE CASCADE, id TEXT NOT NULL,
+  position INTEGER NOT NULL, kind TEXT NOT NULL, link TEXT NOT NULL, label TEXT NOT NULL, pulled TEXT NOT NULL,
+  vetted INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (company_key, id));
+ALTER TABLE session_log ADD COLUMN style TEXT;
+ALTER TABLE session_log ADD COLUMN company TEXT;
+""")
+
+
 STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
                step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results,
-               step_one_home_per_field, step_terms]
+               step_one_home_per_field, step_terms, step_target_research]

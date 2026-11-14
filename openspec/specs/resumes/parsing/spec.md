@@ -12,12 +12,49 @@ The system SHALL expose `parse_resume(text, layout_text)` that takes extracted t
 - **WHEN** the same text is parsed twice
 - **THEN** the results are identical
 
-### Requirement: Two layout families
-The system SHALL recognise layout A (`WORK EXPERIENCE`, company with dates, title below, `•` bullets, `Present`) and layout B (`Work History`, `Company – Title`, optional `Role:`/`Client:`, `●` bullets, `§` profile points, `Current`).
+### Requirement: Layout families
+The system SHALL recognise layout A (`WORK EXPERIENCE`, company with dates, title below, `•` bullets, `Present`) and layout B (`Work History`, `Company – Title`, optional `Role:`/`Client:`, `●` bullets, `§` profile points, `Current`), and the other forms in the requirements below.
 
 #### Scenario: Layout B resume
 - **WHEN** a resume uses `Work History` and `●` bullets
 - **THEN** each company's bullets and dates are parsed
+
+### Requirement: Section headings are recognised by meaning
+The system SHALL recognise a section heading from a table of synonyms (for example `Experience`, `Professional Experience`, `Employment History` for work; `Career Highlights`, `Key Achievements`, `Accomplishments` for profile points; `Core Competencies` for skills), ignoring case, a trailing colon, `&` for `and` and letter spacing. `Skills: a, b` SHALL start the skills section with its content; inside the work history only the skills headings (`Skills:`, `Technical Skills:`, `Leadership Skills:`), `Education:`, `Certifications:` and `Summary:` do so, and a job label such as `Technologies:`, `Tech stack:` or `Leadership:` stays in the bullet. A known heading whose content is not stored (awards, volunteering, publications, languages, interests, references) SHALL end the section before it. An unknown ALL-CAPS heading inside the work history, with no date range within the next lines and that is not a job title, SHALL end the work history and be reported. A combined `Education and Certifications` block SHALL be split by whether a line names a certification. A file whose work heading has no date range under it SHALL be reported as not a resume.
+
+#### Scenario: Highlights after the work history
+- **WHEN** `Career Highlights` follows the last job
+- **THEN** its lines are profile points and no bullet of that job
+
+### Requirement: Date ranges in any common style
+The system SHALL read a date range written as `MM/YYYY`, `M/YYYY`, `MM/YY`, `YYYY-MM`, `Mon YYYY`, `Month YYYY` or `YYYY`, separated by a dash, `to`, `until` or `till`, ending in Present, Current, Now, Today, Ongoing, `To date` or `Till date`, and SHALL store `YYYY-MM`, or `YYYY` when only a year is given. A date range inside a sentence SHALL NOT start a job.
+
+#### Scenario: Month names and years
+- **WHEN** a job header ends with `Sep 2021 – Present` or `2012 – 2017`
+- **THEN** the job starts 2021-09 and is current, or runs 2012 to 2017
+
+### Requirement: Job headers in any common shape
+The system SHALL read a job written as `Company | Title | dates`, `Title, Company (dates)`, `Title at Company`, with the title before the employer, with a place line, or with several titles at one employer. An employer SHALL NOT be a job title or a place; a name that holds a title word (`Principal Labs`) is the employer when a clearer title stands in the same header, between it and the dates, or just after the dates, in any order. A header written `Company | Title` with its dates on the next line SHALL read like one with the dates on the same line. A company, title and dates block SHALL set the employer for later titles with their own dates. Several titles with their own dates under one employer SHALL be several roles of that employer.
+
+#### Scenario: Title first
+- **WHEN** a job is `Lead Engineer   09/2021 - Present` followed by the employer on the next line
+- **THEN** the employer is the second line and the title is the first
+
+### Requirement: Summary without a heading
+The system SHALL, in a file with no summary heading, skip the name and one more line (contact or title), and SHALL keep that second line as the start of the summary when it is running text (60 characters or more, or ending in a full stop) with no email, phone or LinkedIn in it.
+
+#### Scenario: Name then summary
+- **WHEN** the line after the name is a long sentence
+- **THEN** it is the summary
+
+### Requirement: Bullets without marks
+The system SHALL, when a job has no bullet marks at all, start a bullet at a line that follows a line ending in `.`, `;` or `%` and starts with a capital letter, and SHALL report that the bullets were inferred.
+
+### Requirement: Skills in any list style
+The system SHALL read skills with or without bullet marks, one per line or separated by `,`, `;`, `|`, `·`, `•` or table gaps (two or more spaces in a line with no other separator, three or more otherwise; also in marked entries), with any `Label:` prefix (an unknown label goes to Unsorted and is reported). A line continues the one above only when that line ends in a comma, semicolon, `and`, `or`, `/`, `&` or an open bracket; a lowercase name such as `nginx` is a skill of its own. An item longer than 60 characters SHALL be reported and not stored.
+
+### Requirement: Diagnostics for a parse gone wrong
+The system SHALL report an unknown heading that ended the work history, a section heading glued into a bullet, a section with a heading and no content, and profile points that read like a skills list.
 
 ### Requirement: Work history comes from layout text
 The system SHALL read work history from `layout_text`, and other sections from the default reading-order `text`.

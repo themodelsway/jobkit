@@ -39,7 +39,7 @@ class Bullet(TypedDict):
 
 
 class Role(TypedDict):
-    """One period at a company (start/end as YYYY-MM, end None = current)."""
+    """One period at a company (start/end as YYYY-MM, or YYYY when a resume gives only a year; end None = current)."""
 
     start: str | None
     end: str | None

@@ -16,6 +16,7 @@ from jk import common
 from jk.resumes import evidence
 from jk.resumes import match_facts as mf
 from jk.resumes import query_resume as qr
+from jk.resumes.dates import month_index
 from jk.resumes.match_request import Request
 
 YEARS_FULL: Final[Decimal] = Decimal("1.00")           # share of the asked years that earns each level
@@ -280,9 +281,8 @@ def months_covered(facts: mf.ResumeFacts, today: date) -> tuple[int, list[str]]:
 
 
 def _month(value: Any) -> int | None:
-    """Months since year 0 for a 'YYYY-MM' date, else None."""
-    found = re.fullmatch(r"(\d{4})-(\d{2})", str(value or ""))
-    return int(found.group(1)) * 12 + int(found.group(2)) - 1 if found else None
+    """Months since year 0 for a 'YYYY-MM' date (June for a bare 'YYYY'), else None."""
+    return month_index(str(value or ""))
 
 
 def years_level(held: Decimal, asked: Decimal) -> str:

@@ -86,11 +86,11 @@ def stored_header() -> str | None:
 
 
 def fmt_date(date: str | None) -> str:
-    """'YYYY-MM' -> 'MM/YYYY'; None -> 'Present'."""
+    """'YYYY-MM' -> 'MM/YYYY'; a bare 'YYYY' stays a year; None -> 'Present'."""
     if not date:
         return "Present"
-    year, month = date.split("-")
-    return f"{month}/{year}"
+    year, _, month = date.partition("-")
+    return f"{month}/{year}" if month else year
 
 
 def role_line(role: Role, title: str | None = None) -> str:

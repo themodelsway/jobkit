@@ -7,12 +7,26 @@
  ],
  "headline": "Senior Software Engineer",
  "is_resume": true,
- "problems": [
-  "unknown skill group label: Databases"
- ],
+ "problems": [],
  "profile_points": [],
  "projects": [],
  "skills": {
+  "Data": [
+   {
+    "aliases": [
+     "Structured Query Language"
+    ],
+    "name": "SQL"
+   },
+   {
+    "aliases": [],
+    "name": "PostgreSQL"
+   },
+   {
+    "aliases": [],
+    "name": "Performance Tuning"
+   }
+  ],
   "Languages": [
    {
     "aliases": [],
@@ -42,20 +56,6 @@
    }
   ],
   "Unsorted": [
-   {
-    "aliases": [
-     "Structured Query Language"
-    ],
-    "name": "SQL"
-   },
-   {
-    "aliases": [],
-    "name": "PostgreSQL"
-   },
-   {
-    "aliases": [],
-    "name": "Performance Tuning"
-   },
    {
     "aliases": [],
     "name": "Example Certified Designer"

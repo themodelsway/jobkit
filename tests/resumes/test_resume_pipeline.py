@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from jk import store
 from jk.resumes import build_resume as br, parse_resume as pr, process_resumes as proc, query_resume as qr, resume_data as rd, tables
 from tests.support import HomeCase, HomeClassCase
 
@@ -66,7 +67,7 @@ class WriteTests(PipelineCase):
 
     def test_skills_curated_into_groups(self):
         groups = tables.load_skills()["groups"]
-        self.assertIn("PostgreSQL", [s["name"] for s in groups["Unsorted"]])
+        self.assertIn("PostgreSQL", [s["name"] for s in groups["Data"]])
         self.assertIn("Unsorted", groups)                         # the unlabeled list awaits curation
 
     def test_bullets_are_tagged_with_skills(self):
@@ -226,6 +227,29 @@ class ProcessResumesTests(HomeCase):
         self.assertIn("0 new/changed, 1 unchanged", self.run_cli()[1])
         self.assertIn("1 new/changed, 0 unchanged", self.run_cli("--force")[1])
         self.assertEqual(list(tables.load_ledger()), ["a.txt"])
+
+    def test_a_parser_change_backs_up_and_rebuilds_once(self):
+        self.assertIn("1 new/changed", self.run_cli()[1])
+        self.assertIn("0 new/changed, 1 unchanged", self.run_cli()[1])
+        with mock.patch.object(pr, "PARSER_VERSION", pr.PARSER_VERSION + 1):
+            text = self.run_cli()[1]
+            self.assertIn("The resume parser changed", text)
+            self.assertIn("1 new/changed, 0 unchanged", text)
+            self.assertIn("0 new/changed, 1 unchanged", self.run_cli()[1])
+        self.assertTrue(list((self.tmp / "backup").glob("jobkit-before-reparse-*.db")))
+
+    def test_a_parser_change_retries_files_that_all_failed(self):
+        (self.root / "a.txt").write_text("Not a resume at all.\n", encoding="utf-8")
+        self.assertIn("0 companies", self.run_cli()[1])
+        self.assertIn("0 new/changed, 1 unchanged", self.run_cli()[1])
+        with mock.patch.object(pr, "PARSER_VERSION", pr.PARSER_VERSION + 1):
+            self.assertIn("The resume parser changed", self.run_cli()[1])
+
+    def test_data_from_before_the_parser_version_was_recorded_is_rebuilt(self):
+        self.run_cli()
+        with store.transaction() as conn:
+            conn.execute("DELETE FROM meta WHERE key='resume.parser_version'")
+        self.assertIn("The resume parser changed", self.run_cli()[1])
 
     def test_no_resumes_is_a_clear_error(self):
         (self.root / "a.txt").unlink()

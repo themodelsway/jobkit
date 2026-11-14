@@ -9,7 +9,8 @@
 Commands:
   profile status
   profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
-  profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries)
+  profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries),
+                                # answer_style (star, soar or carl: the default way a story is shown and judged complete)
   profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
   profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
   profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
@@ -35,7 +36,8 @@ from jk.user import tables, terms
 DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
-SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience")
+SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style")
+ANSWER_STYLES: Final[tuple[str, ...]] = ("star", "soar", "carl")
 YEARS_RANGE: Final[tuple[int, int]] = (1, 60)
 DEFAULT_REASSESS_DAYS: Final[int] = 30   # a good answer older than this is offered for a retest
 REASSESS_RANGE: Final[tuple[int, int]] = (1, 365)
@@ -55,6 +57,7 @@ class Profile(TypedDict):
     reassess_days: NotRequired[int]
     header: NotRequired[str]
     years_experience: NotRequired[int]
+    answer_style: NotRequired[str]
 
 
 class OpenItem(TypedDict):
@@ -110,6 +113,20 @@ def parse_years(text: str) -> int:
     if not low <= years <= high:
         raise ToolError(f"years_experience must be a whole number from {low} to {high}, not {text!r}.")
     return years
+
+
+def parse_answer_style(text: str) -> str:
+    """An answer style from text (star, soar or carl), else a `ToolError` naming the three."""
+    style = text.strip().lower()
+    if style not in ANSWER_STYLES:
+        raise ToolError(f"answer_style must be one of {', '.join(ANSWER_STYLES)}, not {text!r}.")
+    return style
+
+
+def answer_style() -> str | None:
+    """The default answer style the user saved, or None when none is saved (star applies then)."""
+    value = tables.load_settings().get("answer_style")
+    return value if value in ANSWER_STYLES else None
 
 
 def years_experience() -> int | None:
@@ -216,6 +233,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     stored = profile.get("reassess_days")
     print(f"years of experience: {profile.get('years_experience') or '(not set: summaries show what your resume says)'}")
     print(f"retest window: {reassess_days()} days" + ("" if stored is not None else " (default, not set)"))
+    print(f"answer style: {answer_style() or 'star (default, not set)'}")
     print(f"header: {'present' if header_text() else 'missing (profile header set NAME CONTACT_LINE)'}")
 
 
@@ -246,6 +264,8 @@ def cmd_set(args: argparse.Namespace) -> None:
         profile["reassess_days"] = parse_window(args.value)
     elif args.key == "years_experience":
         profile["years_experience"] = parse_years(args.value)
+    elif args.key == "answer_style":
+        profile["answer_style"] = parse_answer_style(args.value)
     elif args.key == "name":
         profile["name"] = args.value
     else:

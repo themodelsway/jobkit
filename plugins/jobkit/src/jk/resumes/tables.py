@@ -217,6 +217,19 @@ def save_built_curation(digest: str) -> None:
         store.meta_put(conn, "resume.curation_digest", digest)
 
 
+def load_built_parser() -> int | None:
+    """The parser version the stored resume data was built with, or None for data built before it was recorded."""
+    with store.transaction(write=False) as conn:
+        value = store.meta_get(conn, "resume.parser_version", None)
+    return int(value) if value is not None else None
+
+
+def save_built_parser(version: int) -> None:
+    """Remember which parser version the stored resume data was built with."""
+    with store.transaction() as conn:
+        store.meta_put(conn, "resume.parser_version", str(version))
+
+
 def stored_texts() -> dict[str, str]:
     """{label: JSON text} for everything stored about the resumes (for the contact-details check and snapshots)."""
     out = {f"company {cid}": store.dump(company) for cid, company in load_companies().items()}

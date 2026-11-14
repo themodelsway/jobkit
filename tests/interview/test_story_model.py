@@ -85,6 +85,85 @@ class ValidateTests(unittest.TestCase):
             ("error", "e1.d1: decision has no 'what'")])
 
 
+def levels(issues, level):
+    """The messages of one level, without the story id."""
+    return [m.split(": ", 1)[1] for lvl, m in issues if lvl == level]
+
+
+class StyleValidationTests(unittest.TestCase):
+    """The done rule per style; fact, metric, hedging and 'we versus I' checks do not depend on the style."""
+
+    def test_marking_done_in_star_needs_the_task(self):
+        s = story(status="done", situation="S", action="A", result="R", lessons="L")
+        errors = levels(sm.validate_story(s, style="star", marking=True), "error")
+        self.assertEqual(errors, ["cannot be done, still empty: task"])
+
+    def test_marking_done_in_soar_names_the_obstacle(self):
+        s = story(status="done", situation="S", action="A", result="R")
+        errors = levels(sm.validate_story(s, style="soar", marking=True), "error")
+        self.assertEqual(errors, ["cannot be done, still empty: obstacle"])
+
+    def test_marking_done_in_soar_accepts_the_task_field_as_the_obstacle(self):
+        s = story(status="done", situation="S", task="T", action="A", result="R")
+        self.assertEqual(levels(sm.validate_story(s, style="soar", marking=True), "error"), [])
+
+    def test_marking_done_in_carl_needs_no_task_but_needs_learning(self):
+        s = story(status="done", situation="S", action="A", result="R", lessons="L")
+        self.assertEqual(levels(sm.validate_story(s, style="carl", marking=True), "error"), [])
+        s["lessons"] = None
+        self.assertEqual(levels(sm.validate_story(s, style="carl", marking=True), "error"),
+                         ["cannot be done, still empty: learning"])
+
+    def test_a_task_alone_is_a_challenge(self):
+        s = story(status="done", task="T", action="A", result="R", lessons="L")
+        self.assertEqual(levels(sm.validate_story(s, style="carl", marking=True), "error"), [])
+
+    def test_done_in_carl_without_a_task_stays_valid_when_star_is_in_force(self):
+        s = story(status="done", situation="S", action="A", result="R", lessons="L")
+        issues = sm.validate_story(s, style="star")
+        self.assertEqual(levels(issues, "error"), [])
+        self.assertIn("Task is empty in star", levels(issues, "warn"))
+
+    def test_existing_done_stories_without_lessons_pass_under_a_carl_default(self):
+        s = story(status="done", situation="S", task="T", action="A", result="R")
+        issues = sm.validate_story(s, style="carl")
+        self.assertEqual(levels(issues, "error"), [])
+        self.assertIn("Learning is empty in carl", levels(issues, "warn"))
+
+    def test_a_done_story_complete_in_no_style_still_fails(self):
+        s = story(status="done", situation="S", task="T", result="R", lessons="L")       # action emptied
+        for style in ("star", "soar", "carl"):
+            self.assertEqual(levels(sm.validate_story(s, style=style), "error")[0].split(": ")[0],
+                             "cannot be done, still empty", style)
+
+    def test_estimated_figure_without_hedging_warns_in_every_style(self):
+        s = story(status="draft", result="Cut 45% of cost", metrics=[{"name": "c", "value": "45%", "basis": "estimated"}])
+        for style in ("star", "soar", "carl"):
+            self.assertIn("number 45% is an estimate: say 'estimated' or 'about' when you quote it",
+                          levels(sm.validate_story(s, style=style), "warn"), style)
+
+    def test_a_number_in_the_learning_is_checked_only_when_carl_is_in_force(self):
+        s = story(status="draft", lessons="Cut 45% of cost")
+        self.assertEqual([m for m in levels(sm.validate_story(s, style="star"), "warn") if "45%" in m], [])
+        self.assertEqual(len([m for m in levels(sm.validate_story(s, style="carl"), "warn") if "45%" in m]), 1)
+
+    def test_we_versus_i_warning_applies_in_every_style(self):
+        s = story(status="draft", action="we built our thing for us, I did one")
+        for style in ("star", "soar", "carl"):
+            self.assertIn("action says 'we/our' 3 times and 'I' 1 times: make your own part clear",
+                          levels(sm.validate_story(s, style=style), "warn"), style)
+
+    def test_spoken_limits_are_the_same_in_every_style(self):
+        s = story(status="draft", spoken={"60s": "word " * 200, "2min": None})
+        for style in ("star", "soar", "carl"):
+            self.assertIn("spoken 60s is 200 words; aim for 160 or fewer", levels(sm.validate_story(s, style=style), "warn"))
+
+    def test_never_say_is_checked_in_the_learning_under_carl(self):
+        s = story(status="draft", lessons="Our secret sauce", never_say=["secret"])
+        self.assertEqual(levels(sm.validate_story(s, style="star"), "error"), [])
+        self.assertEqual(levels(sm.validate_story(s, style="carl"), "error"), ["text contains a never_say term: 'secret'"])
+
+
 class HelperTests(unittest.TestCase):
     def test_next_id_never_reuses_removed_ids(self):
         e = {"facts": [{"id": "f1"}, {"id": "f2"}]}

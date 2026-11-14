@@ -20,6 +20,7 @@ from jk.resumes import evidence
 from jk.resumes import parse_resume as pr
 from jk.resumes import resume_data as rd
 from jk.resumes import tables
+from jk.resumes.dates import month_index
 from jk.resumes.resume_data import Bullet, Company, ResumeProfile, Skills, Summary
 
 STOP: Final[frozenset[str]] = frozenset("""a about above after all also an and any are as at be been being but by can could do
@@ -172,9 +173,9 @@ def add_requirements(need: Counter[str], text: str, requirements: Iterable[str],
 
 
 def month_number(date: str | None) -> int | None:
-    """Months since year 0 for a 'YYYY-MM' date, else None."""
-    found = re.fullmatch(r"(\d{4})-(\d{2})", date or "")
-    return int(found.group(1)) * 12 + int(found.group(2)) if found else None
+    """Months since year 0 for a 'YYYY-MM' date (June for a bare 'YYYY'), else None."""
+    index = month_index(date)
+    return None if index is None else index + 1
 
 
 def recency_scores(companies: Mapping[str, Company]) -> dict[str, float]:

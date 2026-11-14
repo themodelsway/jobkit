@@ -19,8 +19,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
-from jk import common
-from jk.resumes import curate, extract, tables
+from jk import common, store
+from jk.resumes import curate, extract, tables, visual
 from jk.resumes import parse_resume as pr
 from jk.resumes import resume_data as rd
 from jk.resumes.resume_data import ResumeData
@@ -46,16 +46,27 @@ def load_config() -> Config:
     return config
 
 
-def scan_companies(files: Iterable[Path], save: bool) -> None:
+def transcript_name(key: str) -> str:
+    """File name of the visual transcript of a ledger key: a readable start plus a checksum of the whole key, so two
+    different paths never share a transcript (`a/b.pdf` and `a__b.pdf` both read as `a__b` otherwise)."""
+    return f"{text_name(key).removesuffix('.txt')}-{sha256(key.encode('utf-8')).hexdigest()[:10]}.txt"
+
+
+def transcript_for(path: Path, root: Path) -> Path:
+    """Where the visual transcript of a resume file is kept (see visual.py)."""
+    return visual.VISUAL_DIR / transcript_name(rel(path, root))
+
+
+def scan_companies(files: Iterable[Path], root: Path, save: bool) -> None:
     """First-run scan: find the employers in every resume so nothing has to be typed in. With `save`, new
     employers are stored in the database (existing entries are never changed)."""
     found: dict[str, str] = {}
     for path in files:
         try:
-            doc = extract.extract(path)
+            doc = visual.read_document(path, transcript_for(path, root))
         except common.ToolError:
             continue                        # reported later, per file, by survey or build
-        discovered = pr.discover_companies(doc.layout_text or doc.text)
+        discovered = pr.discover_companies(doc.layout_text or doc.text) or pr.discover_companies(doc.text)
         found.update({k: v for k, v in discovered.items() if k not in found})
     new = [k for k in found if k not in pr.COMPANIES]
     if not new:
@@ -104,9 +115,9 @@ def survey(files: Iterable[Path], root: Path) -> None:
     """Print what each resume parses into, writing nothing."""
     for path in sorted(files, key=lambda p: rel(p, root)):
         try:
-            doc = extract.extract(path)
+            doc = visual.read_document(path, transcript_for(path, root))
         except common.ToolError as error:
-            print(f"{rel(path, root)}\n  UNREADABLE: {error}")
+            print(f"{rel(path, root)}\n  {'NEEDS VISUAL READING' if isinstance(error, extract.NeedsVisualRead) else 'UNREADABLE'}: {error}")
             continue
         parsed = pr.parse_resume(doc.text, doc.layout_text)
         if parsed["is_resume"] is False:
@@ -119,6 +130,9 @@ def survey(files: Iterable[Path], root: Path) -> None:
         for e in parsed["work"]:
             print(f"    {e['company_id']:<14} {e['start']}..{e['end']}  {e['title']!r} "
                   f"role={e['subtitle']!r} client={e['client']!r} bullets={len(e['bullets'])}")
+        if doc.column_pages:
+            print(f"  columns: read page{'s' if len(doc.column_pages) > 1 else ''} "
+                  f"{', '.join(map(str, doc.column_pages))} as columns")
         for problem in parsed["problems"]:
             print(f"  PROBLEM: {problem}")
 
@@ -549,6 +563,11 @@ def load_state(force: bool) -> tuple[dict[str, Any], dict[str, Any], ResumeData]
     if untraceable_wording(data) or untraceable_sources(data):
         print("Upgrading the stored data: rebuilding once from your resume files (your curation is kept).")
         return {}, {}, empty
+    if (data["companies"] or rd.load_ledger()) and tables.load_built_parser() != pr.PARSER_VERSION:
+        saved = store.save_committed_copy(store.connect(), "jobkit-before-reparse", "rebuilding it")
+        print(f"The resume parser changed since the stored data was built. A copy of the database was saved as {saved}; "
+              f"rebuilding from your resume files (your curation is kept).")
+        return {}, {}, empty
     if curation_changed(data):
         print("Your curation changed since the last build: rebuilding from your resume files (your curation is kept).")
         return {}, {}, empty
@@ -559,16 +578,20 @@ def process_file(path: Path, root: Path, ledger: dict[str, Any], unparsed: dict[
     """Parse one resume file unless the ledger says it is unchanged; merge it into `data`."""
     key, stat = rel(path, root), path.stat()
     old = ledger.get(key)
-    if old and old["mtime"] == stat.st_mtime and old["size"] == stat.st_size:
+    transcript = visual.fingerprint(path, transcript_for(path, root))
+    if old and old["mtime"] == stat.st_mtime and old["size"] == stat.st_size and old.get("visual") == transcript:
         return "unchanged"
     entry = {"mtime": stat.st_mtime, "size": stat.st_size, "sha256": file_sha(path), "processed_at": now()}
+    if transcript:
+        entry["visual"] = transcript
     if old:
         strip_source(data, key)             # the file changed: forget its old contribution, then merge it again
     try:
-        doc = extract.extract(path)
+        doc = visual.read_document(path, transcript_for(path, root))
     except common.ToolError as error:
         ledger[key], unparsed[key] = {**entry, "kind": "other"}, [str(error)]
-        print(f"skip (unreadable): {key}: {error}")
+        needs = isinstance(error, extract.NeedsVisualRead)
+        print(f"skip ({'needs visual reading, ask the user first' if needs else 'unreadable'}): {key}: {error}")
         return "other"
     (TEXT_DIR / text_name(key)).write_text(doc.text, encoding="utf-8")
     parsed = pr.parse_resume(doc.text, doc.layout_text)
@@ -620,6 +643,7 @@ def build(files: Iterable[Path], root: Path, force: bool, dirs: Iterable[Path] =
     apply_curated(data)
     write_data(data, ledger, unparsed)
     tables.save_built_curation(digest)
+    tables.save_built_parser(pr.PARSER_VERSION)
     orphans = rd.orphan_curation(data["companies"], data["profile"], rd.load_themes_file(), rd.load_curated())
     if orphans:
         print(f"\nWARNING: {len(orphans)} entr(ies) in your curation match no bullet or summary "
@@ -641,11 +665,22 @@ def cmd_process(args: argparse.Namespace) -> None:
     if not files:
         raise common.ToolError(f"No resumes ({', '.join(extract.supported_suffixes())}) found under "
                                f"{', '.join(map(str, config.dirs))}. Check `profile status`.")
-    scan_companies(files, save=not args.survey)
+    scan_companies(files, config.root, save=not args.survey)
     if args.survey:
         survey(files, config.root)
     else:
         build(files, config.root, args.force, config.dirs)
+
+
+def cmd_visual(args: argparse.Namespace) -> None:
+    """List the PDFs that need a visual reading, or confirm the transcript of one."""
+    config = load_config()
+    files = list_resumes(config.dirs)
+    entries = visual.pending(files, {p: (rel(p, config.root), transcript_name(rel(p, config.root))) for p in files})
+    if args.action == "confirm":
+        visual.cmd_confirm(entries, args.file)
+    else:
+        visual.cmd_list(entries)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -656,6 +691,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(fn=cmd_process)
     sub = parser.add_subparsers(dest="cmd")
     curate.add_parser(sub)
+    visual.add_parser(sub, cmd_visual)
     return parser
 
 

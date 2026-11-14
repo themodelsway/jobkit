@@ -5,15 +5,13 @@
  "education": [],
  "headline": "",
  "is_resume": true,
- "problems": [
-  "unknown skill group label: Databases"
- ],
+ "problems": [],
  "profile_points": [
   "Hands-on engineer with 10+ years of experience."
  ],
  "projects": [],
  "skills": {
-  "Unsorted": [
+  "Data": [
    {
     "aliases": [],
     "name": "MySQL"

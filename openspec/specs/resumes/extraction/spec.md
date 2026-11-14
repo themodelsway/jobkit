@@ -37,12 +37,43 @@ The system SHALL provide `layout_text` in which a date range is separated from i
 - **WHEN** a paragraph is `Company<tab>01/2020 - Present`
 - **THEN** the extracted line has a gap of three spaces before the date range
 
+### Requirement: PDF text is column-safe and normalised
+The system SHALL split a PDF page that has columns (a side bar beside the main column) at the gutter shared by its lines and read the columns one after another, the narrower first, so a main column that continues on the next page stays in order; full-width text ends a column block. Right-aligned dates, locations and aligned titles without a column SHALL NOT make a gutter; a short block counts as columns when each side has section headings of its own. The system SHALL unfold ligatures (NFKC), turn other list glyphs (dashes, arrows, squares, symbol-font glyphs) into `•`, and remove page numbers, footers repeated on two or more pages and headers repeated from page 1. For such a PDF `text` and `layout_text` SHALL both be the column-by-column text, with list markers normalised again after the columns are split so a right-column dash bullet is a bullet.
+
+#### Scenario: Side bar
+- **WHEN** a PDF has skills in a left or right side bar beside the work history
+- **THEN** the work history, the skills and the other side-bar sections each parse as their own section
+
 ### Requirement: Docx structure is flattened to readable lines
 The system SHALL read docx files without third-party libraries, keeping paragraphs, line breaks, tabs, table cells, list items (as `•` bullets), content controls and the text of text boxes anchored in body paragraphs, and SHALL ignore headers and footers.
 
 #### Scenario: Table layout
 - **WHEN** a resume uses a table with company in one cell and dates in another
-- **THEN** the cells of a row are joined on one line separated by a gap
+- **THEN** the cells of a row are joined on one line separated by a gap, and a two-cell row with a date cell puts the date after the entry
+
+#### Scenario: Page laid out as a table
+- **WHEN** some cell of a table with several columns starts with a section heading (`Leadership Skills | Technical Skills`)
+- **THEN** the table is read column after column so each heading stays with its list
+
+#### Scenario: Merged heading row
+- **WHEN** a table starts with a heading cell (merged, or beside empty cells as in a Markdown pipe table) above timeline rows
+- **THEN** the heading stays in place and the rows below are read by their own structure, a timeline row as one line
+
+#### Scenario: Work continues after a table
+- **WHEN** a layout table has the work-history heading in one column and other sections in a side column, and more work follows below the table
+- **THEN** the side columns are read first and the work column last, so the work below the table continues it
+
+#### Scenario: Numbering switched off in a style
+- **WHEN** a style based on a numbered style sets numbering to 0
+- **THEN** its paragraphs are not bullets, and neither are paragraphs of styles based on it
+
+#### Scenario: Text box side bar
+- **WHEN** a body paragraph anchors a text box (Word writes its text twice)
+- **THEN** the text is read once, as its own block with its paragraphs and lists intact
+
+#### Scenario: Bullets set by a paragraph style
+- **WHEN** a paragraph's style, or the style it is based on, carries list numbering and the paragraph does not turn it off
+- **THEN** the paragraph is a `•` bullet
 
 #### Scenario: Text box in the body
 - **WHEN** a body paragraph anchors a text box
@@ -54,6 +85,10 @@ The system SHALL convert markdown (including pandoc output: grid tables, pipe ta
 #### Scenario: Pandoc export
 - **WHEN** a docx is converted to markdown with pandoc
 - **THEN** it parses to the same work history as the original docx
+
+#### Scenario: Markdown layout table
+- **WHEN** a grid or pipe table has a cell that starts with a section heading (for example `Leadership | Technical`), also when the heading is bold
+- **THEN** the table is read column after column, so each heading stays with its list; any other table is read row by row, with a timeline row (an entry beside its dates) as one line
 
 ### Requirement: Contact and address lines are dropped
 The system SHALL remove lines that contain only an email, phone, LinkedIn URL or postal address, or several of these separated by `|`, `·` or `•`, from txt, md and docx text, and SHALL drop a table row's short cells when the row holds a contact block. The parser SHALL also skip such lines in the summary, headline and work history of every format, PDF included, so a stray contact line never becomes a headline, summary or bullet text. A line that mixes contact details with other text is kept.
@@ -79,6 +114,21 @@ When extraction yields no usable text, the system SHALL fail that file with a me
 #### Scenario: Scanned PDF
 - **WHEN** a PDF contains only page images
 - **THEN** the file is reported unreadable with a message that it looks scanned and has no text layer
+
+### Requirement: A PDF the parser cannot read may be read visually, only with the user's agreement
+The system SHALL mark a PDF with no text layer, or one that cannot be opened as a PDF, as needing a visual reading (and no other failure, such as a Word file or a PDF that parsed but is not a resume), say so in its message, `--survey` and the unparsed report, and SHALL NOT read it visually by itself. `process-resumes visual list` SHALL list such files with the PDF path and the path for the transcript under `output/visual/` in the home folder. A transcript SHALL be used in place of the PDF text only after `process-resumes visual confirm FILE`, which ties it to the checksum of the PDF as it is then; editing a transcript SHALL NOT change which PDF it is tied to, and after the PDF is replaced the old transcript SHALL NOT be used until a new one is confirmed. The ledger SHALL record the transcript checksum and its state, so a transcript that becomes confirmed is read even when its text is unchanged. Each source path SHALL have its own transcript name, and the resume folder SHALL never be written.
+
+#### Scenario: Scan found
+- **WHEN** a PDF has no text layer
+- **THEN** the report names it as needing a visual reading and nothing is read visually until the user agrees
+
+#### Scenario: Transcript saved
+- **WHEN** a transcript exists for such a PDF
+- **THEN** the next run parses the transcript as that file's text and a later change to the transcript reprocesses the file
+
+#### Scenario: Other failures
+- **WHEN** a docx cannot be opened
+- **THEN** it is reported unreadable and no visual reading is offered
 
 #### Scenario: Docx with text only in a header
 - **WHEN** a docx body has no text but its header holds the content

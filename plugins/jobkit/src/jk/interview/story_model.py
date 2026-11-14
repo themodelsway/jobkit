@@ -18,6 +18,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Final, NotRequired, TypedDict, cast
 
 from jk import common
+from jk.interview import styles
 
 SCHEMA_VERSION: Final[int] = 2
 FACT_BASES: Final[tuple[str, ...]] = ("stated", "estimate", "unsure", "verified-doc", "proposed")
@@ -183,10 +184,10 @@ def words(text: str | None) -> int:
     return len((text or "").split())
 
 
-def story_text(story: Story) -> str:
-    """All the text a listener could hear: the STAR parts and the spoken versions."""
-    fields: Mapping[str, Any] = story
-    parts = [fields.get(name) for name in STAR] + [story["spoken"].get(key) for key in SPOKEN_LIMITS]
+def story_text(story: Story, style: str = styles.DEFAULT_STYLE) -> str:
+    """All the text a listener could hear: the parts of the style, then the spoken versions."""
+    parts = [styles.part_text(part, story) for part in styles.get(style).parts]
+    parts += [story["spoken"].get(key) for key in SPOKEN_LIMITS]
     return " ".join(str(part) for part in parts if part)
 
 
@@ -247,17 +248,26 @@ def _check_metrics(story: Story) -> list[Issue]:
     return out
 
 
-def _check_text_rules(story: Story, text: str) -> list[Issue]:
+def _check_done(story: Story, style: str, marking: bool) -> list[Issue]:
+    """The done rule. Marking a story done needs every part of the style in force. A story already stored as
+    done stays valid while it is complete in any style; a gap in the style in force is then only a warning."""
+    if story["status"] != "done":
+        return []
+    missing = styles.missing_parts(style, story)
+    if not missing:
+        return []
+    if marking or not styles.complete_styles(story):
+        return [("error", "cannot be done, still empty: " + ", ".join(part.name for part in missing))]
+    return [("warn", f"{part.label} is empty in {style}") for part in missing]
+
+
+def _check_text_rules(story: Story, text: str, style: str, marking: bool) -> list[Issue]:
     out: list[Issue] = []
     lowered = text.lower()
     for term in story["never_say"]:
         if term.lower() in lowered:
             out.append(("error", f"text contains a never_say term: '{term}'"))
-    if story["status"] == "done":
-        fields: Mapping[str, Any] = story
-        missing = [name for name in STAR if not (fields.get(name) or "").strip()]
-        if missing:
-            out.append(("error", "cannot be done, still empty: " + ", ".join(missing)))
+    out += _check_done(story, style, marking)
     if not story["engagement"] and story["status"] != "empty":
         out.append(("warn", "no engagement linked (facts and decisions are not tracked for this story)"))
     return out
@@ -295,11 +305,15 @@ def _check_voice(story: Story) -> list[Issue]:
     return out
 
 
-def validate_story(story: Story, eng: Engagement | None = None) -> list[Issue]:
-    """Return [(level, message)], level 'error' blocks status done, 'warn' is advice."""
+def validate_story(story: Story, eng: Engagement | None = None, style: str = styles.DEFAULT_STYLE,
+                   marking: bool = False) -> list[Issue]:
+    """Return [(level, message)], level 'error' blocks status done, 'warn' is advice.
+
+    `style` is the style in force; `marking` is true while the story is being marked done (see `_check_done`).
+    """
     facts = fact_map(eng)
-    text = story_text(story)
-    found = (_check_links(story, eng, facts) + _check_metrics(story) + _check_text_rules(story, text)
+    text = story_text(story, style)
+    found = (_check_links(story, eng, facts) + _check_metrics(story) + _check_text_rules(story, text, style, marking)
              + _check_numbers(story, text, facts) + _check_voice(story))
     return [(level, f"{story['id']}: {message}") for level, message in found]
 
@@ -326,21 +340,26 @@ def _engagement_sections(eng: Engagement) -> list[str]:
     return lines
 
 
-def render_story_md(story: Story, eng: Engagement | None = None) -> str:
-    """One-page markdown cheat sheet for a story."""
+def render_story_md(story: Story, eng: Engagement | None = None, style: str = styles.DEFAULT_STYLE) -> str:
+    """One-page markdown cheat sheet for a story, headed with the parts of the style.
+
+    Spoken versions are printed as stored, with a note, in every style.
+    """
     lines = [f"# {story['id']}: {story['headline'] or story['theme']}", "",
              f"{story.get('company_name', '')} | theme: {story['theme']} | status: {story['status']}"]
     if eng:
         lines.append(f"Engagement: {eng['id']} - {eng.get('title') or ''} (role: {eng.get('my_role') or '-'})")
-    fields: Mapping[str, Any] = story
-    for name, title in zip(STAR, ("Situation", "Task", "Action", "Result"), strict=True):
-        lines += ["", f"## {title}", fields.get(name) or "-"]
+    chosen = styles.get(style)
+    for part in chosen.parts:
+        lines += ["", f"## {part.label}", styles.part_text(part, story) or "-"]
     if story["metrics"]:
         lines += ["", "## Numbers (say them with their label)"] + [_metric_line(m) for m in story["metrics"]]
-    for key in SPOKEN_LIMITS:
-        if story["spoken"].get(key):
-            lines += ["", f"## Spoken ({key}, {words(story['spoken'][key])} words)", story["spoken"][key] or ""]
-    if story.get("lessons"):
+    spoken = [key for key in SPOKEN_LIMITS if story["spoken"].get(key)]
+    for key in spoken:
+        lines += ["", f"## Spoken ({key}, {words(story['spoken'][key])} words)", story["spoken"][key] or ""]
+    if spoken:
+        lines += ["", f"*Spoken versions are shown as written; they are not rearranged to {chosen.name}.*"]
+    if story.get("lessons") and "lessons" not in styles.stored_fields(style):
         lines += ["", "## Lessons", story["lessons"] or ""]
     if story["likely_questions"]:
         lines += ["", "## Likely questions"] + [f"- {q}" for q in story["likely_questions"]]

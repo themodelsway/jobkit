@@ -205,6 +205,22 @@ class EmptyExtractionTests(unittest.TestCase):
             message = self.message(path)
         self.assertIn("scanned image", message)
         self.assertIn("OCR is not supported", message)
+        self.assertIn("read visually if the user agrees", message)
+
+    def test_scanned_pdf_asks_for_a_visual_reading(self):
+        path = self.tmp / "scan.pdf"
+        path.write_bytes(b"%PDF-1.4")
+        with mock.patch.object(extract.PdfExtractor, "_reading_order", return_value=""), \
+                mock.patch.object(extract.PdfExtractor, "_layout", return_value=""):
+            with self.assertRaises(extract.NeedsVisualRead):
+                extract.extract(path)
+
+    def test_unreadable_docx_does_not_ask_for_a_visual_reading(self):
+        path = self.tmp / "bad.docx"
+        path.write_bytes(b"not a zip")
+        with self.assertRaises(common.ToolError) as ctx:
+            extract.extract(path)
+        self.assertNotIsInstance(ctx.exception, extract.NeedsVisualRead)
 
     def test_docx_with_text_only_in_a_header_says_so(self):
         path = write_docx(self.tmp / "h.docx", "")

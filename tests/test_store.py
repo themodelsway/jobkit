@@ -266,6 +266,66 @@ class SchemaTests(DatabaseFileCase):
         store.connect()
         self.assertEqual(list(base.backup_dir().glob("jobkit-before-upgrade-*")), [])
 
+    def dump_tables(self, conn):
+        """{table: its rows} for every table (the research step must leave all of them as they were)."""
+        names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+        return {n: [tuple(r) for r in conn.execute(f"SELECT * FROM {n} ORDER BY 1, 2")] for n in names}
+
+    def test_the_research_step_upgrades_an_older_database_without_touching_its_data(self):
+        store.db_path().parent.mkdir(parents=True)
+        old = store.MIGRATIONS.index(schema.step_target_research)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, old)
+            conn.execute("INSERT INTO meta(key, value) VALUES('kept', '1')")
+            conn.execute("INSERT INTO session(id, title, mode, status, created, updated, body) "
+                         "VALUES('s1', 't', 'stories', 'open', 'c', 'u', '{}')")
+            conn.execute("INSERT INTO session_log(session_id, at, item, kind, answered, confidence_after, tutor, quiz, body) "
+                         "VALUES('s1', '2026-01-01T10:00:00', 'a', 'story', 1, 1, 0, 0, '{}')")
+            before = self.dump_tables(conn)
+        store.connect()
+        store.close()
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            self.assertEqual(self.pragma_version(), old + 1)
+            after = self.dump_tables(conn)
+        for name, rows in before.items():
+            if name == "session_log":
+                self.assertEqual([r + (None, None) for r in rows], after[name])      # new columns read as none
+            else:
+                self.assertEqual(rows, after[name], name)
+        self.assertEqual(after["target_company"], [])
+        self.assertEqual(after["target_fact"], [])
+
+    def test_a_new_database_is_created_at_the_new_version_with_the_research_tables(self):
+        store.create()
+        store.close()
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            self.assertEqual(self.pragma_version(), len(schema.STEPS))
+            names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(session_log)")}
+        self.assertLessEqual({"target_company", "target_fact"}, names)
+        self.assertLessEqual({"style", "company"}, columns)
+
+    def test_log_entries_stay_append_only_after_the_research_step(self):
+        store.create()
+        with store.transaction() as conn:
+            conn.execute("INSERT INTO session(id, title, mode, status, created, updated, body) "
+                         "VALUES('s1', 't', 'stories', 'open', 'c', 'u', '{}')")
+            conn.execute("INSERT INTO session_log(session_id, at, item, kind, answered, confidence_after, tutor, quiz, body, "
+                         "style, company) VALUES('s1', 'x', 'a', 'story', 1, 1, 0, 0, '{}', 'carl', 'Company X')")
+        with self.assertRaisesRegex(ToolError, "append-only"):
+            with store.transaction() as conn:
+                conn.execute("UPDATE session_log SET style='star'")
+
+    def test_facts_are_removed_with_their_company(self):
+        store.create()
+        with store.transaction() as conn:
+            conn.execute("INSERT INTO target_company(key, name, outcome, researched, body) "
+                         "VALUES('acme', 'Acme', 'found', '2026-01-01', '{}')")
+            conn.execute("INSERT INTO target_fact(company_key, id, position, kind, link, label, pulled, vetted, body) "
+                         "VALUES('acme', 'v1', 0, 'value', 'https://example.test', 'company-references', '2026-01-01', 1, '{}')")
+            conn.execute("DELETE FROM target_company WHERE key='acme'")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM target_fact").fetchone()[0], 0)
+
     def test_newer_database_is_refused_and_left_alone(self):
         store.create()
         store.close()

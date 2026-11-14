@@ -53,7 +53,7 @@ The tutor teaches a card, question or story first, then checks understanding wit
 
 ### Mock interviews and practice
 
-- **Stories.** STAR stories (situation, task, action, result) seeded from the resumes, one per employer and theme. Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
+- **Stories.** Stories seeded from the resumes, one per employer and theme. Each is written once and can be told as STAR (situation, task, action, result), SOAR (situation, obstacle, action, result) or CARL (challenge, action, result, learning). Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
 - **Technical drill cards.** Cards for the services, decision pairs and scenarios of the technologies an interview covers. One example technology is bundled, and any other is added from a JSON topic list, with no code. Lifecycle facts such as "closed to new customers" or "sunset" are recorded only with a link to the vendor's own documentation, never from memory.
 - **Leadership questions.** A question set (roadmapping, mentoring, conflict, prioritisation and more), each with the user's principle and one example per recent employer.
 - **Practice sessions.** Resumable. A session keeps the complete answers and grades; later drills add entries and never edit old ones.
