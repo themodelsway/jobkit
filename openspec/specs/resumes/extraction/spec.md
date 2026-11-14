@@ -115,6 +115,17 @@ When extraction yields no usable text, the system SHALL fail that file with a me
 - **WHEN** a PDF contains only page images
 - **THEN** the file is reported unreadable with a message that it looks scanned and has no text layer
 
+### Requirement: A visual reading can be compared with the parse
+The system SHALL print the JSON shape of a visual reading (`process-resumes visual schema`) and SHALL compare a reading in that shape (`visual compare FILE --reading JSON`) with a fresh parse of the same PDF, reporting employers, titles, dates, bullets, skills, certifications, education and summary that only one side has or that differ, each with both versions. It SHALL NOT change any stored data or merge wording, and a transcript confirmed for the PDF SHALL be used in place of the PDF text, whether the parser could read the PDF or not.
+
+#### Scenario: Parser missed a bullet
+- **WHEN** the visual reading has a bullet the parse lacks
+- **THEN** the report lists it as missing from the parser, with the visual text
+
+#### Scenario: Corrected reading
+- **WHEN** the agreed text is saved and confirmed for a PDF the parser could read
+- **THEN** the next run parses that text instead of the PDF text, until the PDF changes
+
 ### Requirement: A PDF the parser cannot read may be read visually, only with the user's agreement
 The system SHALL mark a PDF with no text layer, or one that cannot be opened as a PDF, as needing a visual reading (and no other failure, such as a Word file or a PDF that parsed but is not a resume), say so in its message, `--survey` and the unparsed report, and SHALL NOT read it visually by itself. `process-resumes visual list` SHALL list such files with the PDF path and the path for the transcript under `output/visual/` in the home folder. A transcript SHALL be used in place of the PDF text only after `process-resumes visual confirm FILE`, which ties it to the checksum of the PDF as it is then; editing a transcript SHALL NOT change which PDF it is tied to, and after the PDF is replaced the old transcript SHALL NOT be used until a new one is confirmed. The ledger SHALL record the transcript checksum and its state, so a transcript that becomes confirmed is read even when its text is unchanged. Each source path SHALL have its own transcript name, and the resume folder SHALL never be written.
 

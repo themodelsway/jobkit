@@ -324,6 +324,22 @@ class CommandNameTests(unittest.TestCase):
 
 
 class SharedTextTests(unittest.TestCase):
+    def test_visual_scanner_helper_keeps_the_skill_rules(self):
+        """The helper definitions for both tools carry the same reading rules as the skill (one source of truth)."""
+        import tomllib  # pylint: disable=import-outside-toplevel
+
+        def block(text: str, name: str) -> str:
+            return " ".join(shared_block(text, name).split())
+        skill = skill_text("resume-workflows")
+        claude = (PLUGIN_ROOT / "agents" / "resume-visual-scanner.md").read_text(encoding="utf-8")
+        codex = tomllib.loads((REPO_ROOT / ".codex" / "agents" / "resume-visual-scanner.toml").read_text(encoding="utf-8"))
+        self.assertTrue(claude.startswith("---\nname: resume-visual-scanner\n"))
+        self.assertEqual(codex["name"], "resume-visual-scanner")
+        self.assertIn("`resume-visual-scanner`", skill)
+        for name in ("visual-transcript", "visual-json"):
+            self.assertEqual(block(claude, name), block(skill, name), name)
+            self.assertEqual(block(codex["developer_instructions"], name), block(skill, name), name)
+
     def test_shared_blocks_are_identical(self):
         for block in SHARED:
             texts = {name: shared_block(skill_text(name), block) for name in SHIPPED}

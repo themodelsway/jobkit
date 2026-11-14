@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from jk import common, store
-from jk.resumes import curate, extract, tables, visual
+from jk.resumes import curate, extract, tables, visual, visual_compare
 from jk.resumes import parse_resume as pr
 from jk.resumes import resume_data as rd
 from jk.resumes.resume_data import ResumeData
@@ -673,14 +674,22 @@ def cmd_process(args: argparse.Namespace) -> None:
 
 
 def cmd_visual(args: argparse.Namespace) -> None:
-    """List the PDFs that need a visual reading, or confirm the transcript of one."""
+    """The `visual` verbs: list, confirm, schema and compare (see visual.py)."""
+    if args.action == "schema":
+        print(visual_compare.READING_SCHEMA)
+        return
     config = load_config()
     files = list_resumes(config.dirs)
-    entries = visual.pending(files, {p: (rel(p, config.root), transcript_name(rel(p, config.root))) for p in files})
+    names = {p: (rel(p, config.root), transcript_name(rel(p, config.root))) for p in files}
     if args.action == "confirm":
-        visual.cmd_confirm(entries, args.file)
+        visual.cmd_confirm(names, args.file)
+    elif args.action == "text":
+        visual.cmd_text(names, args.file)
+    elif args.action == "compare":
+        reading = sys.stdin.read() if args.reading == "-" else Path(args.reading).read_text(encoding="utf-8")
+        visual.cmd_compare(names, args.file, reading)
     else:
-        visual.cmd_list(entries)
+        visual.cmd_list(visual.pending(files, names))
 
 
 def build_parser() -> argparse.ArgumentParser:

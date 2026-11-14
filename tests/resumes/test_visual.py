@@ -88,12 +88,13 @@ class VisualTests(unittest.TestCase):
 
     def test_confirm_command_picks_one_pdf_by_key_or_name(self):
         self.save()
-        entries = visual.pending([self.pdf], {self.pdf: ("2026/scan.pdf", "scan.txt")})
-        entries[0]["transcript"] = str(self.transcript)
-        visual.cmd_confirm(entries, "scan.pdf")
-        self.assertEqual(visual.state(self.pdf, self.transcript), "fresh")
-        with self.assertRaises(common.ToolError):
-            visual.cmd_confirm(entries, "other.pdf")
+        files = {self.pdf: ("2026/scan.pdf", "scan.txt")}
+        with mock.patch.object(visual, "VISUAL_DIR", self.transcript.parent):
+            visual.cmd_confirm(files, "scan.pdf")
+            self.assertEqual(visual.state(self.pdf, self.transcript), "fresh")
+            for name in ("other.pdf", "scan"):
+                with self.assertRaises(common.ToolError):
+                    visual.cmd_confirm(files, name)
 
     def test_different_paths_get_different_transcript_names(self):
         keys = ["a/b.pdf", "a__b.pdf", "a b.pdf", "a_b.pdf"]
