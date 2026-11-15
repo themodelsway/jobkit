@@ -13,7 +13,7 @@ DOCS = Path(__file__).resolve().parents[1] / "docs"
 COMMANDS = {"jobkit": "jk.admin", "profile": "jk.user.profile", "process-resumes": "jk.resumes.process_resumes",
             "query-resume": "jk.resumes.query_resume", "build-resume": "jk.resumes.build_resume", "resume-lines": "jk.resumes.lines", "match-score": "jk.resumes.match_score",
             "arch": "jk.interview.arch", "lead": "jk.interview.lead", "prep": "jk.interview.prep",
-            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness"}
+            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness", "target": "jk.interview.target"}
 
 
 def walk(parser: argparse.ArgumentParser, path: list[str]) -> Iterator[tuple[list[str], list[str]]]:

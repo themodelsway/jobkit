@@ -1,5 +1,9 @@
 """Tests for the `lead` command."""
+import json
+
 from jk.interview import lead, readiness, tables
+from jk.user import profile as up
+from tests.interview.test_targets import fact, store_company
 from tests.interview.test_sessions import SessionCase
 
 
@@ -91,3 +95,42 @@ class LeadCommandTests(SessionCase):
         self.assertEqual(code, 0)
         self.assertIn("4", out)
         self.assertEqual(self.cli(lead.main, "profile", "set", "acme", "colour", "x")[0], 1)
+
+
+class LeadTargetTests(SessionCase):
+    """`lead list` and `lead show` with --target (all data fictional)."""
+
+    def setUp(self):
+        super().setUp()
+        self.questions = lead.cards()
+        first, second = self.questions[0], self.questions[1]
+        word = max(second["question"].split(), key=len).strip("?,.")
+        store_company(fact("v1", name="Theme value", themes=[first["themes"][0]], hints=[]),
+                      fact("v2", name="Word value", themes=[], hints=[word]),
+                      fact("v3", name="Open value", themes=[], hints=[]),
+                      fact("q3", kind="question", value="v3", wording="Tell me about a hard call."))
+        self.first, self.second = first, second
+
+    def test_list_marks_values_and_lists_the_rest_separately(self):
+        before = json.dumps(tables.load_lead_progress(), sort_keys=True)
+        code, out, err = self.cli(lead.main, "list", "--target", "company x")
+        self.assertEqual(code, 0, err)
+        head, rest = out.split("Questions that match no value", 1)
+        self.assertIn(f"{self.first['id']}", head)
+        self.assertIn("Theme value (theme)", head)
+        self.assertIn("Word value (word)", head)
+        self.assertIn("Open value", rest.split("need your judgment", 1)[1])
+        self.assertIn("Q: Tell me about a hard call.", out)
+        self.assertEqual(json.dumps(tables.load_lead_progress(), sort_keys=True), before)
+
+    def test_show_lists_the_matching_values(self):
+        code, out, err = self.cli(lead.main, "show", self.first["id"], "--target", "Company X")
+        self.assertEqual(code, 0, err)
+        self.assertIn("Company X values:", out)
+        self.assertIn("Theme value (by theme)", out)
+
+    def test_without_target_the_list_is_unchanged_by_a_default_company(self):
+        before = self.cli(lead.main, "list")[1]
+        up.save({**up.load(), "resume_root": "/tmp", "target_company": "Company X"})
+        self.assertEqual(self.cli(lead.main, "list")[1], before)
+        self.assertEqual(self.cli(lead.main, "list", "--target", "Nobody")[0], 1)

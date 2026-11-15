@@ -59,6 +59,7 @@ The tutor teaches a card, question or story first, then checks understanding wit
 - **Stories.** Stories seeded from the resumes, one per employer and theme. Each is written once and can be told as STAR (situation, task, action, result), SOAR (situation, obstacle, action, result) or CARL (challenge, action, result, learning). Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
 - **Technical drill cards.** Cards for the services, decision pairs and scenarios of the technologies an interview covers. One example technology is bundled, and any other is added from a JSON topic list, with no code. Lifecycle facts such as "closed to new customers" or "sunset" are recorded only with a link to the vendor's own documentation, never from memory.
 - **Leadership questions.** A question set (roadmapping, mentoring, conflict, prioritisation and more), each with the user's principle and one example per recent employer.
+- **Company research.** For a named company, where the app can read web pages, the skill tells the agent to look up how that company hires (published values, interview rounds, what interviewers look for, typical questions) and to save each fact with its link, a short quote and the date read, leaving out reviews and other user-written posts. Stories and practice sessions can then be ranked against that company's values. Nothing about any company is shipped. The skill tells the agent to recheck stale facts when they are next needed; the default research window is 30 days. The commands refuse a fact without a link or quote, but cannot check that a quote is on its page; each fact keeps its link to open.
 - **Practice sessions.** Resumable. A session keeps the complete answers and grades; later drills add entries and never edit old ones.
 - **Mock interview.** The interview-prep skill asks first, gives no hints, then grades.
 
@@ -71,7 +72,7 @@ A report of coverage and evidence per area, optionally limited to one job postin
 Resume tailoring and match scoring are early previews. Their output requires review before use.
 
 - **Tailoring.** Given a job posting, it builds a resume from the stored lines. It ranks the lines per employer, suggests opening summaries, lists the skills the posting asks for that no stored line supports, and writes a Markdown draft. The draft requires review before use.
-- **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The first step saves the posting in the data folder, so the later steps name it instead of passing it again; a saved posting unused for 30 days is removed.
+- **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The first step saves the posting in the data folder, so the later steps name it instead of passing it again. Each completed scoring run also removes saved postings unused for more than 30 days; nothing removes them on a schedule.
 
 ## Supported apps and systems
 
@@ -181,7 +182,7 @@ jobkit init
 profile --help
 ```
 
-uv installs all twelve commands in its tool folder (`uv tool dir --bin` prints it). Direct invocation requires that folder on the shell search path; if `jobkit` is not found, run `uv tool update-shell` and open a new terminal. With the folder on the search path, no `uv run` and no project option are needed. The constraints file gives the same exact dependency versions as the plugin install. To remove them: `uv tool uninstall jobkit`. Contributors who edit the code use the checkout setup below instead, because an installed copy does not follow later edits.
+uv installs all thirteen commands in its tool folder (`uv tool dir --bin` prints it). Direct invocation requires that folder on the shell search path; if `jobkit` is not found, run `uv tool update-shell` and open a new terminal. With the folder on the search path, no `uv run` and no project option are needed. The constraints file gives the same exact dependency versions as the plugin install. To remove them: `uv tool uninstall jobkit`. Contributors who edit the code use the checkout setup below instead, because an installed copy does not follow later edits.
 
 ### Setup from the command line
 
@@ -241,6 +242,7 @@ Save the name and contact line once with `profile header set NAME CONTACT_LINE` 
 | `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model rates each requirement against the lines; the command does the arithmetic. `extract` saves the posting, and the later steps can name it with `--key`. |
 | `build-resume JD` | Writes a tailored Markdown resume. Name and contact come from the saved header (`profile header`), never from the resume data. |
 | `prep`, `arch`, `lead` | Stories, drill cards and the leadership question set. |
+| `target` | Researched target companies: each fact with its link, quote, label and date read. |
 | `sessions`, `readiness` | Practice sessions and the readiness report. |
 
 For the top commands to explore profile settings, interview preparation and tutoring progress, see [docs/explore.md](docs/explore.md). Full reference: [docs/manual.md](docs/manual.md) (how to use each skill, and every command and option under the skill that uses it) and [docs/references/data-structures.md](docs/references/data-structures.md) (the stored data). Every command has `--help`, and the verbs are the same everywhere: `init`, `status`, `list`, `show ID`, `next`, `set ID FIELD VALUE`, `for-jd JD`. Messages go to stdout, problems to stderr with exit status 1. Commands are also available as `uv run python -m jk.<group>.<tool>`.

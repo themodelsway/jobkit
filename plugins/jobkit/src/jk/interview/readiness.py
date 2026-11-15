@@ -6,6 +6,8 @@
   readiness --days 30       # a "solid" answer older than this many days counts as aging (default: the stored
                             # retest window, 30 when none is set; `profile set reassess_days N` changes it)
   readiness --due           # list the items due for a retest (the aging ones) instead of the report [--json] [-o FILE]
+  readiness --target NAME   # add evidence per value of a researched company (`target`); with --jd, only what both
+                            # select; with --due, only the due items that match a value of that company
 
 This is evidence, not a score. Each item gets one label from your own logged drills:
   untested        never drilled
@@ -33,7 +35,7 @@ from jk.common import ToolError
 from jk.interview import arch
 from jk.interview import lead
 from jk.interview import prep
-from jk.interview import tables
+from jk.interview import tables, targets
 from jk.interview.story_model import Engagement, Story
 from jk.resumes import query_resume as qr
 from jk.user import profile as up
@@ -262,11 +264,58 @@ def due_items(hist: Mapping[str, Evidence], days: int) -> list[Due]:
     return sorted((r for r in rows if r), key=lambda r: (-r["age_days"], r["id"]))
 
 
+def target_items(jd_text: str | None) -> dict[str, targets.Item]:
+    """id -> item for the stories and leadership questions a company report covers: with a JD, only the stories in
+    the JD's themes (leadership questions are not selected by a JD)."""
+    stories = prep.stories() if tables.has_stories() else []
+    if jd_text is not None:
+        themes = qr.analyze(jd_text).themes
+        stories = [s for s in stories if s["theme"] in themes]
+    items = {s["id"]: targets.story_item(s) for s in stories}
+    if tables.has_questions() and jd_text is None:
+        progress = lead.prog()["questions"]
+        items.update({q["id"]: targets.question_item(q, progress.get(q["id"])) for q in lead.cards()})
+    return items
+
+
+def item_label(item: targets.Item, hist: Mapping[str, Evidence], days: int) -> str:
+    """The existing evidence label of a story or leadership question."""
+    if item.kind == "story":
+        return story_label(next(s for s in prep.stories() if s["id"] == item.id), hist, days)
+    p = lead.prog()["questions"].get(item.id, lead.blank())
+    return label(p["confidence"], p["last_drilled"], hist.get(item.id), days)
+
+
+def target_section(company: Mapping[str, object], jd_text: str | None, hist: Mapping[str, Evidence], days: int) -> None:
+    """Evidence per value of a company: its state and the items that match it, each with its label. No score."""
+    items = target_items(jd_text)
+    print(f"\nCOMPANY: {company['name']}" + (" (items the JD also selects)" if jd_text is not None else "")
+          + " - evidence per value, no overall score")
+    for value in targets.values(company):
+        print(f"  {value['name']}: {targets.value_state(value, items.values())}  {targets.fact_source(value)}")
+        for item in items.values():
+            how = targets.how(value, item)
+            if how:
+                print(f"    {item.id} [{item_label(item, hist, days)}]" + (" matched by word" if how == "word" else ""))
+
+
+def due_for_target(rows: list[Due], name: str) -> list[Due]:
+    """The due rows whose item matches a value of the company by theme or by word (cards never match)."""
+    company, items = targets.find(name), target_items(None)
+    return [r for r in rows if r["id"] in items and targets.matches(company, items[r["id"]])]
+
+
 def cmd_due(args: argparse.Namespace, days: int) -> None:
-    """Print the items due for a retest, as text or `--json`."""
+    """Print the items due for a retest, as text or `--json`; with --target only those matching the company."""
     if args.jd:
         raise ToolError("--due lists what is due for a retest across everything; it cannot be combined with --jd.")
     rows = due_items(attempts(), days)
+    if args.target:
+        matching = due_for_target(rows, args.target)
+        if rows and not matching and not args.json:
+            common.emit(f"{len(rows)} item(s) due for a retest in all; none match {args.target}.\n", args.output)
+            return
+        rows = matching
     if args.json:
         common.emit(json.dumps(rows, indent=2, ensure_ascii=False) + "\n", args.output)
         return
@@ -297,6 +346,7 @@ def cmd_report(args: argparse.Namespace) -> None:
     if args.due:
         cmd_due(args, days)
         return
+    company = targets.find(args.target) if args.target else None
     jd_text = common.read_text_arg(args.jd) if args.jd else None
     hist = attempts()
     if not tables.has_catalog():
@@ -305,6 +355,8 @@ def cmd_report(args: argparse.Namespace) -> None:
     gaps = lead_section(jd_text, hist, days)
     todo = story_section(jd_text, hist, days)
     print_next(weak, gaps, todo)
+    if company is not None:
+        target_section(company, jd_text, hist, days)
     print("\n" + NOTE)
 
 
@@ -315,6 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--days", type=int, default=None,
                         help="a solid answer older than this counts as aging (default: the stored retest window, else 30)")
     parser.add_argument("--due", action="store_true", help="list the items due for a retest instead of the report")
+    parser.add_argument("--target", help="a researched company: add evidence per value of that company")
     parser.add_argument("--json", action="store_true", help="with --due: print the list as JSON")
     parser.add_argument("-o", "--output", help="with --due: write the list to this file")
     parser.set_defaults(fn=cmd_report)

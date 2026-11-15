@@ -3,10 +3,17 @@
 
   sessions new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
                                    [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--count 10]
+                                   [--target COMPANY] [--style star|soar|carl]
   sessions list
-  sessions resume ID         # what was covered, last answers, and the next item to ask
-  sessions log ID ITEM --question Q --answer A|- [--grade G] [--confidence 0|1|2] [--quiz]
+  sessions resume ID [--style S]  # what was covered, last answers, and the next item to ask; --style changes the
+                                  # session's style from then on
+  sessions log ID ITEM --question Q --answer A|- [--grade G] [--confidence 0|1|2] [--quiz] [--style S]
                                                  # --answer - reads the full answer from stdin
+
+--target names a researched company (`target`): the queue keeps the same items, with the stories and leadership
+questions that match the company first, and `resume` shows what its graders look for. --company is one of the
+user's own employers (a story filter), not a target company. A session records its style (--style, else the
+profile's answer_style, else star) and each story or question answer records the style and company in force.
   sessions close ID
   sessions reopen ID          # continue a closed session
 
@@ -30,7 +37,7 @@ from jk import common
 from jk.common import ToolError
 from jk.interview import arch
 from jk.interview import lead
-from jk.interview import prep, readiness, tables
+from jk.interview import prep, readiness, session_company, styles, tables, targets
 from jk.resumes import query_resume as qr
 from jk.user import profile as up
 
@@ -62,6 +69,8 @@ class LogEntry(TypedDict):
     confidence_after: NotRequired[int | None]
     tutor: NotRequired[bool]
     quiz: NotRequired[bool]
+    style: NotRequired[str | None]
+    company: NotRequired[str | None]
 
 
 class Session(TypedDict):
@@ -75,6 +84,8 @@ class Session(TypedDict):
     created: str
     updated: str
     jd: NotRequired[str | None]
+    target: NotRequired[str | None]
+    style: NotRequired[str]
     queue: list[QueueItem]
     log: list[LogEntry]
 
@@ -228,9 +239,20 @@ def unique_session_id(title: str) -> str:
 
 # ---------------------------------------------------------------- commands
 
+def session_target(session: Session) -> dict[str, Any] | None:
+    """The researched profile of the session's company; None without a company or when the profile is gone."""
+    name = session.get("target")
+    if not name:
+        return None
+    try:
+        return targets.find(name)
+    except ToolError:
+        return None
+
+
 def show_next(session: Session) -> None:
     """Print the first queued item that has no logged answer yet; an item whose target was removed is reported
-    as unavailable and skipped."""
+    as unavailable and skipped. For a company session, a story or question also shows the company's emphasis."""
     done = {e["item"] for e in session["log"]}
     for item in session["queue"]:
         if item["id"] in done:
@@ -239,6 +261,9 @@ def show_next(session: Session) -> None:
             print(f"\nSkipping {item['id']} ({item['kind']}): it is unavailable, its {item['kind']} was removed.")
             continue
         print(f"\nNext item ({item['kind']}):")
+        company = session_target(session)
+        if company is not None and item["kind"] != "card":
+            print("\n".join(session_company.emphasis(company, item["id"])))
         if item["kind"] == "leader":
             lead.show(lead.find(item["id"]))
         elif item["kind"] == "card":
@@ -246,7 +271,7 @@ def show_next(session: Session) -> None:
         else:
             story = next((s for s in prep.stories() if s["id"] == item["id"]), None)
             if story:
-                prep.show(story, prep.eng_of(story, prep.engagements()))
+                prep.show(story, prep.eng_of(story, prep.engagements()), styles.in_force(None, session.get("style")))
             else:
                 print(f"  {item['id']}")
         return
@@ -257,6 +282,8 @@ def cmd_new(args: argparse.Namespace) -> None:
     """Start a session with a queue for the chosen mode and filters."""
     if args.due and only_open(args):
         raise ToolError("--due queues the items due for a retest, which are solid; it cannot be combined with --only-open.")
+    company = targets.find(args.target) if args.target else None
+    style = styles.in_force(args.style)
     queue, jd = build_queue(args)
     if args.due:
         due = [row["id"] for row in readiness.due_items(readiness.attempts(), up.reassess_days())]
@@ -265,6 +292,9 @@ def cmd_new(args: argparse.Namespace) -> None:
             queue.sort(key=lambda item: due.index(item["id"]))      # oldest first, so --count keeps the oldest
         if not queue:
             raise ToolError("Nothing is due for a retest for those filters. No session created.")
+    note = None
+    if company is not None:
+        queue, note = session_company.order(queue, company, getattr(args, "order", "default") == "random")
     matched = len(queue)
     queue = queue[:args.count]
     if not queue:
@@ -272,11 +302,15 @@ def cmd_new(args: argparse.Namespace) -> None:
                         "already solid or done). No session created.")
     sid = unique_session_id(args.title)
     session: Session = {"id": sid, "title": args.title, "mode": args.mode, "status": "open", "created": now(),
-                        "updated": now(), "jd": jd, "queue": queue, "log": []}
+                        "updated": now(), "jd": jd, "target": company["name"] if company else None, "style": style,
+                        "queue": queue, "log": []}
     if args.mode == "tutor":
         session["topic"] = args.topic
     put_session(session)
     print(f"Started session {sid} with {len(queue)} items ({queue_mix(queue, matched)}).")
+    print(f"Answer style: {style}" + (f"; company: {company['name']}" if company else ""))
+    if company is not None:
+        print(note or "\n".join([f"Matching {company['name']}:", *session_company.marks(queue, company)]))
     show_next(session)
 
 
@@ -287,16 +321,27 @@ def cmd_list(args: argparse.Namespace) -> None:
         print("No sessions yet.")
         return
     for row in rows:
+        extra = "".join(f"  {label} {row[key]}" for key, label in (("style", "style"), ("target", "company")) if row[key])
         print(f"  {row['id']:<50} {row['status']:<7} {row['mode']:<12} {row['logged']}/{row['total']} items  "
-              f"(last: {row['updated'][:16]})")
+              f"(last: {row['updated'][:16]}){extra}")
 
 
 def cmd_resume(args: argparse.Namespace) -> None:
     """Show what a session covered, its last answers, and the next item."""
     session = get_session(args.id)
+    if args.style:
+        session["style"] = styles.get(args.style).name
+        put_session(session)
+        print(f"Style changed to {session['style']} from now on; answers logged earlier keep their style.")
     asked = len({e["item"] for e in session["log"]})
     print(f"Session {session['id']} | {session['title']} | {session['mode']} | {session['status']} | "
-          f"JD: {session.get('jd') or '-'}")
+          f"JD: {session.get('jd') or '-'} | style: {styles.in_force(None, session.get('style'))}"
+          + (f" | company: {session.get('target')}" if session.get("target") else ""))
+    company, named = session_target(session), session.get("target")
+    if named and company is None:
+        print(f"The profile of {named} no longer exists, so no grading emphasis is shown.")
+    elif company is not None:
+        print("\n".join(session_company.to_cover(company)))
     print(f"Started {session['created'][:16]}, updated {session['updated'][:16]}; "
           f"{asked} of {len(session['queue'])} items asked.")
     for entry in session["log"][-3:]:
@@ -361,9 +406,14 @@ def cmd_log(args: argparse.Namespace) -> None:
     confidence = args.confidence
     if tutor and confidence is not None and not args.quiz:
         confidence = min(confidence, 1)    # teaching alone never makes an item solid; only a graded, passed quiz does
-    session["log"].append({"at": now(), "item": args.item, "kind": kind, "question": args.question, "answer": answer,
-                           "grade": args.grade, "confidence_after": confidence, "tutor": tutor,
-                           "quiz": bool(args.quiz)})
+    entry: LogEntry = {"at": now(), "item": args.item, "kind": kind, "question": args.question, "answer": answer,
+                       "grade": args.grade, "confidence_after": confidence, "tutor": tutor, "quiz": bool(args.quiz)}
+    if kind != "card":
+        entry["style"] = styles.in_force(args.style, session.get("style"))
+        entry["company"] = session.get("target")
+    elif args.style:
+        raise ToolError("Architecture cards have no answer style: omit --style for a card.")
+    session["log"].append(entry)
     if confidence is not None:
         record_confidence(kind, args.item, confidence, tutor)
     put_session(session)
@@ -415,11 +465,15 @@ def build_parser() -> argparse.ArgumentParser:
                      help="queue only unfinished and weak items (default: finished stories and solid cards follow them)")
     new.add_argument("--due", action="store_true",
                      help="queue only the items due for a retest (see `readiness --due`)")
+    new.add_argument("--target", help="a researched company (`target list`): its matching items come first")
+    new.add_argument("--style", help="answer style: " + ", ".join(styles.names()) + " (default: the profile's, then star)")
     new.set_defaults(fn=cmd_new)
     sub.add_parser("list").set_defaults(fn=cmd_list)
     for name, fn in (("resume", cmd_resume), ("close", cmd_close), ("reopen", cmd_reopen)):
         one = sub.add_parser(name)
         one.add_argument("id")
+        if name == "resume":
+            one.add_argument("--style", help="change the session's answer style from now on")
         one.set_defaults(fn=fn)
     log = sub.add_parser("log")
     log.add_argument("id")
@@ -430,6 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--quiz", action="store_true",
                      help="tutor mode only: a quiz was answered correctly (needs --grade and --confidence 2)")
     log.add_argument("--confidence", type=int, choices=[0, 1, 2])
+    log.add_argument("--style", help="record this one answer in another style (stories and leadership questions)")
     log.set_defaults(fn=cmd_log)
     return parser
 

@@ -4,10 +4,11 @@ import contextlib
 import io
 import json
 import unittest
+from datetime import date
 from unittest import mock
 
 from jk import common, store
-from jk.interview import prep, story_model as sm, tables
+from jk.interview import prep, story_model as sm, tables, target_tables, targets
 from jk.user import profile
 from tests.support import HomeCase
 
@@ -643,3 +644,64 @@ class TestValidateInAStyle(StyleCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForTarget(PrepCase):
+    """`prep for-target`: stories ranked for a researched company (all data fictional)."""
+
+    def setUp(self):
+        super().setUp()
+        stories = tables.load_stories()
+        second = dict(stories["stories"][0], id="acme-mentoring", theme="mentoring", headline="Grew engineers",
+                      status="draft", action="We hit every deadline while growing the team.")
+        stories["stories"].append(second)
+        tables.replace_stories(stories)
+        today = date.today().isoformat()
+        base = {"quote": "A short passage.", "link": "https://example.com/values", "label": "company-references",
+                "pulled": today, "vetted": True}
+        save = {"name": "Company X", "facts": [
+            {**base, "id": "v1", "kind": "value", "name": "Growth", "wording": "Grows people.", "themes": ["mentoring"],
+             "hints": []},
+            {**base, "id": "v2", "kind": "value", "name": "Pace", "wording": "Moves fast.", "themes": [],
+             "hints": ["deadline"]},
+            {**base, "id": "v3", "kind": "value", "name": "Judgment", "wording": "Decides well.", "themes": [], "hints": []},
+            {**base, "id": "q3", "kind": "question", "value": "v3", "wording": "Tell me about a hard call."},
+            {**base, "id": "g1", "kind": "grading", "wording": "Answers follow STAR."}],
+            "suggested_style": {"style": "star", "basis": "stated", "facts": ["g1"]}}
+        target_tables.save_company(targets.merge_save(None, save, date.today()))
+
+    def test_ranking_values_and_completeness(self):
+        before = json.dumps(tables.load_stories(), sort_keys=True)
+        code, out = run("for-target", "company x")
+        self.assertEqual(code, 0, out)
+        lines = out.splitlines()
+        first = next(i for i, line in enumerate(lines) if line.strip().startswith("acme-"))
+        self.assertTrue(lines[first].strip().startswith("acme-mentoring"))
+        self.assertIn("Growth by theme; Pace by word", lines[first])
+        self.assertIn("complete in star: no, missing situation, task, result", lines[first])
+        self.assertIn("v1  Growth: covered", out)
+        self.assertIn("v2  Pace: possible", out)
+        self.assertIn("v3  Judgment: needs your judgment", out)
+        self.assertIn("Q: Tell me about a hard call.", out)
+        self.assertIn("stated by the company", out)
+        self.assertEqual(json.dumps(tables.load_stories(), sort_keys=True), before)
+
+    def test_no_company_and_no_default(self):
+        profile.save({"resume_root": "/tmp"})
+        code, out = run("for-target")
+        self.assertEqual(code, 1)
+        self.assertIn("Company X", out)
+        profile.save({"resume_root": "/tmp", "target_company": "Company X"})
+        code, out = run("for-target")
+        self.assertEqual(code, 0, out)
+        self.assertIn("the default company, Company X", out)
+
+    def test_a_none_found_company_is_refused_named_or_default(self):
+        target_tables.save_company({"key": "small co", "name": "Small Co", "outcome": "none found",
+                                    "researched": date.today().isoformat(), "style": None, "style_basis": None,
+                                    "style_facts": [], "facts": []})
+        profile.save({"resume_root": "/tmp", "target_company": "Small Co"})
+        for argv in (["for-target", "Small Co"], ["for-target"]):
+            code, out = run(*argv)
+            self.assertEqual(code, 1, argv)
+            self.assertIn("found no qualifying page for Small Co", out)

@@ -32,7 +32,7 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | `match_result` | one finished match score | Added by schema step 10. Columns: `key`, `created`, `last_used`; `body` holds the whole result, including `label`, `band` and the scores, which the listing reads from it (see Match scores). Entries not used for 90 days are removed when `match-score run` finishes. |
 | `session_log` | one logged answer | **Append-only**: the database refuses updates and deletes. `answered` is 1 when the answer is not empty; `tutor` and `quiz` mark lessons and passed quizzes. `readiness` is computed from these rows. Step 13 added the nullable `style` and `company` columns, which are empty for entries logged before it and for card entries. |
 | `target_company` | a researched company | Added by schema step 13. Columns: `key` (the name in lower case, so names compare without regard to letter case), `name`, `outcome` (`found` or `none found`), `researched` (the date), `style` and `style_basis` (the suggested answer style and whether it is `stated` or `inferred`); `body` has `style_facts`, the ids of the facts the suggestion rests on. Removing a company removes its facts. |
-| `target_fact` | one researched fact about a company | `company_key`, `id`, `position`, `kind` (`value`, `round`, `grading`, `question`, `questioning`), `link`, `label` (`company-references` or `othersite-references`), `pulled` (the date the page was read), `vetted` (1 once the agent confirmed it); `body` has `wording`, `quote` and, for a value, `themes` and `hints`. |
+| `target_fact` | one researched fact about a company | `company_key`, `id`, `position`, `kind` (`value`, `round`, `grading`, `question`, `questioning`), `link`, `label` (`company-references` or `othersite-references`), `pulled` (the date the page was read), `vetted` (1 once the agent confirmed it); `body` has `wording`, `quote` and, for a value, `name`, `themes` and `hints`; a typical question may name its value in `value`. |
 | `card` | an architecture card (service, decision pair or scenario) | Columns: `id`, `position`; `body` has `track`, `kind`, `area`, `name`, `tier`, `aliases`, `members`, `lifecycle`, `recent_changes`, `verified_on`. |
 | `card_progress` | your progress on one card | `card_id` (must be a card); `body` has `confidence` (0 to 2), `last_drilled`, `notes` and `links` to resume bullets. Removing a card removes its progress. |
 | `track` | a custom technology track | `name`; `body` is the seed (services, pairs, scenarios, documentation hosts). |
@@ -68,7 +68,7 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 ```json
 { "resume_root": "/path/to/resumes", "resume_dirs": ["2026"], "name": "Your Name", "tier1_services": ["Lambda"] }
 ```
-`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `tier1_services` pins your own tier-1 drill topics (any track, matched by name). Code: `user/profile.py`.
+`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `tier1_services` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days` and `target_company` are set with `profile set` (see the manual); `target_company` holds the name of a researched company. Code: `user/profile.py`.
 
 ### Employers (`employer`; export kind `employers`)
 `{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found on the first scan. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
@@ -242,15 +242,45 @@ One STAR example per employer, for the three most recent employers.
 ### One session (`session`, `session_item`, `session_log`; export kind `sessions`; id is `<date>-<slug>`)
 ```json
 { "id": "2026-11-05-lambda-drill", "title": "Lambda drill", "mode": "architecture", "topic": "architecture",
-  "status": "open", "created": "<timestamp>", "updated": "<timestamp>", "jd": null,
+  "status": "open", "created": "<timestamp>", "updated": "<timestamp>", "jd": null, "target": null, "style": "star",
   "queue": [ { "id": "lambda", "kind": "card" } ],
   "log": [ { "at": "<timestamp>", "item": "lambda", "kind": "card", "question": "...", "answer": "your full answer",
              "grade": "solid", "confidence_after": 2, "tutor": false, "quiz": false } ] }
 ```
+- `target` is the name of the researched company the session was started for (`sessions new --target`), or `null`; it stays when the company's profile is later removed. `style` is the session's current answer style (`sessions resume --style` changes it). Sessions stored before these fields existed have neither.
+- A story or leadership answer also records `style` and `company`: the style in force when it was logged (`sessions log --style` for one answer) and the session's company. Card answers, and entries logged before step 13, have neither.
 - `mode`: `architecture`, `stories`, `jd`, `leadership`, `tutor`, `retest` (`sessions new --due` with no mode: due cards, questions and stories). `status`: `open` or `closed`. `topic` is set for tutor sessions.
 - `kind` is `card` (architecture), `story` or `leader` (leadership question).
 - `queue` is what to ask; `log` is append-only and keeps your complete answers. A later drill adds an entry and never edits an earlier one.
 - The database refuses to change or delete a logged entry. `readiness` counts only entries with a non-empty `answer`. A tutor lesson (`tutor: true`) counts only when `quiz: true`.
+
+---
+
+## Researched companies (`target_company`, `target_fact`; export kind `research`)
+
+Written only by `target save`, `target none-found`, `target recheck` and `target remove`; read by `target`, `prep for-target`, `lead --target`, `readiness --target` and `sessions --target`. Nothing about a company is shipped. The export is `{"companies": [...]}`, one entry per company with its facts:
+
+```json
+{ "key": "company x", "name": "Company X", "outcome": "found", "researched": "2026-11-14",
+  "style": "star", "style_basis": "stated", "style_facts": ["g1"],
+  "facts": [
+    { "id": "v1", "kind": "value", "name": "Ownership", "wording": "Owns outcomes end to end.",
+      "quote": "A short passage copied word for word from the page.", "link": "https://...",
+      "label": "company-references", "pulled": "2026-11-14", "vetted": true,
+      "themes": ["team-leadership"], "hints": ["deadline"] },
+    { "id": "q1", "kind": "question", "value": "v1", "wording": "Tell me about a time you owned a failure.",
+      "quote": "...", "link": "https://...", "label": "othersite-references", "pulled": "2026-11-14", "vetted": true },
+    { "id": "g1", "kind": "grading", "wording": "Answers are scored as situation, task, action and result.",
+      "quote": "...", "link": "https://...", "label": "company-references", "pulled": "2026-11-14", "vetted": true } ] }
+```
+- `outcome`: `found`, or `none found` (no qualifying page; no facts, dated by `researched`).
+- `kind`: `value` (with a `name`), `round`, `grading` (what interviewers look for), `question` (a typical question; `value` names the value it belongs to) or `questioning` (questioning style).
+- `label`: `company-references` when the link is on a site the company publishes, `othersite-references` for any other site.
+- `vetted`: the agent's confirmation, required on every save, that it read the page, the quote is on it and the page is not written by individual users. The commands cannot check this; they refuse a save without it, a quote over 40 words, a link that is not http or https, a link on a known user-content site, a date read in the future, and a question naming a value the company does not have.
+- `themes` and `hints`: the mapping from a value to the user's stories (story themes, and words matched as whole words in any letter case); not claims about the company.
+- `style`, `style_basis` and `style_facts`: a suggested answer style, `stated` (a stored fact says it) or `inferred` (the agent's suggestion), with the ids of the facts it rests on. It never changes the style in force.
+- State: `fresh` (every fact read within `research_days`), `stale` (a fact older, or a none-found record older), `none found` or `not researched`.
+- A save adds facts or replaces them by id and keeps the others; it is all or nothing. `target recheck` sets a fact's `pulled` to today, or removes it with `--remove` (with the questions under a removed value).
 
 ---
 

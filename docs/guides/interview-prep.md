@@ -11,6 +11,7 @@ Requests use plain language and fall into these categories:
 - Story rehearsal.
 - Continuation of an earlier practice session.
 - Preparation for a supplied job posting.
+- Preparation for a named company.
 
 **The first time.** The skill asks what the preparation is for: the kind of role and the technologies it uses. It then sets up drill cards for each technology named, leadership questions, and a set of stories drawn from the resumes added with [resume-workflows](resume-workflows.md). Resumes must be added first.
 
@@ -27,7 +28,21 @@ Requests use plain language and fall into these categories:
 - **Stories.** The skill walks through each story one question at a time (situation, the user's part, the actions, the result with a number, what would change) and saves the answers as it goes. It asks before saving anything that is not already on a resume. Answers can be structured as STAR, SOAR or CARL; see [Answer styles](#answer-styles).
 - **A job posting.** Given a posting, the skill ranks the stories for it, reports which are unfinished and which requirements have no story, then rehearses the questions typically asked.
 
-At the end, the skill closes the session. Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
+- **A named company.** When a company is named, the skill tells the agent to look up how that company hires, where the app can read web pages: its published values, interview rounds, what interviewers look for and typical questions. See [Company research](#company-research). Stories are then ranked against the company's values, and a session puts the matching stories and leadership questions first.
+
+At the end, the skill closes the session.
+
+### Company research
+
+Nothing about any company is shipped with jobkit. The facts are looked up when a company is named and stored in the data folder, each with the link to its page and the date it was read.
+
+- **What the skill tells the agent to do.** Search with only the company name and the role title, never the user's name, employers or resume text. Read pages the company publishes first (careers, culture, engineering, the job posting), then articles other sites publish about its hiring. Leave out anything written by individual users on any site: reviews, interview reports, salary posts, comments, forum threads. For each fact, copy a short quote word for word from the page and state only what it says; confirm the page was read, the quote is on it and it is not user-written content; then save it.
+- **What the commands check.** A fact without a link, a quote, a label, a date or the agent's confirmation is refused, and so is a quote over 40 words or a link on a known user-content site (forums, question-and-answer sites, and the review, interview-report and salary pages of job sites). A save is all or nothing. The commands never read the pages, so they cannot check that a quote is on its page; every fact keeps its link so the user can open it.
+- **Where a fact came from.** Each fact is labelled `company-references` (a site the company publishes) or `othersite-references` (any other site), and the label and the site's name are shown beside it.
+- **Suggested answer style.** A company may get a suggested style: `stated` when a stored fact says it, or `inferred` (the agent's suggestion, shown as such, with the facts it rests on). It never overrides the style in force.
+- **Nothing found, or no web access.** When no page qualifies, the skill tells the agent to record that, say so in plain words and use the default answer style; nothing is invented. When the app cannot read web pages (Codex in its default sandbox, for example), the skill tells the agent to skip research, say so once and use the default style; nothing is recorded, and there is no paste-the-page fallback. In both cases practice continues without the company: `prep for-target`, `readiness --target` and `sessions new --target` refuse a company recorded as none found or never researched, whether it is named or is the default company.
+- **Aging.** Facts older than the research window (30 days unless `profile set research_days` changes it) make a company stale. The skill tells the agent to read it again when next needed: a quote still on its page gets today's date; a changed page is shown to the user, old and new wording side by side, and the fact is replaced or removed only once the user responds with yes.
+- **Matching.** A company value lists story themes and hint words, which are the mapping to the user's stories and not claims about the company. A value reads `covered` (a story with content matches its theme), `possible` (stories match only by a hint word), `no story`, or `needs your judgment` (no themes or hint words; its typical questions are still practised). Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
 
 ## Commands it uses
 
@@ -50,6 +65,7 @@ STAR stories and engagements, stored in the database.
 | `prep styles` | none | List the three answer styles with their parts and a use for each, and the style in force. |
 | `prep new` | `STORY_ID --company ID --theme T [--headline H] [--engagement E]` | Add a story beyond the generated ones. |
 | `prep for-jd` | `JD [--top N]` | Rank stories for a job description (default 8), with typical questions. |
+| `prep for-target` | `[COMPANY]` | Rank stories for a researched company: theme matches, then hint-word matches, then the rest, empty stories last; each story with the values it matches and, when the company has a suggested style, whether it is complete in it. Every value is listed with its state and its stored typical questions. Without `COMPANY`, the profile's `target_company` is used and named. Read-only. |
 | `prep search` | `TEXT` | Search stories and engagements. |
 | `prep validate` | `[ID] [--style S]` | Check one story or all. Errors block `done` and exit 1; warnings are advice. A story already `done` is valid while it is complete in any style; a part missing in the style in force is a warning. |
 | `prep export` | `[--story S \| --engagement E] [--format json\|md] [--style S] [-o FILE]` | Export to JSON (default) or Markdown. The Markdown cheat sheet uses the headings of the style. |
@@ -137,8 +153,8 @@ Leadership questions, stored in the database. Each question holds the user's pri
 | `lead init` | none | Create or extend the questions and progress (never overwrites answers). |
 | `lead status` | none | Confidence per category, and employers whose scope facts (reports, team, budget) are still missing. |
 | `lead next` | `[--category C] [--order default\|random]` | The next question. |
-| `lead list` | `[--category C]` | List questions. |
-| `lead show` | `ID` | The question, profile facts, candidate stories and saved answers. |
+| `lead list` | `[--category C] [--target COMPANY]` | List questions. With `--target`, each question shows the company values it matches and how; questions that match none are listed separately, and values that need judgment come last with their typical questions. Read-only. |
+| `lead show` | `ID [--target COMPANY]` | The question, profile facts, candidate stories and saved answers; with `--target`, the company values it matches and their typical questions. |
 | `lead set` | `ID principle\|notes\|confidence VALUE` | `principle` is the candidate's approach to the leadership topic, in the user's words. |
 | `lead example` | `ID COMPANY FIELD VALUE` | `FIELD`: `situation task action result metric`. `COMPANY` is any employer in the resume data. Blank values are not counted; the target is up to three examples per question, fewer with fewer employers. |
 | `lead skip` / `lead unskip` | `ID COMPANY [REASON]` | Mark an employer as not applicable for a question (never had that responsibility, no real example yet), in the user's own words; it counts as covered and shows as `N not applicable`. A real example replaces the mark; `skip` is refused when an example exists. |
@@ -150,11 +166,25 @@ Resumable practice sessions, stored in the database. A session keeps the complet
 
 | Subcommand | Arguments and options | What it does |
 |---|---|---|
-| `sessions new` | `TITLE [--mode M] [--topic T] [--order O] [--category C] [--jd FILE] [--track T] [--area A] [--tier N] [--kind K] [--company C] [--count N] [--only-open] [--due]` | Start a session with a queue of items. Unfinished stories and cards, leadership questions and cards that are not solid come first; finished stories and solid items follow (solid items not drilled for 30 days before recently solid ones), so strong material is still rehearsed and nothing saved changes. `--only-open` queues only the unfinished and weak ones. `--mode`: `architecture`, `stories`, `jd`, `leadership`, `tutor` (default: `jd` when `--jd` is given, else `architecture`; `--jd` with another mode is an error). `--topic` (tutor mode only): `architecture`, `leadership` or `stories`. `--count` is the queue length (default 10). A jd session takes a card and a story in turn, so the count cannot leave one kind out; when one kind runs out the other fills the rest. The start message gives the number of each kind queued and how many matching items the count left out. The filters apply to the matching mode, jd mode included; `--tier N` means tier N or lower. `--due` queues only the items due for a retest (the same set as `readiness --due`; with no `--mode` and no `--jd` it covers cards, leadership questions and stories, oldest first, stored with the mode `retest`, and a filter such as `--tier` limits only the kind it belongs to; with a `--mode` it queues only that mode's due items; says so and creates nothing when none is due; cannot be combined with `--only-open`). The solid-card aging in the default queue follows the stored retest window. |
-| `sessions list` | none | List sessions. |
-| `sessions resume` | `ID` | What was covered, the last answers and the next item. A queued item whose card, question or story was removed is reported as unavailable and skipped. |
-| `sessions log` | `ID ITEM --question Q --answer A\|- [--grade G] [--confidence 0\|1\|2] [--quiz]` | Record one answered item. `--answer -` reads the full answer from stdin. `--quiz` (tutor mode) says a quiz was answered correctly and needs `--grade` and `--confidence 2`. An item that does not exist, including a queued item that was removed, is refused until it exists again. |
+| `sessions new` | `TITLE [--mode M] [--topic T] [--order O] [--category C] [--jd FILE] [--track T] [--area A] [--tier N] [--kind K] [--company C] [--count N] [--only-open] [--due]` | Start a session with a queue of items. Unfinished stories and cards, leadership questions and cards that are not solid come first; finished stories and solid items follow (solid items not drilled for 30 days before recently solid ones), so strong material is still rehearsed and nothing saved changes. `--only-open` queues only the unfinished and weak ones. `--mode`: `architecture`, `stories`, `jd`, `leadership`, `tutor` (default: `jd` when `--jd` is given, else `architecture`; `--jd` with another mode is an error). `--topic` (tutor mode only): `architecture`, `leadership` or `stories`. `--count` is the queue length (default 10). A jd session takes a card and a story in turn, so the count cannot leave one kind out; when one kind runs out the other fills the rest. The start message gives the number of each kind queued and how many matching items the count left out. The filters apply to the matching mode, jd mode included; `--tier N` means tier N or lower. `--due` queues only the items due for a retest (the same set as `readiness --due`; with no `--mode` and no `--jd` it covers cards, leadership questions and stories, oldest first, stored with the mode `retest`, and a filter such as `--tier` limits only the kind it belongs to; with a `--mode` it queues only that mode's due items; says so and creates nothing when none is due; cannot be combined with `--only-open`). The solid-card aging in the default queue follows the stored retest window. `--target COMPANY` names a researched company (`--company` is one of the user's own employers): the queue holds the same items, with stories and leadership questions that match a company value by theme first, then by hint word, then the rest (more matching values first; with `--order random`, shuffled inside each group); architecture cards keep their places; `--count` cuts after this ordering, and with `--due` the item due longest comes first inside a group. An unknown company creates no session. `--style S` records the session's answer style (default: the profile's `answer_style`, then `star`); a saved default company is never applied here. |
+| `sessions list` | none | List sessions, with each one's style and company. |
+| `sessions resume` | `ID [--style S]` | What was covered, the last answers and the next item. A queued item whose card, question or story was removed is reported as unavailable and skipped. For a company session it also shows the style in force, what the company's graders look for beside the next story or question, and the values still to cover with their typical questions; when the company's profile was removed it says so. `--style` changes the session's style from then on. |
+| `sessions log` | `ID ITEM --question Q --answer A\|- [--grade G] [--confidence 0\|1\|2] [--quiz] [--style S]` | Record one answered item. `--answer -` reads the full answer from stdin. `--quiz` (tutor mode) says a quiz was answered correctly and needs `--grade` and `--confidence 2`. An item that does not exist, including a queued item that was removed, is refused until it exists again. A story or leadership answer records the session's style (or `--style` for this one answer) and its company; a card answer records neither. |
 | `sessions close` | `ID` | Close a session. |
 | `sessions reopen` | `ID` | Continue a closed session. |
 
 Teaching caps a card's confidence at 1; a passed quiz allows 2.
+
+### `target`
+
+Researched target companies, stored in the database (see [Company research](#company-research)). The command never reads a page; the skill tells the agent to research and vet, and the command checks what it can see.
+
+| Subcommand | Arguments and options | What it does |
+|---|---|---|
+| `target list` | none | Every researched company with its state: `fresh`, `stale`, `none found` or `not researched`. |
+| `target show` | `[NAME]` | Values (with themes, hint words and typical questions), rounds, what graders look for, questioning style, the suggested style and the state, each fact with its link, label, site and date read. Without `NAME`, the profile's `target_company`. Names match in any letter case. |
+| `target save` | `NAME --seed FILE\|-` | Add facts, or replace them by id; the other facts stay. All or nothing: one refused fact stores nothing and is named. Warns about themes no story or question uses. The JSON format is in `target --help` and [data-structures.md](../references/data-structures.md#researched-companies-target_company-target_fact-export-kind-research). |
+| `target none-found` | `NAME` | Record, with today's date, that no qualifying page was found; the company is not researched again within the research window. |
+| `target stale` | none | Companies older than the research window, with the facts to read again. |
+| `target recheck` | `NAME FACT [--remove]` | The page still says the fact: its date read becomes today. `--remove`: the page no longer says it and the user responded with yes; the fact (and questions under a removed value) is removed. |
+| `target remove` | `NAME` | Remove a company and its facts. Says how many sessions name it; they keep working. |

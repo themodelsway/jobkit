@@ -75,6 +75,8 @@ Stories, answers and progress are personal data kept on the user's computer. Rea
 - `prep styles`: the three answer styles (star, soar, carl) and the one in force: `--style`, then the saved `profile set answer_style`, then star. `status done` is accepted only when the story is complete in that style; if it is refused, the message names the missing part, so ask for that part.
 - `prep new STORY_ID --company C --theme T`: an extra story beyond the ones `prep init` makes. `prep list [--company C]` lists every story. `prep evidence STORY` shows the dates it was practised.
 - `prep for-jd -`: stories ranked for a job posting (posting on stdin), with typical questions and the unfinished ones
+- `prep for-target COMPANY`: stories ranked for a researched company, every company value with its state, and whether each story is complete in the company's suggested style
+- `target show NAME`, `target list`, `target save NAME --seed -`, `target none-found NAME`, `target stale`, `target recheck NAME FACT [--remove]`, `target remove NAME`: researched companies (see "Preparing for a specific company")
 - `prep init`: add stories for new resume lines or themes (never overwrites answers)
 
 ## Sessions (always first)
@@ -86,11 +88,13 @@ Every practice run belongs to a session, so the user can start fresh or go back 
    Then run `readiness --due`. If it lists items, say how many and how old the oldest is, and ask:
    > N of your good answers are older than D days. Do you want to re-check those first?
    On yes, start the session with `--due` added to the command below. On no, start as usual and do not ask again in this conversation. Never start a retest without a yes.
-   New: `sessions new "title" [--mode architecture|stories|jd|leadership] [--order default|random] [--jd FILE] [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--category C] [--count N] [--only-open] [--due]`. Finished stories and solid cards follow the unfinished and weak ones in the queue, so strong material is still rehearsed; `--only-open` leaves them out. With `--jd` the queue takes a card and a story in turn, so both kinds are asked. The start message gives the number of each kind and how many matching items `--count` left out; when some were left out, tell the user once, and start a longer session only if they ask:
+   For a story or leadership session, ask which answer structure to use unless the user already said, offering the three by their shape (see "Filling in stories"):
+   > How would you like to structure your answers?
+   New: `sessions new "title" [--mode architecture|stories|jd|leadership] [--order default|random] [--jd FILE] [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--category C] [--count N] [--only-open] [--due] [--target COMPANY] [--style star|soar|carl]`. `--company` is one of the user's own past employers; `--target` is a researched company they are preparing for. Pass `--target` only when the user named that company for this session (a saved default company in `profile status` is a suggestion to confirm, never applied by itself). Finished stories and solid cards follow the unfinished and weak ones in the queue, so strong material is still rehearsed; `--only-open` leaves them out. With `--jd` the queue takes a card and a story in turn, so both kinds are asked. The start message gives the number of each kind and how many matching items `--count` left out; when some were left out, tell the user once, and start a longer session only if they ask:
    > This session has N questions. M more fit this job, so say so if you want a longer one.
    (`--mode tutor --topic ...` belongs to the tutor skill.) Pick a short plain title yourself. A closed session continues with `sessions reopen ID`.
-3. Continue: `sessions resume ID` prints what was covered, the last answers and the next item.
-4. After each answer: `sessions log ID ITEM --question "..." --answer - --grade "..." --confidence N` (answer on stdin; keep the user's FULL answer). End with `sessions close ID` when the user says they are done. The command rejects unknown items, empty answers, closed sessions and `--confidence` on stories; fix the command rather than working around it.
+3. Continue: `sessions resume ID` prints what was covered, the last answers and the next item; for a company session also what the company's interviewers look for and the values still to cover. If the user wants another structure from now on, `sessions resume ID --style S`.
+4. After each answer: `sessions log ID ITEM --question "..." --answer - --grade "..." --confidence N` (answer on stdin; keep the user's FULL answer). If the user answered one question in another structure, add `--style S` for that answer only (never for an architecture card). When you run `prep show` or `prep set` for a story during a session, pass the session's style (shown by `sessions resume`) with `--style`. End with `sessions close ID` when the user says they are done. The command rejects unknown items, empty answers, closed sessions and `--confidence` on stories; fix the command rather than working around it.
 Commands: `sessions list|new|resume|log|close`.
 
 ## Order
@@ -123,8 +127,19 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 6. If the user's answer differs from the resume line (for example a different number), ask which is right before saving:
    > Your resume says X but you just said Y. Which one is right?
 
+## Preparing for a specific company
+1. When the user names a company they are interviewing with, or a job posting names one, run `target show NAME`. If it is not researched or is stale, research it first by following `research.md` (in this skill's folder): only if you can read web pages, with only the company name and role title, leaving out anything written by individual users. Say what you are doing first:
+   > I'll look up what this company has published about how it interviews. I'll only use what the company or a proper article says, not reviews or forum posts.
+   Steps 2 to 5 need stored facts. When `target show NAME` reports `none found`, or you could not read pages and nothing is stored for the company, skip them: practise as usual in the answer structure the user chose, and run no `prep for-target`, `readiness --target` or `--target` for that company (each of them refuses a company without facts).
+2. Run `prep for-target NAME` and report in plain words: which stories fit which of the company's values, which values have no story yet, and which values need the user's own judgment. Explain a value in the company's own words, and say beside every fact where it came from:
+   > This comes from the company's own site.
+   > This comes from another site, not the company itself.
+3. If the company suggests an answer structure, say so and whether it was the company's own words or your suggestion, then ask which structure the user wants; their choice wins.
+4. In practice, grade each answer against what the company's interviewers look for, as listed by `sessions resume`, without adding anything the stored facts do not say. Practise the values that need the user's judgment from their stored typical questions, as open questions.
+5. Before saving a challenge over a story that already has a task, tell the user the two parts will be joined into one and ask; use `--merge` only on a yes.
+
 ## Preparing for a specific job posting
-1. Ask the user to paste the posting, then run `prep for-jd -` with it on stdin.
+1. Ask the user to paste the posting, then run `prep for-jd -` with it on stdin. If the posting names the company, also follow "Preparing for a specific company".
 2. Report in plain words: the best-matching stories and the questions typically asked about them, which of those are not finished yet (offer to finish those first), and anything the posting asks for that has no story at all.
 3. For rehearsal, ask the typical questions one at a time and give short feedback on the answer against the saved story (structure, a number, ownership, length). Do not rewrite their story unless asked.
 

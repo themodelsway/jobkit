@@ -4,10 +4,12 @@ import io
 import json
 import sqlite3
 import unittest
+from datetime import date
 from pathlib import Path
 
 from jk import admin, records, store
 from jk.common import ToolError
+from jk.interview import target_tables, targets
 from tests.seed_data import seed
 from tests.support import HomeCase
 
@@ -64,6 +66,35 @@ class ExportTests(SeededCase):
         jobkit("status")
         self.assertEqual([(f.stat().st_mtime_ns, f.stat().st_size) for f in files if f.exists()], before)
         self.assertEqual([p.name for p in self.home.iterdir() if p.is_file()], [])
+
+
+class ResearchExportTests(HomeCase):
+    """The researched companies are their own kind (all data fictional)."""
+
+    def test_fresh_database_has_the_kind_empty(self):
+        data = json.loads(jobkit("export")[1])
+        self.assertEqual(data["research"], {"companies": []})
+        self.assertIn("research: 0", jobkit("status")[1])
+
+    def test_researched_company_and_none_found_are_exported_with_every_fact_field(self):
+        today = date.today().isoformat()
+        facts = [{"id": f"v{n}", "kind": "value", "name": f"Value {n}", "wording": "w", "quote": "q",
+                  "link": f"https://example.com/{n}", "label": "company-references", "pulled": today, "vetted": True}
+                 for n in range(3)]
+        save = {"name": "Company X", "facts": facts, "suggested_style": {"style": "soar", "basis": "inferred",
+                                                                          "facts": ["v0"]}}
+        target_tables.save_company(targets.merge_save(None, save, date.today()))
+        target_tables.save_company({"key": "small co", "name": "Small Co", "outcome": "none found",
+                                    "researched": today, "style": None, "style_basis": None, "style_facts": [],
+                                    "facts": []})
+        companies = {c["name"]: c for c in json.loads(jobkit("export")[1])["research"]["companies"]}
+        first = companies["Company X"]["facts"][0]
+        self.assertEqual({k: first[k] for k in ("link", "quote", "label", "pulled", "vetted")},
+                         {"link": "https://example.com/0", "quote": "q", "label": "company-references",
+                          "pulled": today, "vetted": True})
+        self.assertEqual((companies["Company X"]["style"], companies["Company X"]["style_basis"]), ("soar", "inferred"))
+        self.assertEqual((companies["Small Co"]["outcome"], companies["Small Co"]["researched"]), ("none found", today))
+        self.assertIn("research: 2", jobkit("status")[1])
 
 
 class BackupTests(SeededCase):

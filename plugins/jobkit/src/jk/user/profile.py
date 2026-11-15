@@ -10,7 +10,10 @@ Commands:
   profile status
   profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
   profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries),
-                                # answer_style (star, soar or carl: the default way a story is shown and judged complete)
+                                # answer_style (star, soar or carl: the default way a story is shown and judged complete),
+                                # research_days (when a researched company's facts count as stale; default 30),
+                                # target_company (a researched company `target show` and `prep for-target` use by
+                                # default; "" clears it)
   profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
   profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
   profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
@@ -30,17 +33,20 @@ from typing import Final, NotRequired, TypedDict, cast
 
 from jk import common, store
 from jk.common import ToolError
+from jk.interview import target_tables
 from jk.resumes import tables as resume_tables
 from jk.user import tables, terms
 
 DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
-SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style")
+SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style",
+                                         "research_days", "target_company")
 ANSWER_STYLES: Final[tuple[str, ...]] = ("star", "soar", "carl")
 YEARS_RANGE: Final[tuple[int, int]] = (1, 60)
 DEFAULT_REASSESS_DAYS: Final[int] = 30   # a good answer older than this is offered for a retest
 REASSESS_RANGE: Final[tuple[int, int]] = (1, 365)
+DEFAULT_RESEARCH_DAYS: Final[int] = 30   # researched company facts older than this are read again
 NEEDS_PROFILE: Final[str] = (
     "No profile yet. Ask the user where their resume files are, then run:\n"
     "  profile init --resume-root <folder> "
@@ -58,6 +64,8 @@ class Profile(TypedDict):
     header: NotRequired[str]
     years_experience: NotRequired[int]
     answer_style: NotRequired[str]
+    research_days: NotRequired[int]
+    target_company: NotRequired[str]
 
 
 class OpenItem(TypedDict):
@@ -127,6 +135,44 @@ def answer_style() -> str | None:
     """The default answer style the user saved, or None when none is saved (star applies then)."""
     value = tables.load_settings().get("answer_style")
     return value if value in ANSWER_STYLES else None
+
+
+def parse_research_days(text: str) -> int:
+    """A research window from text: a whole number of days of 1 or more, else a `ToolError`."""
+    try:
+        days = int(text)
+    except ValueError:
+        days = 0
+    if days < 1:
+        raise ToolError(f"research_days must be a whole number of days of 1 or more, not {text!r}.")
+    return days
+
+
+def research_days() -> int:
+    """The research window in days: the stored value, or 30 when none is stored."""
+    value = tables.load_settings().get("research_days")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else DEFAULT_RESEARCH_DAYS
+
+
+def parse_target_company(text: str) -> str | None:
+    """The stored name of a researched company given in any letter case; None for "" (clears the default).
+
+    Raises:
+        ToolError: no researched company has that name (the message lists the ones that exist).
+    """
+    if not text.strip():
+        return None
+    found = target_tables.load_company(text)
+    if found is None:
+        names = ", ".join(target_tables.company_names()) or "none yet"
+        raise ToolError(f"No researched company {text!r}. Researched companies: {names}.")
+    return str(found["name"])
+
+
+def target_company() -> str | None:
+    """The default target company the user saved, or None."""
+    value = tables.load_settings().get("target_company")
+    return value if isinstance(value, str) and value else None
 
 
 def years_experience() -> int | None:
@@ -234,6 +280,8 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"years of experience: {profile.get('years_experience') or '(not set: summaries show what your resume says)'}")
     print(f"retest window: {reassess_days()} days" + ("" if stored is not None else " (default, not set)"))
     print(f"answer style: {answer_style() or 'star (default, not set)'}")
+    print(f"research window: {research_days()} days" + ("" if profile.get("research_days") is not None else " (default, not set)"))
+    print(f"default target company: {target_company() or '(not set)'}")
     print(f"header: {'present' if header_text() else 'missing (profile header set NAME CONTACT_LINE)'}")
 
 
@@ -255,6 +303,15 @@ def cmd_init(args: argparse.Namespace) -> None:
     print("Saved the profile. Next: process-resumes")
 
 
+def _set_target_company(settings: Profile, value: str) -> None:
+    """Set the default target company (a researched one), or clear it with ""."""
+    name = parse_target_company(value)
+    if name is None:
+        settings.pop("target_company", None)
+    else:
+        settings["target_company"] = name
+
+
 def cmd_set(args: argparse.Namespace) -> None:
     """Change one setting."""
     if args.key not in SETTABLE_KEYS:
@@ -266,6 +323,10 @@ def cmd_set(args: argparse.Namespace) -> None:
         profile["years_experience"] = parse_years(args.value)
     elif args.key == "answer_style":
         profile["answer_style"] = parse_answer_style(args.value)
+    elif args.key == "research_days":
+        profile["research_days"] = parse_research_days(args.value)
+    elif args.key == "target_company":
+        _set_target_company(profile, args.value)
     elif args.key == "name":
         profile["name"] = args.value
     else:

@@ -105,20 +105,22 @@ def save_session(session: Mapping[str, Any]) -> None:
         conn.executemany("INSERT INTO session_item(session_id, position, item, kind) VALUES(?,?,?,?)",
                          [(sid, i, q["id"], q["kind"]) for i, q in enumerate(session["queue"])])
         conn.executemany(
-            "INSERT INTO session_log(session_id, at, item, kind, answered, confidence_after, tutor, quiz, body) "
-            "VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO session_log(session_id, at, item, kind, answered, confidence_after, tutor, quiz, style, "
+            "company, body) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             [(sid, e["at"], e["item"], e["kind"], int(bool((e.get("answer") or "").strip())),
-              e.get("confidence_after"), int(bool(e.get("tutor"))), int(bool(e.get("quiz"))), store.dump(e))
+              e.get("confidence_after"), int(bool(e.get("tutor"))), int(bool(e.get("quiz"))), e.get("style"),
+              e.get("company"), store.dump(e))
              for e in list(session["log"])[len(stored):]])
 
 
 def session_rows() -> list[Record]:
-    """One summary row per session, newest update first (for `sessions list`)."""
+    """One summary row per session, newest update first (for `sessions list`), with its company and style."""
     with store.transaction(write=False) as conn:
         rows = conn.execute(
             "SELECT s.id, s.title, s.mode, s.status, s.created, s.updated, "
             "(SELECT COUNT(DISTINCT item) FROM session_log WHERE session_id=s.id) AS logged, "
-            "(SELECT COUNT(*) FROM session_item WHERE session_id=s.id) AS total "
+            "(SELECT COUNT(*) FROM session_item WHERE session_id=s.id) AS total, "
+            "json_extract(s.body, '$.target') AS target, json_extract(s.body, '$.style') AS style "
             "FROM session s ORDER BY s.updated DESC, s.id")
         return [dict(row) for row in rows]
 

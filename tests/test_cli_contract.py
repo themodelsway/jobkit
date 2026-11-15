@@ -14,7 +14,16 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins" / "jobkit"
 
 TOOLS = ["jk.user.profile", "jk.resumes.process_resumes", "jk.resumes.query_resume",
          "jk.resumes.build_resume", "jk.resumes.lines", "jk.resumes.match_score", "jk.interview.arch", "jk.interview.lead",
-         "jk.interview.prep", "jk.interview.sessions", "jk.interview.readiness", "jk.admin"]
+         "jk.interview.prep", "jk.interview.sessions", "jk.interview.readiness", "jk.interview.target", "jk.admin"]
+
+# The commands each released package version installs. The installers reinstall only when the version changes, so a
+# new or removed command needs a new version: add an entry for it and never edit a released one.
+RELEASED_COMMANDS = {
+    "0.4.0": {"jobkit", "profile", "process-resumes", "query-resume", "build-resume", "resume-lines", "match-score",
+              "arch", "lead", "prep", "sessions", "readiness"},
+    "0.5.0": {"jobkit", "profile", "process-resumes", "query-resume", "build-resume", "resume-lines", "match-score",
+              "arch", "lead", "prep", "sessions", "readiness", "target"},
+}
 
 
 class HelpTests(unittest.TestCase):
@@ -32,6 +41,13 @@ class HelpTests(unittest.TestCase):
         for target in scripts.values():
             module, func = target.split(":")
             self.assertTrue(callable(getattr(importlib.import_module(module), func)), target)
+
+    def test_a_changed_command_list_has_a_new_version(self):
+        project = tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        self.assertIn(project["version"], RELEASED_COMMANDS,
+                      "a new package version needs its command list in RELEASED_COMMANDS")
+        self.assertEqual(set(project["scripts"]), RELEASED_COMMANDS[project["version"]],
+                         "the commands changed: give the package a new version (see AGENTS.md, Versions)")
 
 
 class SeedTests(unittest.TestCase):

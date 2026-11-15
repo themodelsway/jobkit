@@ -10,6 +10,7 @@ from typing import Any, NamedTuple
 
 from jk.base import ToolError
 from jk.interview import tables
+from jk.interview import target_tables
 from jk.resumes import match_tables
 from jk.resumes import tables as resume_tables
 from jk.user import tables as user_tables
@@ -48,6 +49,7 @@ KINDS: tuple[Kind, ...] = (
     Kind("lead-progress", lambda: {"questions": tables.load_lead_progress()}, lambda d: len(d["questions"])),
     Kind("lead-scope", lambda: {"companies": tables.load_company_facts()}, lambda d: len(d["companies"])),
     Kind("sessions", lambda: {s["id"]: s for s in tables.all_sessions()}, len),
+    Kind("research", lambda: {"companies": target_tables.load_companies()}, lambda d: len(d["companies"])),
     Kind("settings", user_tables.load_settings, len),
     Kind("employers", user_tables.load_employers, len),
     Kind("open-items", user_tables.load_open_items, len),

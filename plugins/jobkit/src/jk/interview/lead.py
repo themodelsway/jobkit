@@ -4,8 +4,9 @@
   lead init                      # create/extend questions + progress (never overwrites answers)
   lead status                    # per category: confidence counts; profile gaps
   lead next [--category C] [--order default|random]
-  lead show ID                   # question, profile facts, candidate stories for the 3 newest companies, saved answers
-  lead list [--category C]
+  lead show ID [--target COMPANY]   # question, profile facts, candidate stories for the 3 newest companies, saved
+                                    # answers; with --target, the company values it matches and their typical questions
+  lead list [--category C] [--target COMPANY]   # with --target, each question's matching values; read-only
   lead set ID principle|notes|confidence VALUE      # principle = "how I handle this" in your own words
   lead example ID COMPANY FIELD VALUE               # FIELD: situation task action result metric
   lead skip ID COMPANY [REASON]                     # no real example there (never had that role, say): not a gap
@@ -30,7 +31,7 @@ from typing import Any, Final, NamedTuple, TypedDict, cast
 from jk import common
 from jk.common import ToolError
 from jk.interview import arch
-from jk.interview import prep, tables
+from jk.interview import prep, tables, targets
 from jk.interview.story_model import Story
 from jk.resumes import query_resume as qr
 from jk.resumes import tables as rd_tables
@@ -286,9 +287,32 @@ def show(question: Question) -> None:
         print(f"  notes: {progress['notes']}")
 
 
+def target_item(question: Question) -> targets.Item:
+    """A question as the company matching sees it."""
+    return targets.question_item(question, prog()["questions"].get(question["id"]))
+
+
+def matches_text(company: dict[str, Any], question: Question) -> str:
+    """The company values a question matches and how: "Ownership (theme), Pace (word)"; "" for none."""
+    return ", ".join(f"{value['name']} ({how})" for value, how in targets.matches(company, target_item(question)))
+
+
+def print_target_values(company: dict[str, Any], question: Question) -> None:
+    """The values of the company the question matches, each with how and its stored typical questions."""
+    found = targets.matches(company, target_item(question))
+    print(f"  {company['name']} values: " + ("" if found else "none match this question"))
+    for value, how in found:
+        print(f"    {value['name']} (by {how}) {targets.fact_source(value)}")
+        for typical in targets.questions_for(company, value["id"]):
+            print(f"      Q: {typical['wording']} {targets.fact_source(typical)}")
+
+
 def cmd_show(args: argparse.Namespace) -> None:
-    """Show one question."""
-    show(find(args.id))
+    """Show one question; with --target, the company values it matches. Read-only."""
+    question = find(args.id)
+    show(question)
+    if args.target:
+        print_target_values(targets.find(args.target), question)
 
 
 def in_category(question: Question, category: str | None) -> bool:
@@ -296,14 +320,35 @@ def in_category(question: Question, category: str | None) -> bool:
     return not category or category.lower() in question["category"].lower()
 
 
+def question_row(question: Question, progress: dict[str, Any]) -> str:
+    """One listing row: id, category, confidence and example counts."""
+    p = progress.get(question["id"], blank())
+    return f"  {question['id']:<24} {question['category']:<28} {arch.CONF[p['confidence']]:<12} {examples_text(p)}"
+
+
 def cmd_list(args: argparse.Namespace) -> None:
-    """List questions with confidence and example counts."""
+    """List questions with confidence and example counts; with --target, the company values each matches."""
     progress = prog()["questions"]
-    for question in cards():
-        if in_category(question, args.category):
-            p = progress.get(question["id"], blank())
-            print(f"  {question['id']:<24} {question['category']:<28} {arch.CONF[p['confidence']]:<12} "
-                  f"{examples_text(p)}")
+    chosen = [q for q in cards() if in_category(q, args.category)]
+    if not args.target:
+        for question in chosen:
+            print(question_row(question, progress))
+        return
+    company = targets.find(args.target)
+    matched = [q for q in chosen if matches_text(company, q)]
+    print(f"Leadership questions for {company['name']}:")
+    for question in matched:
+        print(f"{question_row(question, progress)} | {matches_text(company, question)}")
+    print(f"\nQuestions that match no value of {company['name']}:")
+    for question in (q for q in chosen if q not in matched):
+        print(question_row(question, progress))
+    judgment = [v for v in targets.values(company) if not v.get("themes") and not v.get("hints")]
+    if judgment:
+        print("\nValues that need your judgment (no themes or hint words to match):")
+        for value in judgment:
+            print(f"  {value['name']} {targets.fact_source(value)}")
+            for typical in targets.questions_for(company, value["id"]):
+                print(f"    Q: {typical['wording']}")
 
 
 def ordered(args: argparse.Namespace, include_solid: bool = False) -> list[Question]:
@@ -419,9 +464,11 @@ def build_parser() -> argparse.ArgumentParser:
     nxt.set_defaults(fn=cmd_next)
     listing = sub.add_parser("list")
     listing.add_argument("--category")
+    listing.add_argument("--target", help="a researched company: mark each question with the values it matches")
     listing.set_defaults(fn=cmd_list)
     shower = sub.add_parser("show")
     shower.add_argument("id")
+    shower.add_argument("--target", help="a researched company: list the values this question matches")
     shower.set_defaults(fn=cmd_show)
     setter = sub.add_parser("set")
     setter.add_argument("id")

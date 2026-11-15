@@ -1,6 +1,6 @@
 [project]
 name = "jobkit"
-version = "0.4.0"
+version = "0.5.0"
 description = "Local resume data, matching and interview-prep tools for a job search"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -26,6 +26,7 @@ lead = "jk.interview.lead:main"
 prep = "jk.interview.prep:main"
 sessions = "jk.interview.sessions:main"
 readiness = "jk.interview.readiness:main"
+target = "jk.interview.target:main"
 
 [tool.uv]
 # The oldest uv the helper install accepts. Both installers read this line.

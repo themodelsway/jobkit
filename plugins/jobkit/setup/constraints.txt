@@ -1,3 +1,3 @@
-# jobkit 0.4.0
+# jobkit 0.5.0
 # Exact versions for the helper install. Generated from uv.lock by tools/pins.py; do not edit.
 pypdf==6.21.4

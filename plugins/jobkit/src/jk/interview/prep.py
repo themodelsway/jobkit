@@ -17,6 +17,7 @@ Stories (STAR narratives)
   prep styles            # the three answer styles with their parts and a use for each
   prep new STORY_ID --company C --theme T [--headline H] [--engagement E]   # extra story beyond the skeleton
   prep for-jd jd.txt     # ("-" = stdin) stories ranked for a job description (+ typical questions)
+  prep for-target [COMPANY]   # stories ranked for a researched company (`target`); no COMPANY: the profile default
 
 Engagements (one real project: facts with a basis, decisions, people), reusable by several stories
   prep engagement add ID --company C --title T [--role R] [--period P] [--summary S]
@@ -63,7 +64,7 @@ from typing import Any, Final, TypedDict, cast
 from jk import common
 from jk.common import ToolError
 from jk.interview import story_model as sm
-from jk.interview import styles, tables
+from jk.interview import story_targets, styles, tables
 from jk.interview.story_model import Engagement, Story
 from jk.resumes import query_resume as qr
 from jk.resumes.resume_data import Bullet, Company, newest_start
@@ -853,6 +854,7 @@ def _add_story_parsers(sub: Any) -> None:
     for_jd.add_argument("jd", help="job description file, or - for stdin")
     for_jd.add_argument("--top", type=int, default=8)
     for_jd.set_defaults(fn=cmd_for_jd)
+    story_targets.add_parser(sub, stories, engagements)
     new = sub.add_parser("new")
     new.add_argument("id")
     new.add_argument("--company", required=True)
