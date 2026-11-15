@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Final
 
 from jk import store
+
+FOUND: Final[str] = "found"
+NONE_FOUND: Final[str] = "none found"
 
 Record = dict[str, Any]
 COMPANY_FIELDS = ("key", "name", "outcome", "researched", "style", "style_basis")

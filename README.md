@@ -2,7 +2,9 @@
 
 jobkit supports interview preparation through tutoring, mock interviews and readiness reports. Stored resumes provide the experience behind the stories and questions. Resume tailoring for job postings is available as an early preview.
 
-jobkit provides three skills for Claude Code and Codex: interview practice, tutoring with readiness reports, and resume workflows. Requests use plain language; the skills run the required commands.
+jobkit provides three skills for Claude Code and Codex: interview practice, tutoring with readiness reports, and resume workflows. Requests use plain language; each skill gives the agent instructions for a task.
+
+Claude Code and Codex are coding agents, called **agents** here. The agent loads jobkit's skills and runs its commands within its permission settings. The **model** is the language model the agent uses: it interprets requests and the content supplied, such as resume text or page images, and writes the responses.
 
 ![License: Apache 2](https://img.shields.io/badge/License-Apache_2-2ea44f?labelColor=555555) ![macOS: Claude Code and Codex](https://img.shields.io/badge/macOS-Claude_Code_and_Codex-2ea44f?logo=apple&logoColor=white&labelColor=555555) ![Linux: Claude Code and Codex](https://img.shields.io/badge/Linux-Claude_Code_and_Codex-2ea44f?labelColor=555555&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPGVsbGlwc2UgY3g9IjEyIiBjeT0iMTQuNSIgcng9IjcuMiIgcnk9IjguNiIgZmlsbD0iIzM2MzYzNiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iNy41IiByPSI1IiBmaWxsPSIjMzYzNjM2Ii8%2BPGVsbGlwc2UgY3g9IjEyIiBjeT0iMTUuOCIgcng9IjQuMiIgcnk9IjYiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIxMC4yIiBjeT0iNi42IiByPSIxLjIiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIxMy44IiBjeT0iNi42IiByPSIxLjIiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIxMC40IiBjeT0iNi43IiByPSIuNSIgZmlsbD0iIzAwMCIvPjxjaXJjbGUgY3g9IjEzLjYiIGN5PSI2LjciIHI9Ii41IiBmaWxsPSIjMDAwIi8%2BPGVsbGlwc2UgY3g9IjEyIiBjeT0iOS4yIiByeD0iMi4yIiByeT0iMS4xIiBmaWxsPSIjZjVhNjIzIi8%2BPGVsbGlwc2UgY3g9IjgiIGN5PSIyMi42IiByeD0iMyIgcnk9IjEuMiIgZmlsbD0iI2Y1YTYyMyIvPjxlbGxpcHNlIGN4PSIxNiIgY3k9IjIyLjYiIHJ4PSIzIiByeT0iMS4yIiBmaWxsPSIjZjVhNjIzIi8%2BPC9zdmc%2B) ![Windows: Claude Code](https://img.shields.io/badge/Windows-Claude_Code-007ec6?labelColor=555555&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMy40IDkuOCAydjkuNEgwek0xMSAxLjggMjQgMHYxMS40SDExek0wIDEyLjZoOS44VjIyTDAgMjAuNnpNMTEgMTIuNmgxM1YyNGwtMTMtMS44eiIvPjwvc3ZnPg==)
 
@@ -29,7 +31,7 @@ jobkit provides three skills for Claude Code and Codex: interview practice, tuto
 
 ## Quick start
 
-After installation, Claude Code or Codex accepts requests in plain words from any folder. The first request leads to an offer to set up the helper ([What setup installs](#what-setup-installs)); one yes is needed.
+After installation (for Claude Code, at user scope: see [Install on Claude Code](#install-on-claude-code)), the agent accepts requests in plain words from any folder. On the first request the skill tells the agent to offer to set up the helper ([What setup installs](#what-setup-installs)); setup starts once the user responds with yes, within the permissions set in the agent.
 
 1. **Resume import.** The skill takes the folder that holds the resumes, finds the resume files (PDF, Word, Markdown or text) in it and its subfolders, previews what was found, and then reads them. The jobkit commands only read resume files, and the skills tell the agent never to change them.
 2. **Topic instruction.** The tutor explains a topic, a question or one of the user's stories first, then checks understanding with a short quiz.
@@ -59,7 +61,7 @@ The tutor teaches a card, question or story first, then checks understanding wit
 - **Stories.** Stories seeded from the resumes, one per employer and theme. Each is written once and can be told as STAR (situation, task, action, result), SOAR (situation, obstacle, action, result) or CARL (challenge, action, result, learning). Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
 - **Technical drill cards.** Cards for the services, decision pairs and scenarios of the technologies an interview covers. One example technology is bundled, and any other is added from a JSON topic list, with no code. Lifecycle facts such as "closed to new customers" or "sunset" are recorded only with a link to the vendor's own documentation, never from memory.
 - **Leadership questions.** A question set (roadmapping, mentoring, conflict, prioritisation and more), each with the user's principle and one example per recent employer.
-- **Company research.** For a named company, where the app can read web pages, the skill tells the agent to look up how that company hires (published values, interview rounds, what interviewers look for, typical questions) and to save each fact with its link, a short quote and the date read, leaving out reviews and other user-written posts. Stories and practice sessions can then be ranked against that company's values. Nothing about any company is shipped. The skill tells the agent to recheck stale facts when they are next needed; the default research window is 30 days. The commands refuse a fact without a link or quote, but cannot check that a quote is on its page; each fact keeps its link to open.
+- **Company research.** For a named company, where the agent can read web pages, the skill tells the agent to look up how that company hires (published values, interview rounds, what interviewers look for, typical questions) and to save each fact with its link, a short quote and the date read, leaving out reviews and other user-written posts. Stories and practice sessions can then be ranked against that company's values. Nothing about any company is shipped. The skill tells the agent to recheck stale facts when they are next needed; the default research window is 30 days. The commands refuse a fact without a link or quote, but cannot check that a quote is on its page; each fact keeps its link to open.
 - **Practice sessions.** Resumable. A session keeps the complete answers and grades; later drills add entries and never edit old ones.
 - **Mock interview.** The interview-prep skill asks first, gives no hints, then grades.
 
@@ -74,22 +76,40 @@ Resume tailoring and match scoring are early previews. Their output requires rev
 - **Tailoring.** Given a job posting, it builds a resume from the stored lines. It ranks the lines per employer, suggests opening summaries, lists the skills the posting asks for that no stored line supports, and writes a Markdown draft. The draft requires review before use.
 - **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The first step saves the posting in the data folder, so the later steps name it instead of passing it again. Each completed scoring run also removes saved postings unused for more than 30 days; nothing removes them on a schedule.
 
-## Supported apps and systems
+## Supported agents and systems
 
-| App | Where | macOS | Linux | Windows |
+| Agent | Where | macOS | Linux | Windows |
 |---|---|---|---|---|
 | Claude Code | terminal, desktop app, IDE extensions | yes | yes | yes, with Git for Windows |
 | Codex | command line (`codex`), running locally | yes | yes | not yet |
 
-Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Codex. On an unsupported combination the skills say so and install nothing. Checked with Claude Code 2.1 and Codex CLI 0.167 on macOS.
+Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Codex. The setup refuses, and installs nothing, only where it can tell: on an operating system other than macOS, Linux or Windows, and for Codex on Windows. It does not detect the Codex IDE extension or hosted Codex on macOS or Linux, so these are untested rather than blocked. Checked with Claude Code 2.1 and Codex CLI 0.167 on macOS.
+
+## Before you begin
+
+- The agent (Claude Code or Codex) is installed, signed in and recent enough to have plugin commands (`claude plugin --help` or `codex plugin --help` in a terminal lists them). If it is not, install or update the agent from its official documentation first.
+- The computer is online: installation downloads the plugin from GitHub, and the first-time setup downloads software ([What setup installs](#what-setup-installs)).
+- On Windows, Git for Windows is installed ([Windows](#windows)).
+
+Installation has two steps in either agent. This repository holds a marketplace catalog, so it is first registered as a marketplace in the agent, and jobkit is then installed from it. Three names are involved: `themodelsway/jobkit` is the GitHub repository, `themodelsway` is the marketplace and `jobkit` is the plugin. Cloning the repository is not needed; [Installing from a checkout](#installing-from-a-checkout) is an optional path for contributors and local testing.
+
+| Step | Claude Code (in a session) | Codex (in a terminal) |
+|---|---|---|
+| Register the repository's marketplace | `/plugin marketplace add themodelsway/jobkit` | `codex plugin marketplace add themodelsway/jobkit` |
+| Install the plugin | `/plugin install jobkit@themodelsway` | `codex plugin add jobkit@themodelsway` |
 
 ## Install on Claude Code
 
 ### macOS and Linux
 
 1. Marketplace registration, in Claude Code: `/plugin marketplace add themodelsway/jobkit`
-2. Plugin installation: `/plugin install jobkit@themodelsway`
-3. A new session makes the installed skills available; requests use plain language (see [Quick start](#quick-start)).
+2. Plugin installation: `/plugin install jobkit@themodelsway`. When asked for a scope, choose user scope ("install for you"): it makes jobkit available in every folder on this computer. Project and local scope limit it to the current project, so it is missing from other folders. The terminal equivalent is `claude plugin install jobkit@themodelsway --scope user`.
+3. A new session makes the installed skills available.
+4. Check: jobkit is listed in the Installed tab of `/plugin`, or by `claude plugin list` in a terminal. If it is missing or disabled, see [Troubleshooting](#troubleshooting).
+5. First request, for example:
+   > Use jobkit to import my resumes.
+
+   The skill tells the agent to offer the helper setup first. Once the user responds with yes, setup runs, within the permissions set in the agent. The agent then asks for the folder that holds the resumes and shows what it found before reading them. The wording above is an example; any plain request works (see [Quick start](#quick-start)).
 
 ### Windows
 
@@ -97,15 +117,15 @@ Claude Code on Windows runs its commands through Git for Windows, a prerequisite
 
 1. Git installation, in a terminal: `winget install --id Git.Git -e`, or the installer from [git-scm.com](https://git-scm.com/download/win) with the standard options.
 2. Restarting Claude Code makes Git available to it.
-3. The same three steps as for macOS and Linux follow.
+3. The same steps as for macOS and Linux follow.
 
 Setup installs [uv](https://docs.astral.sh/uv/) when it is missing. [What setup installs](#what-setup-installs) explains when setup runs.
 
 ### After installing
 
 - **Skills installed:** `jobkit:interview-prep` (mock interview), `jobkit:tutor` (teaching and readiness reports) and `jobkit:resume-workflows` (add a resume, tailor a resume for a job posting).
-- **Helpers installed:** `resume-visual-scanner` (reads the pages of a PDF as pictures, once the user responds with yes to a visual reading) and `jd-matcher` (the first rating pass of a match score). The skills tell the agent to hand work to them, to keep page images and long postings out of the main conversation, and to do the work itself when the app cannot run them.
-- **Update:** `/plugin marketplace update themodelsway`, then `/plugin update jobkit@themodelsway`, then restart Claude Code. The next time a skill starts it notices the commands are older and offers to update them.
+- **Helpers installed:** `resume-visual-scanner` (reads the pages of a PDF as pictures, once the user responds with yes to a visual reading) and `jd-matcher` (the first rating pass of a match score). The skills tell the agent to hand work to them, to keep page images and long postings out of the main conversation, and to do the work itself when the agent cannot run them.
+- **Update:** in a terminal, `claude plugin marketplace update themodelsway` (refreshes the marketplace's list of versions), then `claude plugin update jobkit@themodelsway` (updates the installed plugin); in a session, the Installed tab of `/plugin` offers the same update. A new session applies it. The next time a skill starts, it tells the agent to notice that the commands are older and to offer to update them.
 - **Remove:** `/plugin uninstall jobkit@themodelsway`. `~/.jobkit` and your data are left alone, and so are the commands (see [Removing the commands](#removing-the-commands)).
 - **Trying it from a checkout:** `claude --plugin-dir plugins/jobkit` loads the three skills for one session.
 
@@ -115,14 +135,22 @@ Codex support is for the Codex command line on macOS and Linux, running locally.
 
 1. Marketplace registration: `codex plugin marketplace add themodelsway/jobkit`
 2. Plugin installation: `codex plugin add jobkit@themodelsway`
-3. Starting `codex` makes the installed skills available; requests use plain language (see [Quick start](#quick-start)).
+3. Starting `codex` makes the installed skills available.
+4. Check: `codex plugin list --marketplace themodelsway` lists jobkit. If it is missing, see [Troubleshooting](#troubleshooting).
+5. First request: the same as for Claude Code (step 5 under [macOS and Linux](#macos-and-linux)).
 
-Codex runs commands in a sandbox that can read your files but, by default, cannot write outside the folder you started it in and cannot go online. jobkit keeps its data in `~/.jobkit`, so allow that one folder. Either approve it when Codex asks, or add this to `~/.codex/config.toml`, with the full path that `echo ~/.jobkit` prints in a terminal:
+Codex runs commands in a sandbox that can read your files but, by default, cannot write outside the folder you started it in and cannot go online. jobkit keeps its data in `~/.jobkit`, so allow that one folder. The simplest way is to approve it when Codex asks. To allow it ahead of time with the workspace-write sandbox settings, edit `~/.codex/config.toml`, using the full path that `echo ~/.jobkit` prints in a terminal:
 
-```
-[sandbox_workspace_write]
-writable_roots = ["FULL-PATH-OF-YOUR-HOME-FOLDER/.jobkit"]
-```
+- If the file has no `[sandbox_workspace_write]` table, add one:
+
+  ```
+  [sandbox_workspace_write]
+  writable_roots = ["FULL-PATH-OF-YOUR-HOME-FOLDER/.jobkit"]
+  ```
+
+- If the table is already there, do not add a second one (Codex then cannot read the file). Add the path to its existing `writable_roots` list and keep the folders already in it.
+
+This setting applies to the workspace-write sandbox only; it has no effect in a read-only session. A setup that uses Codex permission profiles instead configures folders there, as described in the Codex documentation.
 
 The first-time setup also downloads and installs software (see [What setup installs](#what-setup-installs)), which the sandbox blocks: approve that step when Codex asks. If it was blocked, the skill says that setup did not finish; allow it and ask again, and it carries on from where it stopped. If a save is blocked later, the skill says that nothing was saved and names the folder to allow. Do not turn the sandbox off for this.
 
@@ -130,9 +158,17 @@ The first-time setup also downloads and installs software (see [What setup insta
 - **Update:** `codex plugin marketplace upgrade themodelsway`, then `codex plugin add jobkit@themodelsway` again. The next time a skill starts it offers to update the commands.
 - **Remove:** `codex plugin remove jobkit@themodelsway`, and `codex plugin marketplace remove themodelsway` to forget the marketplace. Your data and the commands are left alone.
 
+## Troubleshooting
+
+- **The agent does not know a plugin command** (`/plugin` or `codex plugin` is not recognised): the agent is too old. Update it and try again.
+- **jobkit or the marketplace is not found:** register the marketplace again (first row of the table in [Before you begin](#before-you-begin)), then install. In Claude Code, a plugin installed at project or local scope is missing from other folders; install it again at user scope. A plugin shown as disabled is turned on in the Installed tab of `/plugin` or with `claude plugin enable jobkit@themodelsway`.
+- **The skills do not respond to a request:** start a new session after installing or updating, and name jobkit in the request.
+- **Setup did not finish:** setup downloads software, so the computer must be online and the agent must allow the download (approve it when asked). Asking again carries on from where it stopped.
+- **uv is too old:** setup never replaces an existing uv. Update it the way it was installed: `uv self update` for uv's own installer, or the package manager that installed it (for example `brew upgrade uv`). Then ask again.
+
 ## What setup installs
 
-The first time a skill runs, in either app, the skill tells the agent to say that a small helper needs to be set up and to ask whether that is OK, to install nothing on a no, and once the user responds with yes to run `setup/install` from the plugin folder (`setup/install.ps1` on Windows). That installer installs exactly this:
+The first time a skill runs, in either agent, the skill tells the agent to say that a small helper needs to be set up and to ask whether that is OK, to install nothing on a no, and once the user responds with yes to run `setup/install` from the plugin folder (`setup/install.ps1` on Windows). That installer installs exactly this:
 
 | What | Version | From | When |
 |---|---|---|---|
@@ -148,21 +184,21 @@ The first time a skill runs, in either app, the skill tells the agent to say tha
 - If setup stops half way (for example offline), what it already installed stays; asking again finishes it.
 - Your data is kept in `~/.jobkit` (on Windows, the `.jobkit` folder inside your user folder).
 
-## Using both apps
+## Using both agents
 
 Claude Code and Codex share one set of installed commands and one `~/.jobkit`. Whatever is saved through one is available in the other: resumes, practice sessions, stories and match scores.
 
-- The helper is set up once. The second app finds it ready and installs nothing.
-- Keep the jobkit plugin up to date in both apps, so their instructions match the commands. If the two differ, the commands stay at the newer version and are never downgraded.
+- The helper is set up once. The second agent finds it ready and installs nothing.
+- Keep the jobkit plugin up to date in both agents, so their instructions match the commands. If the two differ, the commands stay at the newer version and are never downgraded.
 - The database refuses to open with commands older than the ones that last wrote it, so a version mix does not damage your data.
 
 ### Removing the commands
 
-Uninstalling a plugin leaves the commands, because the other app may still use them. To remove them: `uv tool uninstall jobkit`. To remove your data as well, delete `~/.jobkit` yourself; nothing else does.
+Uninstalling a plugin leaves the commands, because the other agent may still use them. To remove them: `uv tool uninstall jobkit`. To remove your data as well, delete `~/.jobkit` yourself; nothing else does.
 
 ## Installing from a checkout
 
-Installing from the `themodelsway/jobkit` repository requires no extra steps. The plugin is the `plugins/jobkit/` folder of the repository, so the installed copy holds that folder and not the contributor files at the repository root (tests, documentation, OpenSpec files). A local-folder installation from a working checkout (for example while developing) must be added as a marketplace, not as the plugin folder alone, and a plain copy of the checkout also carries `.git`, `.venv` and `tmp/`. A clean copy holds the two marketplace catalogs and the plugin, without those folders or any ignored file. The copy script needs Git and Python 3.11 or newer, on macOS, Linux or Windows (on Windows, use the `py -3` launcher or any Python 3.11 or newer):
+This is optional, for contributors and local testing; a normal installation does not use it. Installing from the `themodelsway/jobkit` repository requires no extra steps. The plugin is the `plugins/jobkit/` folder of the repository, so the installed copy holds that folder and not the contributor files at the repository root (tests, documentation, OpenSpec files). A local-folder installation from a working checkout (for example while developing) must be added as a marketplace, not as the plugin folder alone, and a plain copy of the checkout also carries `.git` and every file Git ignores. A clean copy holds the two marketplace catalogs and the plugin, without `.git` or any ignored file. The copy script needs Git and Python 3.11 or newer, on macOS, Linux or Windows (on Windows, use the `py -3` launcher or any Python 3.11 or newer):
 
 ```
 python3 tools/clean_copy.py FULL-PATH-OF-A-NEW-FOLDER
@@ -189,7 +225,7 @@ uv installs all thirteen commands in its tool folder (`uv tool dir --bin` prints
 Requirements: macOS, Linux or Windows with Git for Windows (see above), [uv](https://docs.astral.sh/uv/) (it installs the pinned Python), and gitleaks for contributors who commit. poppler is optional: it improves PDF reading and draws the page pictures for a visual reading of any PDF (without it, pictures can be taken only from a plain scan).
 
 ```
-uv sync                       # creates .venv and installs the commands into it
+uv sync                       # creates the environment and installs the commands into it
 ```
 
 Optional tools, by system:
@@ -201,7 +237,7 @@ Optional tools, by system:
 
 On Windows neither is needed to try jobkit. Without `pdftotext` the PDF reader falls back to `pypdf`, which works with no extra install; poppler stays preferred when it is present. In testing, the `pypdf` layout gave the same employers, date lines and bullet counts as poppler.
 
-The examples below use `uv run <command>`, the same on macOS, Linux and Windows. Run them from the repository root: its `pyproject.toml` is a uv workspace around `plugins/jobkit`, so the one `uv.lock` and `.venv` are there. The pre-commit hook and the skills run in Git Bash on Windows.
+The examples below use `uv run <command>`, the same on macOS, Linux and Windows. Run them from the repository root: its `pyproject.toml` is a uv workspace around `plugins/jobkit`, so the one `uv.lock` and its environment are there. The pre-commit hook and the skills run in Git Bash on Windows.
 
 The home folder and database are created once (`~/.jobkit`, or the folder named by `JOBKIT_HOME`):
 
@@ -239,7 +275,7 @@ Save the name and contact line once with `profile header set NAME CONTACT_LINE` 
 |---|---|
 | `process-resumes` | Reads resumes from the resume folder, finds the employers on its own, and builds the resume data. `--survey` previews without writing; `--force` rebuilds. `curate` changes the hand curation (several entries at once from standard input); `visual` handles PDFs read from their pages (`list`, `render`, `text`, `schema`, `compare`, `confirm`). |
 | `query-resume` | `for-jd` ranks lines for a posting; `search`, `review` and `stats` filter lines, list items that need a human look and show counts. |
-| `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model rates each requirement against the lines; the command does the arithmetic. `extract` saves the posting, and the later steps can name it with `--key`. |
+| `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model used by the agent rates each requirement against the lines; the command does the arithmetic. `extract` saves the posting, and the later steps can name it with `--key`. |
 | `build-resume JD` | Writes a tailored Markdown resume. Name and contact come from the saved header (`profile header`), never from the resume data. |
 | `prep`, `arch`, `lead` | Stories, drill cards and the leadership question set. |
 | `target` | Researched target companies: each fact with its link, quote, label and date read. |
@@ -327,7 +363,7 @@ New tools follow the same shape (`build_parser()`, `main(argv) -> int`, typed fu
 
 jobkit data is stored in the `~/.jobkit` folder (or the folder named by `JOBKIT_HOME`). Your own resume files are read from where you keep them.
 
-When a skill runs, the app (Claude Code or Codex) gives its model what the task needs, such as resume lines, a job posting or your practice answers, and the model reads them wherever that provider runs it. The skills tell the agent to ask first, and to give pictures of a PDF's pages to the model once the user responds with yes. This rests on the agent following its instructions; the commands themselves do not check for a yes. Page images that `process-resumes visual render` writes go to `~/.jobkit/output/visual/pages/`, and `visual confirm` removes them. How that content is handled, kept or used is decided by the model provider (Anthropic for Claude Code, OpenAI for Codex) and by the privacy settings you have configured with them, not by jobkit.
+When a skill runs, the agent sends the model what the task needs, such as resume lines, a job posting or your practice answers, and the model reads them wherever that provider runs it. The skills tell the agent to ask first, and to give pictures of a PDF's pages to the model once the user responds with yes. This rests on the agent following its instructions; the commands themselves do not check for a yes. Page images that `process-resumes visual render` writes go to `~/.jobkit/output/visual/pages/`, and `visual confirm` removes them. How that content is handled, kept or used is decided by the model provider (by default Anthropic for Claude Code and OpenAI for Codex, or whichever provider the agent is set up to use) and by the privacy settings you have configured with them, not by jobkit.
 
 Setup downloads software as listed in [What setup installs](#what-setup-installs).
 

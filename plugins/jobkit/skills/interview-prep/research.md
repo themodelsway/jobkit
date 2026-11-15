@@ -31,7 +31,7 @@ If no page qualifies, run `target none-found NAME`, tell the user, use the answe
 ## Re-reading a stale company
 `target stale` and `target show NAME` list the facts older than the research window. For each, open its link again:
 - The quote is still there: `target recheck NAME FACT`.
-- The page now says something different or nothing: show the user the old and new wording side by side and ask whether to change it. Once the user responds with yes, save the new fact under the same id (`target save`) or, when the page no longer says it at all, `target recheck NAME FACT --remove`. On no, leave it as it is.
+- The page now says something different or nothing: show the user the old and new wording side by side and ask whether to change it. Once the user responds with yes, save the new fact under the same id (`target save`) or, when the page no longer says it at all, `target recheck NAME FACT --remove`. The command refuses to remove a company's last fact: then ask whether to drop the company's research, and once the user responds with yes, run `target remove NAME` and research it again. On no, leave it as it is.
 - The page cannot be read: leave the fact; it stays stale.
 
 ## Talking about facts

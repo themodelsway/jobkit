@@ -390,13 +390,13 @@ class SharedTextTests(unittest.TestCase):
 
     def test_blocked_write_names_the_folder_and_keeps_protections_on(self):
         text = shared_block(skill_text("tutor"), "preflight")
-        self.assertIn("never suggest turning the app's protections off", text)
+        self.assertIn("never suggest turning your own protections off", text)
         self.assertTrue(any("nothing was saved" in x and x.endswith("DATA_FOLDER") for x in self.said()))
 
     def test_unsupported_environment_is_said_plainly_and_installs_nothing(self):
         text = shared_block(skill_text("tutor"), "preflight")
         self.assertIn("`unsupported`: install nothing", text)
-        self.assertTrue(any("isn't available with this app on this kind of computer yet" in x for x in self.said()))
+        self.assertTrue(any("this setup doesn't work on your operating system yet" in x for x in self.said()))
 
     def test_preflight_explains_git_for_windows_in_plain_words(self):
         said = [x for x in shared_block(skill_text("tutor"), "preflight").splitlines() if x.strip().startswith(">")]

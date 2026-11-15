@@ -48,3 +48,29 @@ Team sizes, reports, budget and cadence SHALL be stored only when the user provi
 #### Scenario: Re-init
 - **WHEN** `init` is run again
 - **THEN** existing principles and examples are unchanged
+
+### Requirement: Questions carry company values
+`list` and `show` SHALL accept `--target COMPANY` and mark each leadership question with the values of that company it matches, by the question's themes or by a hint word in the question's text, using the same matching as stories.
+
+#### Scenario: Questions for a company
+- **WHEN** `list --target COMPANY` is run
+- **THEN** each question shows the company values it matches and how, and questions that match none are listed separately
+
+#### Scenario: Values no question can match
+- **WHEN** the company has values that list no themes and no hint words
+- **THEN** those values are listed at the end as needs your judgment, with their typical questions
+
+#### Scenario: Show with a company
+- **WHEN** `show ID --target COMPANY` is run
+- **THEN** the question's output also lists the matching values and the company's typical questions for them
+
+#### Scenario: No company named
+- **WHEN** `list` is run without `--target` while the profile has a default company
+- **THEN** the output is the same as before this change
+
+### Requirement: Company view changes nothing
+Viewing leadership questions against a company SHALL NOT change any principle, example, skip mark or confidence.
+
+#### Scenario: View twice
+- **WHEN** a company view is run twice
+- **THEN** stored principles and examples are unchanged

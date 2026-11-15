@@ -65,3 +65,48 @@ The report SHALL NOT change any stored data.
 #### Scenario: Nothing due
 - **WHEN** no item is aging
 - **THEN** the output says none are due and the exit status is 0
+
+### Requirement: Limit to a target company
+With `--target COMPANY` the report SHALL show evidence per company value: the value's state as defined for target companies, and the stories and leadership questions that match it, each with its existing label and how it matched. The system SHALL NOT compute a single percentage or rank companies.
+
+#### Scenario: Value with a solid story
+- **WHEN** a story that matches a value by theme is done-rehearsed
+- **THEN** the value reads covered and lists that story with the label done-rehearsed
+
+#### Scenario: Value matched only by word
+- **WHEN** the only matches for a value are by word
+- **THEN** the value reads possible and each item is marked matched by word
+
+#### Scenario: Value with nothing
+- **WHEN** a value has themes or hint words and no story or question matches
+- **THEN** the value reads no story
+
+#### Scenario: Value that cannot be matched
+- **WHEN** a value lists no themes and no hint words
+- **THEN** the value reads needs your judgment, never untested and never covered
+
+#### Scenario: No score
+- **WHEN** the company report is shown
+- **THEN** it contains no overall percentage
+
+#### Scenario: Company is always named
+- **WHEN** `readiness` is run without `--target` while the profile has a default company
+- **THEN** the report is the same as before this change
+
+### Requirement: Company with a job description
+`--target` MAY be combined with `--jd`, and the report SHALL then cover only what both select. Both SHALL narrow the same report, not produce two.
+
+#### Scenario: Both filters
+- **WHEN** `--target COMPANY --jd jd.txt` is given
+- **THEN** every company value is still listed with its state, and under each only the items the job description also selects
+
+### Requirement: Company report is read-only
+The company report SHALL NOT change any stored data, and `--due` SHALL accept `--target` to list only due items that match a company value by theme or by word.
+
+#### Scenario: Due for a company
+- **WHEN** `--due --target COMPANY` is run and three items are due, one matching
+- **THEN** only the matching item is listed
+
+#### Scenario: Due, nothing matching
+- **WHEN** `--due --target COMPANY` is run and no due item matches
+- **THEN** the command says how many items are due in all and that none match this company

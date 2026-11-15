@@ -160,8 +160,12 @@ def cmd_recheck(args: argparse.Namespace) -> None:
         raise ToolError(f"{company['name']} has no fact {args.fact!r}. Its facts: "
                         + ", ".join(f["id"] for f in company["facts"]))
     if args.remove:
-        company["facts"] = [f for f in company["facts"]
-                            if f["id"] != args.fact and not (f["kind"] == "question" and f.get("value") == args.fact)]
+        kept_facts = [f for f in company["facts"]
+                      if f["id"] != args.fact and not (f["kind"] == "question" and f.get("value") == args.fact)]
+        if not kept_facts:
+            raise ToolError(f"Removing {args.fact} would leave {company['name']} with no facts, so nothing was "
+                            f"removed. To drop its research, use `target remove {company['name']}`.")
+        company["facts"] = kept_facts
         kept = [i for i in company.get("style_facts", []) if i in {f["id"] for f in company["facts"]}]
         if company.get("style") and not kept:
             company.update(style=None, style_basis=None)

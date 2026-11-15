@@ -232,6 +232,14 @@ class TargetCommandTests(HomeCase):
         self.assertEqual(code, 1)
         self.assertIn("v1", out)
 
+    def test_removing_the_last_fact_is_refused(self):
+        today = date.today().isoformat()
+        self.save(save(fact(pulled=today), fact("q1", kind="question", value="v1", name=None, pulled=today)))
+        code, out = self.cli("recheck", "Company X", "v1", "--remove")
+        self.assertEqual(code, 1)
+        self.assertIn("target remove Company X", out)
+        self.assertEqual([f["id"] for f in tt.load_company("Company X")["facts"]], ["v1", "q1"])
+
     def test_remove_says_how_many_sessions_name_it(self):
         self.save(self.seed())
         with mock.patch.object(target.tables, "all_sessions", return_value=[{"target": "company x"}] * 2):
@@ -269,11 +277,18 @@ class ProfileSettingTests(HomeCase):
         with self.assertRaises(ToolError):
             targets.find(None, use_default=True)
 
+    def test_a_none_found_company_cannot_be_the_default(self):
+        tt.save_company({"key": "small co", "name": "Small Co", "outcome": targets.NONE_FOUND,
+                         "researched": date.today().isoformat(), "style": None, "style_basis": None,
+                         "style_facts": [], "facts": []})
+        self.assertEqual(self.set("target_company", "Small Co"), 1)
+        self.assertIsNone(profile.target_company())
+
     def test_none_found_is_refused_alike_named_or_default(self):
         tt.save_company({"key": "small co", "name": "Small Co", "outcome": targets.NONE_FOUND,
                          "researched": date.today().isoformat(), "style": None, "style_basis": None,
                          "style_facts": [], "facts": []})
-        self.set("target_company", "Small Co")
+        profile.save({"resume_root": str(self.home), "target_company": "Small Co"})  # set before the research
         for name, default in (("Small Co", False), (None, True)):
             with self.subTest(default=default), self.assertRaises(ToolError) as caught:
                 targets.find(name, use_default=default)

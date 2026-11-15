@@ -85,3 +85,64 @@ The profile SHALL hold a retest window, `reassess_days`, as a whole number of da
 #### Scenario: Nothing stored
 - **WHEN** no window has been set
 - **THEN** the window is 30 and `profile status` says it is the default
+
+### Requirement: Default answer style
+The profile SHALL hold an optional default answer style (star, soar or carl), set with `set` and shown by `status`. It SHALL apply wherever a style is needed and none is given, and a command option SHALL override it for that run only.
+
+#### Scenario: Set the style
+- **WHEN** `set answer_style carl` is run
+- **THEN** `status` shows carl as the default style
+
+#### Scenario: Invalid value
+- **WHEN** `set answer_style bogus` is run
+- **THEN** the command fails with status 1, names the valid styles, and the stored value is unchanged
+
+#### Scenario: Override
+- **WHEN** a command is given a style different from the default
+- **THEN** that run uses it and the stored default is unchanged
+
+### Requirement: Research window
+The profile SHALL hold a research window in days, 30 when not set, set with `set research_days N` and shown by `status`. It SHALL decide when a researched company is stale.
+
+#### Scenario: Default
+- **WHEN** `research_days` has never been set
+- **THEN** `status` shows 30
+
+#### Scenario: Set the window
+- **WHEN** `set research_days 60` is run
+- **THEN** `status` shows 60 and a fact read 45 days ago is not stale
+
+#### Scenario: Invalid value
+- **WHEN** `set research_days 0` or `set research_days soon` is run
+- **THEN** the command fails with status 1, says a whole number of days of 1 or more is needed, and the stored value is unchanged
+
+### Requirement: Default target company
+The profile SHALL hold an optional default target company, set with `set` and shown by `status`. It SHALL be used only by the commands whose single purpose is to view a company (showing a profile and ranking stories for a company) when no company is given; every other command SHALL apply a company only when one is named.
+
+#### Scenario: Set the company
+- **WHEN** `set target_company NAME` is run for a profile that exists
+- **THEN** `status` shows it as the default company
+
+#### Scenario: Unknown company
+- **WHEN** `set target_company NAME` is run for a company with no profile
+- **THEN** the command fails with status 1, lists the profiles that exist, and the stored value is unchanged
+
+#### Scenario: Company with nothing found
+- **WHEN** `set target_company NAME` is run for a company recorded as none found
+- **THEN** the command fails with status 1, says research found no qualifying page for it, and the stored value is unchanged
+
+#### Scenario: Default used
+- **WHEN** a default company is set and stories are ranked for a company with none given
+- **THEN** the default is used and the output says so
+
+#### Scenario: Default not applied elsewhere
+- **WHEN** a default company is set and a session, a readiness report or a leadership list is run with no company named
+- **THEN** the result is the same as with no default set
+
+#### Scenario: Default company removed
+- **WHEN** the default company's profile no longer exists and a company view is run with no company
+- **THEN** the command fails with status 1, says the default no longer exists, and lists the profiles that do
+
+#### Scenario: Clear the default
+- **WHEN** `set target_company ""` is run
+- **THEN** `status` shows no default company

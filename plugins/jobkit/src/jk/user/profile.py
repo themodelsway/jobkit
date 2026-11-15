@@ -158,7 +158,8 @@ def parse_target_company(text: str) -> str | None:
     """The stored name of a researched company given in any letter case; None for "" (clears the default).
 
     Raises:
-        ToolError: no researched company has that name (the message lists the ones that exist).
+        ToolError: no researched company has that name (the message lists the ones that exist), or research found
+            no qualifying page for it, so there is nothing to prepare against.
     """
     if not text.strip():
         return None
@@ -166,6 +167,9 @@ def parse_target_company(text: str) -> str | None:
     if found is None:
         names = ", ".join(target_tables.company_names()) or "none yet"
         raise ToolError(f"No researched company {text!r}. Researched companies: {names}.")
+    if found["outcome"] == target_tables.NONE_FOUND:
+        raise ToolError(f"Research found no qualifying page for {found['name']} ({found['researched']}), so it "
+                        "cannot be the default company. The default was not changed.")
     return str(found["name"])
 
 

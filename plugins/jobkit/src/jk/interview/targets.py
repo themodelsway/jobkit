@@ -26,8 +26,8 @@ KINDS: Final[tuple[str, ...]] = ("value", "round", "grading", "question", "quest
 LABELS: Final[tuple[str, ...]] = ("company-references", "othersite-references")
 BASES: Final[tuple[str, ...]] = ("stated", "inferred")
 MAX_QUOTE_WORDS: Final[int] = 40
-FOUND: Final[str] = "found"
-NONE_FOUND: Final[str] = "none found"
+FOUND: Final[str] = tt.FOUND
+NONE_FOUND: Final[str] = tt.NONE_FOUND
 VALUE_STATES: Final[tuple[str, ...]] = ("covered", "possible", "no story", "needs your judgment")
 # Sites whose content is written by individual users, and the user-written pages of job sites. A fixed list: the
 # skill tells the agent to leave out any other user-written page, which this code cannot recognise.

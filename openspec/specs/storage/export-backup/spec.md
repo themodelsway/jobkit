@@ -67,3 +67,25 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 #### Scenario: Protection removed
 - **WHEN** the file lacks the triggers that protect logged answers
 - **THEN** it is refused and the current database is unchanged
+
+### Requirement: Researched companies are exported
+`jobkit export` SHALL include the researched company profiles as their own kind, with every field of every fact (id, kind, wording, quote, reference link, label, date of pull, vetting), the none-found records, and the suggested style with its basis, and `jobkit status` SHALL count them.
+
+#### Scenario: Researched company
+- **WHEN** one company with three facts is researched and the data is exported
+- **THEN** the export contains that company with each fact's link, quote, label and date of pull
+
+#### Scenario: None found
+- **WHEN** a company was recorded as none found and the data is exported
+- **THEN** the export contains that record with its date
+
+#### Scenario: Fresh database
+- **WHEN** a new database is exported
+- **THEN** the kind is present and empty
+
+### Requirement: Exported sessions carry style and company
+An exported session SHALL include its company and current style, and each exported log entry SHALL include the style and company it recorded, empty for entries logged before they existed.
+
+#### Scenario: Session with a company
+- **WHEN** a session started for a company in soar is exported
+- **THEN** the session and each of its story entries show that company and soar

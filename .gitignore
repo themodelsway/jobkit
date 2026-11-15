@@ -29,3 +29,5 @@ __pycache__/
 
 # Track only specs not verbose changes
 /openspec/changes/
+/AGENTS.override.md
+/.codex/config.toml

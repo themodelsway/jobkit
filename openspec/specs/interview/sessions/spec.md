@@ -107,3 +107,120 @@ A queued item whose card, question or story no longer exists SHALL stay in the s
 #### Scenario: Target restored
 - **WHEN** the removed item exists again
 - **THEN** an answer to it is accepted
+
+### Requirement: Session records a company and a style
+`new` SHALL accept `--target COMPANY` and `--style STYLE`, store both on the session, and show them in `list` and `resume`. With no `--style` the session SHALL record the profile's default style; with no `--target` it SHALL record no company, whatever the profile's default company is.
+
+#### Scenario: Company and style recorded
+- **WHEN** `new "title" --target COMPANY --style soar --mode stories` is run
+- **THEN** `list` and `resume` show that company and soar
+
+#### Scenario: Unknown company or style
+- **WHEN** a company without a profile or a style other than star, soar or carl is given
+- **THEN** the command fails with status 1 and no session is created
+
+#### Scenario: No company
+- **WHEN** a session starts without `--target` while the profile has a default company
+- **THEN** it behaves as before this change and stores no company
+
+### Requirement: A company orders the queue and never empties it
+With `--target`, the queue SHALL hold the same items as without it, with stories and leadership questions that match the company by theme first, then those that match by word, then the rest. Each queued story or question SHALL show the company values it matches and how.
+
+#### Scenario: Matching items first
+- **WHEN** `new "title" --target COMPANY --mode stories` is run and two of five stories match by theme
+- **THEN** the queue holds all five, those two first, each marked with the values it matches
+
+#### Scenario: More values first
+- **WHEN** two stories match by theme, one matching three values and the other one
+- **THEN** the story matching three values comes first, and stories matching the same number keep their usual order
+
+#### Scenario: Random order
+- **WHEN** `--target` is given with `--order random`
+- **THEN** items are shuffled within each group, and every theme match still comes before every word match, and every word match before the rest
+
+#### Scenario: Count keeps the best matches
+- **WHEN** `--target` is given with `--count 3` and five stories are queued
+- **THEN** the three kept are the first three after ordering by the company
+
+#### Scenario: Nothing matches
+- **WHEN** no story matches any value of the company
+- **THEN** the session is created with the usual queue, and the output says no story matches this company yet
+
+#### Scenario: Architecture cards
+- **WHEN** `--target` is given for a session whose queue holds only architecture cards
+- **THEN** the session is created, the cards keep their usual order, and the output says a company does not change card order
+
+#### Scenario: With a job description
+- **WHEN** `--target` is given with `--jd`
+- **THEN** the items the job description selects are queued, the stories among them ordered by the company
+
+### Requirement: Company session shows what is left to cover
+`resume ID` for a session with a company SHALL show, beside the next story or question, what that company's graders look for, and SHALL list the company values that are `no story` or `needs your judgment` with their stored typical questions. Each fact SHALL show its label and the site it came from.
+
+#### Scenario: Resume a company session
+- **WHEN** a session with a company is resumed
+- **THEN** the output shows the grading emphasis, the style in force, and the values still to cover with their typical questions
+
+#### Scenario: Every value is unmapped
+- **WHEN** every value of the company is needs your judgment
+- **THEN** all of them are listed with their typical questions, so the session can still be run
+
+#### Scenario: Next item is a card
+- **WHEN** the next item of a company session is an architecture card
+- **THEN** no grading emphasis is shown beside it
+
+### Requirement: The session's style can be changed
+`resume ID --style STYLE` SHALL change the session's current style from then on and say so. Entries logged earlier SHALL NOT change.
+
+#### Scenario: Change on resume
+- **WHEN** a carl session is resumed with `--style star`
+- **THEN** the session's current style is star in `list` and in later `resume` output
+
+#### Scenario: Next story shown in the session's style
+- **WHEN** the next item of a session is a story and the session's style differs from the profile's default
+- **THEN** the story is shown grouped as the session's style, after `new`, `resume` (with or without `--style`) and `reopen`
+
+### Requirement: Logged answers keep the style and company
+Each entry logged for a story or leadership question SHALL keep the session's current style and company at the time it was logged, and `log` SHALL accept `--style` to record a different style for that one entry. An entry for an architecture card SHALL record no style.
+
+#### Scenario: After a change of style
+- **WHEN** a carl session is resumed with `--style star` and an answer is then logged
+- **THEN** the new entry records star and earlier entries still record carl
+
+#### Scenario: One answer in another style
+- **WHEN** an answer is logged with `--style soar` in a star session
+- **THEN** that entry records soar and the session's current style stays star
+
+#### Scenario: Entry logged before this change
+- **WHEN** an entry logged before this change is shown
+- **THEN** it shows no style and no company, and is otherwise unchanged
+
+### Requirement: Company sessions work with the retest window
+`new --due` SHALL accept `--target` and queue the same due items as without it, those matching the company first.
+
+#### Scenario: Due and company
+- **WHEN** `new "title" --due --target COMPANY` is run and three items are due, one matching
+- **THEN** all three are queued, the matching one first
+
+#### Scenario: Due, company and count
+- **WHEN** `new "title" --due --target COMPANY --count 2` is run and four items are due, two matching
+- **THEN** the two matching items are kept, the one due longest first
+
+#### Scenario: Due items in the same group
+- **WHEN** several due items fall in the same group
+- **THEN** the one due longest comes first within that group
+
+#### Scenario: Nothing due
+- **WHEN** `new "title" --due --target COMPANY` is run and nothing is due
+- **THEN** the command says nothing is due and creates no session, as it does without a company
+
+### Requirement: A session whose company profile was removed
+A session that names a company whose profile no longer exists SHALL still be listed, resumed and logged to. `resume` SHALL say the profile is gone and show no grading emphasis, and the queue SHALL keep its stored order.
+
+#### Scenario: Resume after removal
+- **WHEN** a session's company profile was removed and the session is resumed
+- **THEN** the next item is shown, with a line saying the company's profile no longer exists
+
+#### Scenario: Log after removal
+- **WHEN** an answer is logged in that session
+- **THEN** it is stored, and the entry still records the company's name
