@@ -8,12 +8,14 @@
 
 Commands:
   profile status
-  profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME]
+  profile init --resume-root PATH [--resume-dir SUB ...] [--name NAME] [--replace]
+                                # --replace: change the resume folder and its parts (otherwise kept)
   profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries),
                                 # answer_style (star, soar or carl: the default way a story is shown and judged complete),
                                 # research_days (when a researched company's facts count as stale; default 30),
                                 # target_company (a researched company `target show` and `prep for-target` use by
-                                # default; "" clears it)
+                                # default; "" clears it), preparing_for (what the user is preparing for, in a few
+                                # words; saved last, it marks that step of setup as done)
   profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
   profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
   profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
@@ -41,7 +43,8 @@ DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
 SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style",
-                                         "research_days", "target_company")
+                                         "research_days", "target_company", "preparing_for")
+PREPARING_FOR_MAX: Final[int] = 200
 ANSWER_STYLES: Final[tuple[str, ...]] = ("star", "soar", "carl")
 YEARS_RANGE: Final[tuple[int, int]] = (1, 60)
 DEFAULT_REASSESS_DAYS: Final[int] = 30   # a good answer older than this is offered for a retest
@@ -66,6 +69,7 @@ class Profile(TypedDict):
     answer_style: NotRequired[str]
     research_days: NotRequired[int]
     target_company: NotRequired[str]
+    preparing_for: NotRequired[str]
 
 
 class OpenItem(TypedDict):
@@ -179,6 +183,20 @@ def target_company() -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def parse_preparing_for(text: str) -> str:
+    """What the user is preparing for: one line of 1 to PREPARING_FOR_MAX characters, else a `ToolError`."""
+    value = " ".join(text.split())
+    if not 1 <= len(value) <= PREPARING_FOR_MAX:
+        raise ToolError(f"preparing_for must be a few words (1 to {PREPARING_FOR_MAX} characters), not {text!r}.")
+    return value
+
+
+def preparing_for() -> str | None:
+    """What the user said they are preparing for, or None while that step of setup is not done."""
+    value = tables.load_settings().get("preparing_for")
+    return value if isinstance(value, str) and value else None
+
+
 def years_experience() -> int | None:
     """The years of experience the user gave (built summaries show it as "N+ years"), or None."""
     return load().get("years_experience")
@@ -274,7 +292,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         return
     profile = load()
     pinned = profile.get("tier1_services")
-    print(f"resume_root: {profile['resume_root']}")
+    print(f"resume_root: {common.hide_home(profile['resume_root'])}")
     print(f"resume_dirs: {', '.join(profile.get('resume_dirs') or ['(whole folder)'])}")
     print(f"name: {profile.get('name') or '(not set)'}")
     print(f"employers: {len(tables.load_employers())} (run process-resumes to scan)"
@@ -286,15 +304,26 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"answer style: {answer_style() or 'star (default, not set)'}")
     print(f"research window: {research_days()} days" + ("" if profile.get("research_days") is not None else " (default, not set)"))
     print(f"default target company: {target_company() or '(not set)'}")
+    print(f"preparing for: {preparing_for() or '(not set yet)'}")
     print(f"header: {'present' if header_text() else 'missing (profile header set NAME CONTACT_LINE)'}")
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create the profile, or fill in what is still unset; an existing answer is never overwritten (use `set`)."""
+    """Create the profile, or fill in what is still unset; an existing answer is never overwritten (use `set`).
+
+    With `--replace`, the resume folder and its parts are set to exactly what was given (the whole folder when no
+    `--resume-dir` is given), for when the user corrects them; every other setting is kept.
+    """
     root = Path(args.resume_root).expanduser()
     if not root.is_dir():
         raise ToolError(f"{root} is not a folder")
     profile = load()
+    if args.replace:
+        profile["resume_root"] = str(args.resume_root)
+        profile["resume_dirs"] = args.resume_dir or []
+        save(profile)
+        print("Replaced the resume folder settings. Next: process-resumes")
+        return
     kept = [key for key, given in (("resume_root", args.resume_root), ("name", args.name), ("resume_dirs", args.resume_dir))
             if given and profile.get(key) and profile[key] != given]
     profile.setdefault("resume_root", str(args.resume_root))
@@ -331,6 +360,8 @@ def cmd_set(args: argparse.Namespace) -> None:
         profile["research_days"] = parse_research_days(args.value)
     elif args.key == "target_company":
         _set_target_company(profile, args.value)
+    elif args.key == "preparing_for":
+        profile["preparing_for"] = parse_preparing_for(args.value)
     elif args.key == "name":
         profile["name"] = args.value
     else:
@@ -431,6 +462,8 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--resume-root", required=True)
     init.add_argument("--resume-dir", action="append")
     init.add_argument("--name")
+    init.add_argument("--replace", action="store_true",
+                      help="set the resume folder and its parts to exactly these (a correction); other settings are kept")
     init.set_defaults(fn=cmd_init)
     setter = sub.add_parser("set")
     setter.add_argument("key")

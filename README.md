@@ -31,9 +31,11 @@ Claude Code and Codex are coding agents, called **agents** here. The agent loads
 
 ## Quick start
 
-After installation (for Claude Code, at user scope: see [Install on Claude Code](#install-on-claude-code)), the agent accepts requests in plain words from any folder. On the first request the skill tells the agent to offer to set up the helper ([What setup installs](#what-setup-installs)); setup starts once the user responds with yes, within the permissions set in the agent.
+[Install on Claude Code](#install-on-claude-code) (at user scope, so it works in every folder) or [Install on Codex](#install-on-codex), or give the agent this repository's address, `https://github.com/themodelsway/jobkit`, and ask it to guide the installation. If installation or a first request does not work, see [Troubleshooting](#troubleshooting).
 
-1. **Resume import.** The skill takes the folder that holds the resumes, finds the resume files (PDF, Word, Markdown or text) in it and its subfolders, previews what was found, and then reads them. The jobkit commands only read resume files, and the skills tell the agent never to change them.
+Once installed, start the agent in a new empty folder, not in the folder that holds the resumes. The agent accepts requests in plain words. On the first request the skill tells the agent to offer to set up the helper ([What setup installs](#what-setup-installs)); setup starts once the user responds with yes, subject to the permissions configured in the agent. After the first import, and at the start of a conversation whose request names no task, the skill tells the agent to list what it can do and to ask where to start.
+
+1. **Resume import.** The skill takes the folder that holds the resumes, finds the resume files (PDF, Word, Markdown or text) in it and its subfolders, and imports them into the jobkit datastore. The jobkit commands only read the files in that folder, and the skills tell the agent never to change them.
 2. **Topic instruction.** The tutor explains a topic, a question or one of the user's stories first, then checks understanding with a short quiz.
 3. **Practice.** A mock interview asks first, gives no hints, then grades the answers. A session can be stopped and resumed later.
 4. **Readiness assessment.** A report shows what has been rehearsed, what is solid and what is still untested, optionally for a supplied job posting.
@@ -87,9 +89,15 @@ Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Code
 
 ## Before you begin
 
-- The agent (Claude Code or Codex) is installed, signed in and recent enough to have plugin commands (`claude plugin --help` or `codex plugin --help` in a terminal lists them). If it is not, install or update the agent from its official documentation first.
-- The computer is online: installation downloads the plugin from GitHub, and the first-time setup downloads software ([What setup installs](#what-setup-installs)).
-- On Windows, Git for Windows is installed ([Windows](#windows)).
+| Prerequisite | Purpose | Install |
+|---|---|---|
+| Claude Code or Codex, signed in and recent enough to have plugin commands (`claude plugin --help` or `codex plugin --help` in a terminal lists them) | the agent that runs jobkit | the agent's official documentation |
+| [uv](https://github.com/astral-sh/uv) 0.13.7 or newer | Python package manager; downloads the Python version and packages jobkit uses. Python itself does not need to be installed | instructions at https://github.com/astral-sh/uv |
+| Git for Windows (Windows only) | runs the agent's commands on Windows | [Windows](#windows) |
+
+If uv is missing, the skill tells the agent to explain this prerequisite and to install uv only when the user asks.
+
+The computer must be online: installation downloads the plugin from GitHub, and the first-time setup downloads Python and packages ([What setup installs](#what-setup-installs)).
 
 Installation has two steps in either agent. This repository holds a marketplace catalog, so it is first registered as a marketplace in the agent, and jobkit is then installed from it. Three names are involved: `themodelsway/jobkit` is the GitHub repository, `themodelsway` is the marketplace and `jobkit` is the plugin. Cloning the repository is not needed; [Installing from a checkout](#installing-from-a-checkout) is an optional path for contributors and local testing.
 
@@ -109,7 +117,7 @@ Installation has two steps in either agent. This repository holds a marketplace 
 5. First request, for example:
    > Use jobkit to import my resumes.
 
-   The skill tells the agent to offer the helper setup first. Once the user responds with yes, setup runs, within the permissions set in the agent. The agent then asks for the folder that holds the resumes and shows what it found before reading them. The wording above is an example; any plain request works (see [Quick start](#quick-start)).
+   The skill tells the agent to offer the helper setup first. Once the user responds with yes, setup runs, subject to the permissions configured in the agent. The wording above is an example; any plain request works (see [Quick start](#quick-start)).
 
 ### Windows
 
@@ -119,7 +127,7 @@ Claude Code on Windows runs its commands through Git for Windows, a prerequisite
 2. Restarting Claude Code makes Git available to it.
 3. The same steps as for macOS and Linux follow.
 
-Setup installs [uv](https://docs.astral.sh/uv/) when it is missing. [What setup installs](#what-setup-installs) explains when setup runs.
+uv is a prerequisite on Windows as on the other systems ([Before you begin](#before-you-begin)). [What setup installs](#what-setup-installs) explains when setup runs.
 
 ### After installing
 
@@ -160,19 +168,22 @@ The first-time setup also downloads and installs software (see [What setup insta
 
 ## Troubleshooting
 
+The quickest help for any problem: give the agent this repository's address, `https://github.com/themodelsway/jobkit`, and ask it to help install jobkit or solve the problem.
+
+Common problems:
+
 - **The agent does not know a plugin command** (`/plugin` or `codex plugin` is not recognised): the agent is too old. Update it and try again.
 - **jobkit or the marketplace is not found:** register the marketplace again (first row of the table in [Before you begin](#before-you-begin)), then install. In Claude Code, a plugin installed at project or local scope is missing from other folders; install it again at user scope. A plugin shown as disabled is turned on in the Installed tab of `/plugin` or with `claude plugin enable jobkit@themodelsway`.
 - **The skills do not respond to a request:** start a new session after installing or updating, and name jobkit in the request.
 - **Setup did not finish:** setup downloads software, so the computer must be online and the agent must allow the download (approve it when asked). Asking again carries on from where it stopped.
-- **uv is too old:** setup never replaces an existing uv. Update it the way it was installed: `uv self update` for uv's own installer, or the package manager that installed it (for example `brew upgrade uv`). Then ask again.
 
 ## What setup installs
 
-The first time a skill runs, in either agent, the skill tells the agent to say that a small helper needs to be set up and to ask whether that is OK, to install nothing on a no, and once the user responds with yes to run `setup/install` from the plugin folder (`setup/install.ps1` on Windows). That installer installs exactly this:
+The first time a skill runs, in either agent, the skill tells the agent to check for uv first. If uv is missing, the skill tells the agent to name it as a prerequisite, point to its instructions, and install it only when the user asks. The skill then tells the agent to say that a small helper needs to be set up and to ask whether that is OK, to install nothing on a no, and once the user responds with yes to run `setup/install` from the plugin folder (`setup/install.ps1` on Windows). That installer installs exactly this:
 
 | What | Version | From | When |
 |---|---|---|---|
-| [uv](https://docs.astral.sh/uv/), the installer tool | 0.13.7, the same on every system | astral.sh | only if uv is not on the computer |
+| [uv](https://github.com/astral-sh/uv), the Python package manager | 0.13.7, the same on every system | astral.sh | only when uv is missing and the user asks the agent to install it |
 | Python | 3.14 (the exact version is in `plugins/jobkit/.python-version`) | uv's own Python builds | if uv does not already have that version |
 | Python packages | the exact versions in `plugins/jobkit/setup/constraints.txt` | PyPI | always |
 | the jobkit commands | the plugin's version | the plugin's own files | always |
@@ -180,9 +191,10 @@ The first time a skill runs, in either agent, the skill tells the agent to say t
 - **Own Python not required.** Setup uses a separate Python installation managed by uv, apart from any Python already on the computer; nothing else uses it. `uv python list --only-installed` lists Python installations managed by uv.
 - A uv that is already on the computer is used as it is and never replaced. If it is older than the minimum in `plugins/jobkit/pyproject.toml` (`required-version`), setup stops and says so; uv must be updated before setup is requested again.
 - Setup never downgrades: if the installed commands are newer than the plugin, it changes nothing.
+- After setup, each skill tells the agent to check how far setup has got (`jobkit status --setup`) and to continue from there: create the data folder, import the resumes, or ask what the user is preparing for. When the check reports that saving is not allowed, or that the data comes from a newer version, the skill tells the agent to say so and stop. For any other failure, at setup or later, the skill tells the agent to follow the troubleshooting guide that ships with the plugin (`setup/troubleshoot.md`): it never repairs the data itself, retries only a busy database, once, and otherwise stops and offers a report without personal details for the user to post as a GitHub issue; jobkit does not post issues itself. A command that fails in a way its message does not explain ends its error output with a line that points to that guide. For a returning user, the list of what jobkit can do starts with an offer to continue an unfinished practice session (`jobkit status --summary`).
 - It does not edit your shell settings. The commands go in uv's tool folder and the skills run them by full path.
 - If setup stops half way (for example offline), what it already installed stays; asking again finishes it.
-- Your data is kept in `~/.jobkit` (on Windows, the `.jobkit` folder inside your user folder).
+- Your data is kept in `~/.jobkit` on macOS and Linux, and in `%USERPROFILE%\.jobkit` (the `.jobkit` folder in your user home folder) on Windows. This README writes it as `~/.jobkit`.
 
 ## Using both agents
 
@@ -248,7 +260,7 @@ uv run jobkit init
 The resume-folder setting is recorded once with:
 
 ```
-uv run profile init --resume-root /path/to/resumes [--resume-dir <subfolder> ...] [--name NAME]
+uv run profile init --resume-root /path/to/resumes [--resume-dir <subfolder> ...] [--name NAME] [--replace]
 ```
 
 Any `.pdf`, `.docx`, `.md` or `.txt` file below that folder is found, in any subfolders; files that are not resumes and Word lock files (`~$...`) are skipped. Legacy `.doc`, `.rtf` and `.odt` formats require conversion to `.docx` before import. This stores the setting in the database.

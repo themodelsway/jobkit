@@ -8,15 +8,16 @@ import argparse
 import io
 import re
 import sys
-from pathlib import Path
 from typing import Final
 
 from jk import store
-from jk.base import ToolError, backup_dir, data_dir, header_file, home, now, output_dir
+from jk.base import (TROUBLESHOOT_HINT, ToolError, backup_dir, data_dir, header_file, home, hide_home, now,
+                     output_dir, user_path)
 
 SLUG_MAX: Final[int] = 60
-__all__ = ["SLUG_MAX", "ToolError", "backup_dir", "data_dir", "emit", "header_file", "home", "make_parser", "now",
-           "output_dir", "read_text_arg", "run", "slug", "use_utf8_output"]
+__all__ = ["SLUG_MAX", "TROUBLESHOOT_HINT", "ToolError", "backup_dir", "data_dir", "emit", "header_file", "home",
+           "hide_home", "make_parser", "now", "output_dir", "read_text_arg", "report_failure", "run", "slug",
+           "use_utf8_output", "user_path"]
 
 
 def slug(text: str) -> str:
@@ -27,8 +28,8 @@ def slug(text: str) -> str:
 def emit(text: str, output: str | None) -> None:
     """Print the text, or write it to the `-o/--output` file and say so."""
     if output:
-        Path(output).write_text(text, encoding="utf-8")
-        print(f"Wrote {output}")
+        user_path(output).write_text(text, encoding="utf-8")
+        print(f"Wrote {hide_home(output)}")
     else:
         print(text, end="")
 
@@ -42,7 +43,7 @@ def read_text_arg(arg: str) -> str:
     if arg == "-":
         return sys.stdin.read()
     try:
-        return Path(arg).read_text(encoding="utf-8")
+        return user_path(arg).read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise ToolError(f"{arg} is not a UTF-8 text file.") from exc
     except OSError as exc:
@@ -68,15 +69,31 @@ def use_utf8_output() -> None:
 def run(args: argparse.Namespace, *, lock: bool = False) -> int:
     """Call the chosen subcommand (`args.fn`) in one database transaction and return the exit status.
 
-    A handler may return None (success) or an int status. A ToolError is printed to standard error as
-    its message and becomes status 1; its transaction is rolled back. With `lock`, the transaction takes
+    A handler may return None (success) or an int status. Any error is printed to standard error by
+    `report_failure` and becomes status 1; its transaction is rolled back. With `lock`, the transaction takes
     the write lock at once (use it for commands that change data).
     """
     use_utf8_output()
     try:
         with store.transaction(write=lock):
             status = args.fn(args)
-    except ToolError as exc:
-        print(exc, file=sys.stderr)
-        return 1
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # every failure ends in a status
+        return report_failure(exc)
     return status or 0
+
+
+def report_failure(exc: Exception) -> int:
+    """Print a failed command's error to standard error and return status 1.
+
+    A ToolError prints its message; an unexpected error prints its type and message, never a stack trace. The
+    home folder is shown as `~` (on Windows `%USERPROFILE%`). Unless the message alone says what to fix, a last line points to the
+    troubleshooting guide.
+    """
+    if isinstance(exc, ToolError):
+        print(hide_home(str(exc)), file=sys.stderr)
+        if not exc.troubleshoot:
+            return 1
+    else:
+        print(f"error: {type(exc).__name__}: {hide_home(str(exc))}", file=sys.stderr)
+    print(TROUBLESHOOT_HINT, file=sys.stderr)
+    return 1

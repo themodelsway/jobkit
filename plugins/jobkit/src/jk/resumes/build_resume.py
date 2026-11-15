@@ -515,7 +515,7 @@ def review_status(resume: Path) -> str:
 
 def cmd_approve(args: argparse.Namespace) -> None:
     """Record that the user has reviewed this resume and says it is ready. Run it only after they confirm."""
-    resume = Path(args.approve)
+    resume = common.user_path(args.approve)
     review_status(resume)                                   # fails when the file is missing
     if HEADER_TEMPLATE.splitlines()[0] in resume.read_text(encoding="utf-8").splitlines():
         raise common.ToolError("This resume still has the placeholder name and contact line. Save them with "
@@ -532,7 +532,7 @@ def cmd_approve(args: argparse.Namespace) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Print the review status of a built resume."""
-    print(f"{Path(args.status).name}: {review_status(Path(args.status))}")
+    print(f"{Path(args.status).name}: {review_status(common.user_path(args.status))}")
 
 
 def cmd_build(args: argparse.Namespace) -> None:
@@ -556,7 +556,7 @@ def build_and_write(args: argparse.Namespace) -> None:
     markdown, notes = build(text, options, header)
 
     name = "resume" if args.jd == "-" else Path(args.jd).stem
-    out = Path(args.output) if args.output else next_revision(OUTPUT_DIR, name)
+    out = common.user_path(args.output) if args.output else next_revision(OUTPUT_DIR, name)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(markdown, encoding="utf-8")
     record = write_record(out, args, text, notes)
@@ -564,7 +564,7 @@ def build_and_write(args: argparse.Namespace) -> None:
     if notes.header_missing:
         print("No name and contact line is saved yet, so this draft has a placeholder. Save them with "
               "`profile header set NAME CONTACT_LINE`, then build again.")
-    print(f"Wrote {out} (record: {record.name})")
+    print(f"Wrote {common.hide_home(str(out))} (record: {record.name})")
     print(f"Opening summary: {notes.used_summary}")
     print("JD skills with no supporting bullet: " + (", ".join(notes.missing) or "none"))
     print(f"JD skills shown in this resume: {notes.shown_count} of {notes.need_count}")
@@ -587,7 +587,7 @@ def build_and_write(args: argparse.Namespace) -> None:
         print(f"Lines over the {LINE_LIMIT}-character limit (say how many are long and stop there: offer shorter wording only if the user asks; never change a stored line):")
         print("\n".join(f"  - {note}" for note in notes.too_long))
     print(REVIEW_CHECKLIST)
-    print(f"Status: draft. After you have reviewed it: build-resume --approve {out}")
+    print(f"Status: draft. After you have reviewed it: build-resume --approve {common.hide_home(str(out))}")
 
 
 def build_parser() -> argparse.ArgumentParser:

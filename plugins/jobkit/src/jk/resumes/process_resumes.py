@@ -117,7 +117,7 @@ def survey(files: Iterable[Path], root: Path) -> None:
         try:
             doc = visual.read_document(path, transcript_for(path, root))
         except common.ToolError as error:
-            print(f"{rel(path, root)}\n  {'NEEDS VISUAL READING' if isinstance(error, extract.NeedsVisualRead) else 'UNREADABLE'}: {error}")
+            print(f"{rel(path, root)}\n  {'NEEDS VISUAL READING' if isinstance(error, extract.NeedsVisualRead) else 'UNREADABLE'}: {common.hide_home(str(error))}")
             continue
         parsed = pr.parse_resume(doc.text, doc.layout_text)
         if parsed["is_resume"] is False:
@@ -565,7 +565,7 @@ def load_state(force: bool) -> tuple[dict[str, Any], dict[str, Any], ResumeData]
         return {}, {}, empty
     if (data["companies"] or rd.load_ledger()) and tables.load_built_parser() != pr.PARSER_VERSION:
         saved = store.save_committed_copy(store.connect(), "jobkit-before-reparse", "rebuilding it")
-        print(f"The resume parser changed since the stored data was built. A copy of the database was saved as {saved}; "
+        print(f"The resume parser changed since the stored data was built. A copy of the database was saved as {common.hide_home(str(saved))}; "
               f"rebuilding from your resume files (your curation is kept).")
         return {}, {}, empty
     if curation_changed(data):
@@ -591,7 +591,7 @@ def process_file(path: Path, root: Path, ledger: dict[str, Any], unparsed: dict[
     except common.ToolError as error:
         ledger[key], unparsed[key] = {**entry, "kind": "other"}, [str(error)]
         needs = isinstance(error, extract.NeedsVisualRead)
-        print(f"skip ({'needs visual reading, ask the user first' if needs else 'unreadable'}): {key}: {error}")
+        print(f"skip ({'needs visual reading, ask the user first' if needs else 'unreadable'}): {key}: {common.hide_home(str(error))}")
         return "other"
     (TEXT_DIR / text_name(key)).write_text(doc.text, encoding="utf-8")
     parsed = pr.parse_resume(doc.text, doc.layout_text)

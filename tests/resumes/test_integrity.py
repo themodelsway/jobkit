@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from jk import common
+from jk.user import profile as up
 from jk.resumes import extract, match_facts as mf, parse_resume as pr, process_resumes as proc, resume_data as rd, tables
 from tests.resumes.test_extract import as_txt, REGISTRY as BASE_REGISTRY, write_docx
 from tests.support import HomeCase, real_resume_texts
@@ -81,6 +82,29 @@ class PruneTests(RebuildCase):
         shared = "Built a search service on PostgreSQL."
         self.assertEqual(self.bullets()[shared], ["one.txt"])
         self.assertNotIn("two.txt", rd.load_ledger())
+
+    def test_a_corrected_folder_choice_is_what_gets_imported(self):
+        (self.resumes / "keep").mkdir()
+        (self.resumes / "skip").mkdir()
+        self.write("keep/one.txt", as_txt())
+        self.write("skip/two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nInitech      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
+
+        def import_as_the_profile_says() -> str:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                proc.build(proc.list_resumes(up.resume_dirs()), up.resume_root(), force=False)
+            return out.getvalue()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            up.main(["init", "--resume-root", str(self.resumes)])
+        import_as_the_profile_says()
+        self.assertEqual(sorted(rd.load_ledger()), ["keep/one.txt", "skip/two.txt"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            up.main(["init", "--replace", "--resume-root", str(self.resumes), "--resume-dir", "keep"])
+        out = import_as_the_profile_says()
+        self.assertEqual(sorted(rd.load_ledger()), ["keep/one.txt"])
+        self.assertIn("pruned (file gone): skip/two.txt", out)
+        self.assertNotIn(EXTRA_BULLET, self.bullets())
 
     def test_company_with_no_source_left_loses_its_file(self):
         self.write("one.txt", as_txt())

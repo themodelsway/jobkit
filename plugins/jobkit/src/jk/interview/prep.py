@@ -58,7 +58,6 @@ import argparse
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
-from pathlib import Path
 from typing import Any, Final, TypedDict, cast
 
 from jk import common
@@ -782,8 +781,8 @@ def cmd_export(args: argparse.Namespace) -> None:
     """Print or write a story (markdown or JSON) or the whole store (JSON)."""
     text = export_text(args)
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
-        print(f"Wrote {args.output}")
+        common.user_path(args.output).write_text(text, encoding="utf-8")
+        print(f"Wrote {common.hide_home(args.output)}")
     else:
         print(text, end="")
 

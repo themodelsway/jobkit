@@ -15,6 +15,8 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from jk import common
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "jobkit"
 SKILLS = PLUGIN_ROOT / "skills"
@@ -44,6 +46,19 @@ def shared_block(text: str, name: str) -> str:
 
 def all_skill_files() -> list[Path]:
     return sorted(p for p in SKILLS.rglob("*") if p.is_file())
+
+
+SETUP_GUIDES = ("preflight", "first-run", "welcome", "troubleshoot")
+
+
+def setup_text(name: str) -> str:
+    """One of the shared setup guides in `plugins/jobkit/setup/`, which every skill reads."""
+    return (PLUGIN_ROOT / "setup" / f"{name}.md").read_text(encoding="utf-8")
+
+
+def instruction_files() -> list[Path]:
+    """Every file an agent reads as instructions: the skills, their guides and the shared setup guides."""
+    return [*all_skill_files(), *(PLUGIN_ROOT / "setup" / f"{n}.md" for n in SETUP_GUIDES)]
 
 
 def parser_words(parser: argparse.ArgumentParser) -> set[str]:
@@ -176,7 +191,7 @@ class PrivacyWordingTests(unittest.TestCase):
         texts = {name: (REPO_ROOT / name).read_text(encoding="utf-8")
                  for name in ("README.md", "plugins/jobkit/README.md")}
         texts |= {rel(path): path.read_text(encoding="utf-8") for path in (*MANIFESTS, *MARKETPLACES)}
-        texts |= {rel(p): p.read_text(encoding="utf-8") for p in all_skill_files()}
+        texts |= {rel(p): p.read_text(encoding="utf-8") for p in instruction_files()}
         for name, text in texts.items():
             hit = STAYS_LOCAL.search(text)
             self.assertIsNone(hit, f"{name} says {hit.group(0) if hit else ''!r}")
@@ -187,9 +202,11 @@ class PrivacyWordingTests(unittest.TestCase):
         self.assertIn("privacy settings you have configured", privacy)
 
     def test_consent_question_says_where_the_data_is_kept(self):
-        text = shared_block(skill_text("tutor"), "preflight")
-        (question,) = [x for x in text.splitlines() if "Is that OK?" in x]
-        self.assertIn("kept in a folder on your own computer", question)
+        text = setup_text("preflight")
+        questions = [x for x in text.splitlines() if "Proceed?" in x]
+        self.assertEqual(len(questions), 2)
+        for question in questions:
+            self.assertIn("Data is stored in a folder on this computer", question)
 
 
 class ShippedSkillTests(unittest.TestCase):
@@ -205,7 +222,7 @@ class ShippedSkillTests(unittest.TestCase):
             self.assertTrue(fields.get("description", "").strip(), name)
 
     def test_no_checkout_references(self):
-        for path in all_skill_files():
+        for path in instruction_files():
             text = path.read_text(encoding="utf-8")
             for bad in (".venv", ".claude/", "CLAUDE.md", "AGENTS.md"):
                 self.assertNotIn(bad, text, f"{rel(path)} mentions {bad}")
@@ -233,7 +250,7 @@ class ShippedSkillTests(unittest.TestCase):
         self.assertIn("`../interview-prep/architecture.md` (a path from this skill's folder)", skill_text("tutor"))
 
     def test_skills_and_guides_name_no_app_vendor_or_app_tool(self):
-        for path in all_skill_files():
+        for path in instruction_files():
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 hit = APP_NAMES.search(line)
                 self.assertIsNone(hit, f"{rel(path)}:{number} names {hit.group(0) if hit else ''!r}")
@@ -299,7 +316,8 @@ def check_span(span: str, parsers: dict[str, argparse.ArgumentParser]) -> str | 
 def checked_files() -> list[Path]:
     """Skill pages and user docs whose written commands are checked."""
     docs = REPO_ROOT / "docs"
-    return sorted([*SKILLS.glob("*/*.md"), *(docs / "guides").glob("*.md"), docs / "explore.md", docs / "manual.md"])
+    return sorted([*SKILLS.glob("*/*.md"), *(PLUGIN_ROOT / "setup").glob("*.md"), *(docs / "guides").glob("*.md"),
+                   docs / "explore.md", docs / "manual.md"])
 
 
 class CommandNameTests(unittest.TestCase):
@@ -347,38 +365,141 @@ class SharedTextTests(unittest.TestCase):
             texts = {name: shared_block(skill_text(name), block) for name in SHIPPED}
             self.assertEqual(len(set(texts.values())), 1, f"{block} differs between skills")
 
-    def test_rules_block_has_the_five_rules(self):
+    def test_rules_block_has_the_rules(self):
         rules = shared_block(skill_text("tutor"), "rules")
-        for phrase in ("only through the commands", "read-only", "Never invent", "phone number", "JOBKIT_HOME"):
+        for phrase in ("only through the commands", "read-only", "Never invent", "phone number", "JOBKIT_HOME",
+                       "until `JOBKIT_PLUGIN_DIR/setup/preflight.md` has given you JOBKIT_COMMANDS_DIR", "Jobkit does not post issues on GitHub",
+                       "read and follow `JOBKIT_PLUGIN_DIR/setup/troubleshoot.md`"):
             self.assertIn(phrase, rules)
 
     def test_preflight_asks_before_installing(self):
-        text = shared_block(skill_text("tutor"), "preflight")
+        text = setup_text("preflight")
         for line in text.splitlines():
             if "setup/install" in line:
                 self.assertIn("--check", line, "only the read-only check may be named before the user agrees")
-        self.assertLess(text.index("Is that OK?"), text.index("without `--check`"))
+        self.assertLess(text.index("Proceed?"), text.index("without `--check`"))
         self.assertIn("install nothing", text)
+        self.assertIn("Never install it unasked", text)
+        self.assertLess(text.index("The user asks you to install uv"), text.index("`--with-uv`"))
+        self.assertTrue(any("https://github.com/astral-sh/uv" in x for x in self.said()))
+        self.assertFalse(any("astral.sh" in x.replace("astral-sh", "") for x in self.said()))
 
     def test_preflight_picks_the_helper_by_platform(self):
-        text = shared_block(skill_text("tutor"), "preflight")
-        self.assertIn('sh "PLUGIN/setup/install" --check', text)
+        guide = setup_text("preflight")
+        self.assertIn('sh "JOBKIT_PLUGIN_DIR/setup/install" --check', guide)
         self.assertIn('powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
-                      '"PLUGIN/setup/install.ps1" --check', text)
-        self.assertIn("PLUGIN below is the folder two levels above this skill file", text)
+                      '"JOBKIT_PLUGIN_DIR/setup/install.ps1" --check', guide)
+        self.assertNotIn("Set-ExecutionPolicy", guide)
+        text = shared_block(skill_text("tutor"), "preflight")
+        self.assertIn("JOBKIT_PLUGIN_DIR below is the folder two levels above this skill file", text)
         self.assertIn("never from the working folder", text)
         self.assertNotIn("Set-ExecutionPolicy", text)
 
     def said(self) -> list[str]:
         """The lines of the preflight that the user reads."""
-        return [x.strip() for x in shared_block(skill_text("tutor"), "preflight").splitlines()
-                if x.strip().startswith(">")]
+        return [x.strip() for x in setup_text("preflight").splitlines() if x.strip().startswith(">")]
+
+    def test_welcome_lists_five_things(self):
+        text = setup_text("welcome")
+        items = [x for x in text.splitlines() if re.match(r"^> \d\. \*\*", x)]
+        self.assertEqual(len(items), 5, items)
+        self.assertIn("early preview", items[4])
+        self.assertIn("job posting", items[4])
+        said = [x for x in text.splitlines() if x.startswith(">")]
+        self.assertFalse(any("draft" in x or "Tailor" in x for x in said), "the welcome advertises tailoring")
+        self.assertIn("> What would you like to do first?", said)
+        self.assertIn("without asking what to do first; the rest of the running skill's steps still apply", text)
+        self.assertNotIn("its own published pages", text, "company research also reads other sites' articles")
+        self.assertLess(text.index("`jobkit status --summary`"), text.index("Your resumes are ready"))
+        self.assertIn("unfinished practice session", text)
+        for skill in SHIPPED:
+            self.assertIn(f"`JOBKIT_PLUGIN_DIR/skills/{skill}/SKILL.md`", text)
+            self.assertTrue((SKILLS / skill / "SKILL.md").is_file())
+        for skill, heading in (("interview-prep", "Preparing for a specific company"),
+                               ("resume-workflows", "Rating how well the resume matches a job posting")):
+            self.assertIn(heading, text)
+            self.assertIn(f"## {heading}", skill_text(skill))
+
+    def test_stub_reads_the_setup_guides_and_checks_the_stage(self):
+        text = shared_block(skill_text("tutor"), "preflight")
+        for name in SETUP_GUIDES:
+            self.assertIn(f"`JOBKIT_PLUGIN_DIR/setup/{name}.md`", text)
+            self.assertTrue((PLUGIN_ROOT / "setup" / f"{name}.md").is_file(), name)
+        self.assertLess(text.index("setup/preflight.md"), text.index("`jobkit status --setup`"))
+        self.assertLess(text.index("`jobkit status --setup`"), text.index("setup/first-run.md"))
+        for stage in ("no-database", "no-resumes", "no-target", "ready"):
+            self.assertIn(f"`{stage}`", text)
+        self.assertIn("Never guess the stage", text)
+        self.assertIn("Without JOBKIT_COMMANDS_DIR none of this skill's commands can run", text)
+        self.assertIn("applies to every command in this conversation", text)
+        self.assertIn("do not start the import again in this conversation", text)
+        failures = text[text.index("`blocked`"):]
+        for word in ("busy", "too-new", "failed"):
+            self.assertIn(f"`{word}`", failures, word)
+        self.assertLess(text.index("`blocked`"), text.index("setup/troubleshoot.md"))
+        self.assertNotIn("github.com", text, "the troubleshooting guide holds the report, not the stub")
+
+    def test_troubleshooting_guide_handles_every_failure_and_reports_privately(self):
+        text = setup_text("troubleshoot")
+        for word in ("blocked", "busy", "too-new", "failed"):
+            self.assertIn(f"- `{word}`", text, word)
+        self.assertLess(text.index("- `blocked`"), text.index("https://github.com/themodelsway/jobkit/issues"),
+                        "a blocked save must not end in a bug report")
+        self.assertIn("This is not something to report", text)
+        self.assertIn("if it prints `busy` again, handle it as `failed`", text)
+        self.assertIn("Never run a failed command again more than once", text)
+        self.assertIn("Never try to repair the stored data yourself", text)
+        self.assertIn("Never guess the setup stage", text)
+        self.assertIn("Leave out names, resume content", text)
+        self.assertIn("Show it to the user to post themselves", text)
+        self.assertIn("Jobkit does not post issues on GitHub", text)
+        self.assertIn(common.TROUBLESHOOT_HINT.removesuffix("."), text)
+        self.assertIn("asks the user before updating anything", text)
+        report = text[text.index("## 3. Report it"):]
+        for line in ("`JOBKIT_HOME`", "`JOBKIT_COMMANDS_DIR`", "`JOBKIT_PROGRAM_DIR`", "`jobkit --version`"):
+            self.assertIn(line, report)
+        self.assertLess(report.index("`jobkit status --summary`"), report.index("`jobkit --version`"))
+
+    def test_a_lost_commands_folder_is_found_again_not_guessed(self):
+        text = shared_block(skill_text("tutor"), "preflight")
+        self.assertIn("If JOBKIT_COMMANDS_DIR is no longer known", text)
+        self.assertIn("never guess the folder", text)
+
+    def test_first_run_imports_into_the_named_folder(self):
+        text = setup_text("first-run")
+        self.assertIn('--resume-root "RESUME_FOLDER"', text)
+        self.assertIn("Does that look right?", text)
+        self.assertIn("If the user says no, ask what is wrong", text)
+        self.assertIn('`profile init --replace --resume-root "RESUME_FOLDER"', text, "plain init keeps the first answer")
+        self.assertLess(text.index("--replace"), text.rindex("`process-resumes`"))
+
+    def test_plugin_files_are_read_with_cat_before_any_guide_is_named(self):
+        for skill in ("tutor", "interview-prep", "resume-workflows"):
+            text = skill_text(skill)
+            rule = text.index('by printing it with `cat "PATH"`, so the user is not asked for permission')
+            self.assertLess(rule, text.index("setup/preflight.md"), f"{skill}: the rule comes before the first guide")
+
+    def test_preparation_is_marked_done_last(self):
+        for skill in ("tutor", "interview-prep"):
+            text = skill_text(skill)
+            start = text.index("## What they are preparing for")
+            section = text[start:text.index("\n\n", start)]
+            self.assertIn('`profile set preparing_for "TEXT"`', section, skill)
+            self.assertLess(section.index("`arch init"), section.index("preparing_for"), skill)
+            self.assertIn("safe to run again", section, skill)
+            self.assertIn("never tell the user about a setup check", section, skill)
+            role, tech = section.index("what kind of role"), section.index("technology you'd like to focus on")
+            self.assertLess(role, tech, f"{skill}: the role is asked first, then the technology")
+            self.assertIn("carry on with the task the user chose", section, skill)
+        for skill in ("tutor", "interview-prep", "resume-workflows"):
+            self.assertIn("for you only: never say it to the user", skill_text(skill), skill)
+        self.assertNotIn('"JOBKIT_COMMANDS_DIR"', text, "JOBKIT_COMMANDS_DIR is the commands folder, not the resume folder")
 
     def test_newer_helper_is_ready_and_never_installed_over(self):
-        text = shared_block(skill_text("tutor"), "preflight")
-        self.assertIn("`ok:FOLDER` or `newer:FOLDER`: the helper is ready", text)
+        text = setup_text("preflight")
+        self.assertIn("`ok:JOBKIT_COMMANDS_DIR` or `newer:JOBKIT_COMMANDS_DIR`: the helper is ready", text)
         self.assertIn("never offer to install over it", text)
-        self.assertNotIn("`newer:FOLDER`: the helper must", text)
+        self.assertNotIn("`newer:JOBKIT_COMMANDS_DIR`: the helper must", text)
 
     def test_failure_line_does_not_claim_nothing_changed(self):
         failed = [x for x in self.said() if x.startswith("> Setup did not finish")]
@@ -389,30 +510,33 @@ class SharedTextTests(unittest.TestCase):
         self.assertTrue(any("too old" in x and "won't replace" in x for x in failed))
 
     def test_blocked_write_names_the_folder_and_keeps_protections_on(self):
-        text = shared_block(skill_text("tutor"), "preflight")
+        text = setup_text("preflight")
         self.assertIn("never suggest turning your own protections off", text)
-        self.assertTrue(any("nothing was saved" in x and x.endswith("DATA_FOLDER") for x in self.said()))
+        self.assertTrue(any("nothing was saved" in x and x.endswith("JOBKIT_HOME") for x in self.said()))
+        self.assertIn("give the user the full path, with the home folder expanded properly", text)
+        self.assertIn("Say the full path only to the user, never in a report", text)
+        self.assertIn("`%USERPROFILE%\\.jobkit` on Windows", text)
 
     def test_unsupported_environment_is_said_plainly_and_installs_nothing(self):
-        text = shared_block(skill_text("tutor"), "preflight")
+        text = setup_text("preflight")
         self.assertIn("`unsupported`: install nothing", text)
         self.assertTrue(any("this setup doesn't work on your operating system yet" in x for x in self.said()))
 
     def test_preflight_explains_git_for_windows_in_plain_words(self):
-        said = [x for x in shared_block(skill_text("tutor"), "preflight").splitlines() if x.strip().startswith(">")]
+        said = [x for x in setup_text("preflight").splitlines() if x.strip().startswith(">")]
         self.assertTrue(any("Git for Windows" in x and "git-scm.com" in x for x in said))
 
     def test_commands_run_by_full_path_not_by_editing_the_search_path(self):
         for name in SHIPPED:
             text = skill_text(name)
             self.assertNotIn('PATH="', text, name)
-            self.assertIn('"FOLDER/arch" next', text, name)
+            self.assertIn('"JOBKIT_COMMANDS_DIR/arch" next', text, name)
 
     def test_folders_are_quoted_because_they_may_have_spaces(self):
         for name in SHIPPED:
             text = skill_text(name)
-            self.assertIn('--resume-root "FOLDER"', text, name)
             self.assertIn("in quotes", text, name)
+        self.assertIn('--resume-root "RESUME_FOLDER"', setup_text("first-run"))
 
 
 PRODUCT_NAME = "Jobkit engine"   # the one place the product name may appear in user-facing lines (the setup question)
@@ -420,11 +544,13 @@ PRODUCT_NAME = "Jobkit engine"   # the one place the product name may appear in 
 
 class PlainLanguageTests(unittest.TestCase):
     def test_user_facing_lines_have_no_technical_words(self):
-        for name in SHIPPED:
-            for number, line in enumerate(skill_text(name).splitlines(), 1):
+        texts = {name: skill_text(name) for name in SHIPPED} | {name: setup_text(name) for name in SETUP_GUIDES}
+        for name, text in texts.items():
+            for number, line in enumerate(text.splitlines(), 1):
                 stripped = line.strip()
                 if stripped.startswith(">"):
-                    hit = BANNED.search(stripped.replace(PRODUCT_NAME, ""))
+                    spoken = re.sub(r"https://\S+", "", stripped.replace(PRODUCT_NAME, ""))   # a web address is read as is
+                    hit = BANNED.search(spoken)
                     self.assertIsNone(hit, f"{name}:{number} says {hit.group(0) if hit else ''!r}: {stripped}")
 
     def test_there_is_user_facing_wording(self):
@@ -458,7 +584,7 @@ class SetupScriptTests(unittest.TestCase):
     def test_check_reports_a_known_state(self):
         result = subprocess.run(["sh", str(PLUGIN_ROOT / "setup" / "install"), "--check"], capture_output=True, text=True,
                                 timeout=60, check=False)
-        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|unsupported)$")
+        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|no-uv|unsupported)$")
 
     @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_shell_script_refuses_windows(self):
@@ -488,7 +614,7 @@ class WindowsInstallScriptTests(unittest.TestCase):
 
     def test_same_check_answers_as_the_shell_script(self):
         text = self.SCRIPT.read_text(encoding="utf-8")
-        for form in ("ok:", "older:", "newer:", "missing", "unsupported"):
+        for form in ("ok:", "older:", "newer:", "missing", "no-uv", "--with-uv", "unsupported"):
             self.assertIn(form, text)
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is not installed")
@@ -501,7 +627,7 @@ class WindowsInstallScriptTests(unittest.TestCase):
         self.assertEqual(parse.returncode, 0, parse.stdout + parse.stderr)
         result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.SCRIPT),
                                  "--check"], capture_output=True, text=True, timeout=60, check=False)
-        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|unsupported)$")
+        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|no-uv|unsupported)$")
 
 
 if __name__ == "__main__":

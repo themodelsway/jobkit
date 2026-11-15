@@ -19,7 +19,7 @@ In Codex: `codex plugin marketplace add themodelsway/jobkit`, then `codex plugin
 
 ## Privacy
 
-Text extracted from users' resumes, practice answers and match results are stored in the `~/.jobkit` folder on their own computer. The original resume files stay where users keep them; the jobkit commands only read them, and the skills tell the agent never to change them.
+Text extracted from users' resumes, practice answers and match results are stored on their own computer, in `~/.jobkit` on macOS and Linux and in `%USERPROFILE%\.jobkit` (the `.jobkit` folder in the user home folder) on Windows. The original resume files stay where users keep them; the jobkit commands only read them, and the skills tell the agent never to change them.
 Content sent to a model is handled under the policies and privacy settings of the provider serving it.
 The [repository README](https://github.com/themodelsway/jobkit#privacy) has the details.
 

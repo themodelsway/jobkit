@@ -1,8 +1,10 @@
 #!/bin/sh
 # Set up the jobkit commands for the jobkit plugin (macOS and Linux).
-#   sh setup/install --check   print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | unsupported
-#   sh setup/install           install uv if it is missing, then install the commands from this plugin
-# Run it only after the user has said yes: it downloads software (uv, from astral.sh).
+#   sh setup/install --check     print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | no-uv | unsupported
+#   sh setup/install             install the commands from this plugin with the uv already on the computer
+#   sh setup/install --with-uv   the same, and first download uv if it is missing
+# Run it only after the user has said yes: uv downloads Python and packages. --with-uv also downloads uv
+# (from astral.sh); pass it only when the user asked for uv to be installed for them.
 # It never replaces a uv that is already there and never installs over newer commands.
 set -eu
 
@@ -62,8 +64,10 @@ check() {
             gt) echo "newer:$folder" ;;
             *) echo "older:$folder" ;;
         esac
-    else
+    elif find_uv >/dev/null; then
         echo "missing"
+    else
+        echo "no-uv"
     fi
 }
 
@@ -83,6 +87,9 @@ if uv_path=$(find_uv); then
         echo "failed: uv is too old (found ${have:-an unknown version}, need $uv_minimum or newer); it was left as it is" >&2
         exit 3
     fi
+elif [ "${1:-}" != "--with-uv" ]; then
+    echo "failed: uv is not installed" >&2
+    exit 4
 else
     if ! command -v curl >/dev/null 2>&1; then
         echo "failed: curl is not available, so uv could not be downloaded" >&2

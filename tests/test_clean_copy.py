@@ -13,6 +13,8 @@ NEEDED = (*CATALOGS, "plugins/jobkit/plugin.json", "plugins/jobkit/.claude-plugi
           "plugins/jobkit/pyproject.toml", "plugins/jobkit/.python-version",
           "plugins/jobkit/LICENSE", "plugins/jobkit/README.md", "plugins/jobkit/setup/install",
           "plugins/jobkit/setup/install.ps1", "plugins/jobkit/setup/constraints.txt",
+          "plugins/jobkit/setup/preflight.md", "plugins/jobkit/setup/first-run.md",
+          "plugins/jobkit/setup/welcome.md", "plugins/jobkit/setup/troubleshoot.md",
           "plugins/jobkit/src/jk/common.py", "plugins/jobkit/skills/tutor/SKILL.md",
           "plugins/jobkit/skills/interview-prep/architecture.md")
 ABSENT = (".git", ".venv", "tmp", ".ruff_cache", ".DS_Store", "tests", "docs", "openspec", ".claude", ".githooks",

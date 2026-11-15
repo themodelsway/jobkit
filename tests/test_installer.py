@@ -1,4 +1,4 @@
-"""The helper installers: the four check states, no downgrade, pinned versions, and the pin records.
+"""The helper installers: the check states, uv installed only on request, no downgrade, pinned versions, and the pin records.
 
 `setup/install` is driven against a fake `uv` and a fake `curl` in a throw-away folder, so nothing is
 downloaded or installed. `setup/install.ps1` can only be fully run on Windows; here its text is compared
@@ -139,7 +139,8 @@ class ShellInstallerTests(unittest.TestCase):
                     self.add_helper(version)
                 before = self.snapshot()
                 result = self.run_script("--check")
-                wanted = "missing" if version is None else f"{name}:{self.fake / 'tools'}"
+                wanted = ({"missing-no-uv": "no-uv", "missing": "missing"}[name] if version is None
+                          else f"{name}:{self.fake / 'tools'}")
                 self.assertEqual((result.stdout.strip(), result.returncode), (wanted, 0), result.stderr)
                 self.assertEqual(self.snapshot(), before, "the check changed a file")
                 self.assertNotIn("tool install", self.log("uv"))
@@ -187,9 +188,18 @@ class ShellInstallerTests(unittest.TestCase):
         self.add_helper("0.3.1")
         self.assertTrue(self.run_script("--check").stdout.startswith("older:"))
 
-    def test_missing_uv_is_downloaded_at_the_fixed_version(self):
+    def test_missing_uv_is_not_downloaded_unless_asked(self):
         write_script(self.bin / "curl", FAKE_CURL)
+        before = self.snapshot()
         result = self.run_script()
+        self.assertEqual(result.returncode, 4)
+        self.assertIn("failed: uv is not installed", result.stderr)
+        self.assertEqual(self.log("curl"), "", "uv was downloaded without --with-uv")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_missing_uv_is_downloaded_at_the_fixed_version_when_asked(self):
+        write_script(self.bin / "curl", FAKE_CURL)
+        result = self.run_script("--with-uv")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"https://astral.sh/uv/{pinned_uv(SCRIPT)}/install.sh", self.log("curl"))
         self.assertTrue(result.stdout.startswith("ok:"), result.stdout)
@@ -207,7 +217,7 @@ class ShellInstallerTests(unittest.TestCase):
 
     def test_a_failed_install_can_be_retried(self):
         write_script(self.bin / "curl", FAKE_CURL)
-        failed = self.run_script(FAKE_INSTALL_FAILS="1")
+        failed = self.run_script("--with-uv", FAKE_INSTALL_FAILS="1")
         self.assertEqual(failed.returncode, 1)
         self.assertIn("could not be installed", failed.stderr)
         self.assertTrue((self.fake / "home" / ".local" / "bin" / "uv").exists(), "uv stays from the first attempt")
@@ -226,7 +236,8 @@ class InstallersAgreeTests(unittest.TestCase):
         for script in (SCRIPT, WINDOWS_SCRIPT):
             text = script.read_text(encoding="utf-8")
             for name in ("pyproject.toml", ".python-version", "constraints.txt", "--constraints", "--python",
-                         "required-version", "newer:", "older:", "ok:", "missing", "uv is too old"):
+                         "required-version", "newer:", "older:", "ok:", "missing", "no-uv", "--with-uv",
+                         "uv is too old", "uv is not installed"):
                 self.assertIn(name, text, f"{script.name}: {name}")
             self.assertNotIn("plugin.json", text, f"{script.name} reads the version from a manifest")
 

@@ -211,7 +211,7 @@ def load_resume_context() -> tuple[list[Company] | None, set[str]]:
     try:
         companies, skills = qr.load()
     except (OSError, ValueError, KeyError) as exc:
-        print(f"Warning: resume data not loaded ({exc}); resume links left unchanged.")
+        print(f"Warning: resume data not loaded ({common.hide_home(str(exc))}); resume links left unchanged.")
         return None, set()
     names = {item["name"].lower() for group in skills["groups"].values() for item in group}
     return list(companies.values()), names

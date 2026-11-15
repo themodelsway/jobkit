@@ -250,9 +250,10 @@ def cmd_compare(files: dict[Path, tuple[str, str]], name: str, reading_text: str
                            certifications=[], education=[], projects=[], problems=parsed["problems"])
     print(visual_compare.format_report(key, visual_compare.compare(parsed, reading)))
     if document.format == "visual":
-        print(f"(the parser side is the confirmed transcript at {transcript})")
+        print(f"(the parser side is the confirmed transcript at {common.hide_home(str(transcript))})")
     elif visual_compare.compare(parsed, reading):
-        print(f"If corrections are agreed: save the full corrected text as {transcript} (its current text is shown by "
+        print(f"If corrections are agreed: save the full corrected text as {common.hide_home(str(transcript))} "
+              f"(its current text is shown by "
               f"`process-resumes visual text {name}`), then run `process-resumes visual confirm {name}`.")
 
 

@@ -1,7 +1,9 @@
 # Set up the jobkit commands for the jobkit plugin (Windows).
-#   install.ps1 --check   print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | unsupported
-#   install.ps1           install uv if it is missing, then install the commands from this plugin
-# Run it only after the user has said yes: it downloads software (uv, from astral.sh).
+#   install.ps1 --check     print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | no-uv | unsupported
+#   install.ps1             install the commands from this plugin with the uv already on the computer
+#   install.ps1 --with-uv   the same, and first download uv if it is missing
+# Run it only after the user has said yes: uv downloads Python and packages. --with-uv also downloads uv
+# (from astral.sh); pass it only when the user asked for uv to be installed for them.
 # It never replaces a uv that is already there and never installs over newer commands.
 # Keep this file ASCII only: Windows PowerShell 5.1 misreads UTF-8 without a byte order mark.
 $ErrorActionPreference = 'Stop'
@@ -68,7 +70,7 @@ function Get-InstalledVersion($Folder) {
 
 function Get-State {
     $folder = Get-ToolFolder
-    if (-not $folder) { return 'missing' }
+    if (-not $folder) { if (Find-Uv) { return 'missing' } else { return 'no-uv' } }
     $order = Compare-Version (Get-InstalledVersion $folder) $Wanted
     if ($order -eq 0) { return "ok:$folder" }
     if ($order -gt 0) { return "newer:$folder" }
@@ -91,6 +93,8 @@ if ($uv) {
     if ((Compare-Version $have $UvMinimum) -lt 0) {
         Fail "uv is too old (found $have, need $UvMinimum or newer); it was left as it is" 3
     }
+} elseif (-not ($args.Count -gt 0 -and $args[0] -eq '--with-uv')) {
+    Fail 'uv is not installed' 4
 } else {
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ("jobkit-" + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $scratch | Out-Null

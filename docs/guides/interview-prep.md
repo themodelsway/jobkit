@@ -13,7 +13,7 @@ Requests use plain language and fall into these categories:
 - Preparation for a supplied job posting.
 - Preparation for a named company.
 
-**The first time.** The skill asks what the preparation is for: the kind of role and the technologies it uses. It then sets up drill cards for each technology named, leadership questions, and a set of stories drawn from the resumes added with [resume-workflows](resume-workflows.md). Resumes must be added first.
+**The first time.** Before the first task, the skill tells the agent to ask what kind of role the preparation is for, then which technologies to focus on (it can suggest some from the resumes). It then sets up drill cards for each technology named, leadership questions, and a set of stories drawn from the resumes added with [resume-workflows](resume-workflows.md). Resumes must be added first.
 
 **Every time.** The skill lists earlier sessions and asks whether to start a new one or resume one. It never chooses on the user's behalf.
 

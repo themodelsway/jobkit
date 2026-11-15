@@ -57,6 +57,16 @@ def close() -> None:
     _STATE.conn, _STATE.path, _STATE.depth = None, None, 0
 
 
+class StoreError(ToolError):
+    """The stored data could not be used (busy, unavailable, written by a newer version); nothing was changed."""
+
+    troubleshoot = True
+
+
+class NewerDatabaseError(StoreError):
+    """The database was written by a newer version of the program; nothing was changed."""
+
+
 def _open(path: Path) -> sqlite3.Connection:
     """A new connection with the durability and integrity settings every command needs."""
     conn = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_MS / 1000)
@@ -91,7 +101,7 @@ def migrate(conn: sqlite3.Connection) -> int:
             conn.execute("COMMIT")
             return current
         if current > version():
-            raise ToolError(f"The database is version {current} but this program only knows version "
+            raise NewerDatabaseError(f"The database is version {current} but this program only knows version "
                             f"{version()}. Update jobkit; nothing was changed.")
         if 0 < current < version():
             _save_before_upgrade(conn, current)
@@ -225,7 +235,7 @@ def transaction(*, write: bool = True) -> Iterator[sqlite3.Connection]:
     try:
         conn.execute("BEGIN IMMEDIATE" if write else "BEGIN")
     except sqlite3.OperationalError as exc:
-        raise ToolError(f"The database is busy ({exc}). Try again in a moment.") from exc
+        raise StoreError(f"The database is busy ({exc}). Try again in a moment.") from exc
     _STATE.depth = 1
     try:
         yield conn
@@ -235,7 +245,7 @@ def transaction(*, write: bool = True) -> Iterator[sqlite3.Connection]:
         raise ToolError(f"Refused, nothing was changed: {exc}.") from exc
     except sqlite3.OperationalError as exc:
         _rollback(conn)
-        raise ToolError(f"The database is busy or unavailable ({exc}). Try again in a moment.") from exc
+        raise StoreError(f"The database is busy or unavailable ({exc}). Try again in a moment.") from exc
     except BaseException:
         _rollback(conn)
         raise

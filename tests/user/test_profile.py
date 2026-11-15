@@ -228,6 +228,51 @@ class ProfileInitTests(HomeCase):
         self.assertEqual(up.load()["name"], "Pat")
 
 
+    def test_replace_corrects_the_folder_and_its_parts_and_keeps_the_rest(self):
+        first, second = self.home / "one", self.home / "two"
+        first.mkdir()
+        second.mkdir()
+        self.run_cli("init", "--resume-root", str(first), "--name", "Synthetic One", "--resume-dir", "a")
+        code, out = self.run_cli("init", "--replace", "--resume-root", str(second), "--resume-dir", "b", "--resume-dir", "c")
+        self.assertEqual(code, 0)
+        self.assertIn("Replaced the resume folder settings", out)
+        profile = up.load()
+        self.assertEqual((profile["resume_root"], profile["resume_dirs"], profile["name"]),
+                         (str(second), ["b", "c"], "Synthetic One"))
+        self.run_cli("init", "--replace", "--resume-root", str(second))
+        self.assertEqual(up.load()["resume_dirs"], [], "no --resume-dir means the whole folder")
+
+    def test_replace_still_needs_a_real_folder(self):
+        root = self.home / "r"
+        root.mkdir()
+        self.run_cli("init", "--resume-root", str(root))
+        code, _ = self.run_cli("init", "--replace", "--resume-root", str(self.home / "missing"))
+        self.assertEqual(code, 1)
+        self.assertEqual(up.load()["resume_root"], str(root))
+
+
+class PreparingForTests(HomeCase):
+    def run_cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = up.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_set_shows_and_validates_preparing_for(self):
+        root = self.home / "r"
+        root.mkdir()
+        self.run_cli("init", "--resume-root", str(root))
+        self.assertIsNone(up.preparing_for())
+        self.assertIn("preparing for: (not set yet)", self.run_cli("status")[1])
+        self.assertEqual(self.run_cli("set", "preparing_for", "  Backend engineer,\n Python  ")[0], 0)
+        self.assertEqual(up.preparing_for(), "Backend engineer, Python")
+        self.assertIn("preparing for: Backend engineer, Python", self.run_cli("status")[1])
+        for bad in ("", "   ", "x" * (up.PREPARING_FOR_MAX + 1)):
+            with self.subTest(bad=bad[:10]):
+                self.assertEqual(self.run_cli("set", "preparing_for", bad)[0], 1)
+        self.assertEqual(up.preparing_for(), "Backend engineer, Python")
+
+
 class ProfileCompaniesTests(HomeCase):
     def test_lists_companies_or_says_to_scan(self):
         out = io.StringIO()

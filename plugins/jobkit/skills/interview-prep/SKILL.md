@@ -7,41 +7,18 @@ description: Mock-interview practice: asks first, no hints, then grades. Use to 
 
 <!-- shared:preflight -->
 ## Before you start (every time, before anything else)
-Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep FOLDER and carry on.
-1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. PLUGIN below is the folder two levels above this skill file (it holds `setup`). Put these paths in quotes, since they may contain spaces.
-2. Check the helper. The session's environment says which operating system this is; if it does not, run `uname -s` (`Darwin` is macOS, `Linux` is Linux, a name starting `MINGW`, `MSYS` or `CYGWIN`, or no `uname` at all, is Windows):
-   - macOS or Linux: run `sh "PLUGIN/setup/install" --check`.
-   - Windows: run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "PLUGIN/setup/install.ps1" --check`. If that cannot run at all because the shell or `powershell.exe` is missing, say the next line and stop:
-     > On Windows I need a free program called Git for Windows. Please install it from git-scm.com (the standard options are fine), then close this window, open it again and ask me again.
-
-   The command prints one line:
-   - `ok:FOLDER` or `newer:FOLDER`: the helper is ready. Remember FOLDER. `newer` means the helper is already ahead of this plugin: use it as it is and never offer to install over it.
-   - `missing` or `older:FOLDER`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
-     > I need to install the Jobkit engine, which keeps your resumes and interview practice organized. It takes about a minute and downloads one standard tool from astral.sh. Everything is kept in a folder on your own computer. Is that OK?
-     - Yes: run the same command again without `--check`. It prints `ok:FOLDER` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
-       > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
-
-       If it fails in any other way, say the next line and stop:
-       > Setup did not finish. Please check that you are online and that I am allowed to download and install, then ask me to try again. I will carry on from where it stopped.
-     - No: install nothing, say the next line and stop:
-       > No problem. I can't help with your resumes or practice without that helper, so I'll stop here. Ask me again whenever you're ready.
-   - `unsupported`: install nothing, say the next line and stop:
-     > Sorry, this setup doesn't work on your operating system yet.
-3. Run every jobkit command by its full path inside FOLDER, in quotes, for example `"FOLDER/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces.
-4. If a command fails because it was not allowed to write under the jobkit home folder (the error mentions `Operation not permitted`, `Permission denied`, `unable to open database file` or a read-only database), nothing was saved. Report nothing as saved and never suggest turning your own protections off. If you can ask the user to approve running that one command again with wider permissions (your own one-off approval, for that command only), ask that first and run it again if they agree. If you cannot, or they decline, say the next line with DATA_FOLDER replaced by the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), and stop:
-   > I wasn't allowed to save that, so nothing was saved. Please allow me to write to this folder, then ask me again: DATA_FOLDER
-5. Run `jobkit status && profile status` as one command (each by its full path, as in step 3). If it says there is no database, run `jobkit init` and then `profile status`. Do not mention any of this.
-6. From the `profile status` output: if there is no resume data yet, set up the resumes, one question at a time:
-   1. Ask:
-      > Where do you keep your resumes? You can drag the folder here or tell me its name.
-   2. Look inside that folder. Only if it also holds files that do not look like resumes, ask:
-      > I see some files that don't look like resumes. Should I skip any part of that folder?
-   3. Run `profile init --resume-root "FOLDER" [--resume-dir SUBFOLDER ...]`, then `process-resumes --survey`, then `process-resumes`.
-   4. Report what was found and ask:
-      > I found N resumes from M employers: A, B, C. Does that look right?
-   5. If one employer shows up under two names, ask for each pair:
-      > I found "X" and "Y". Are they the same company?
-      On yes, run `profile companies merge FROM INTO`, then `process-resumes --force`.
+Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep JOBKIT_COMMANDS_DIR and carry on.
+1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. JOBKIT_PLUGIN_DIR below is the folder two levels above this skill file (where the plugin's setup and skill files are). JOBKIT_PLUGIN_DIR and JOBKIT_COMMANDS_DIR are folders you work out, not environment variables; only JOBKIT_HOME (the data folder) is one. Put these paths in quotes, since they may contain spaces. Read every file this skill names (the setup guides, the guides next to this skill, and another skill's file) by printing it with `cat "PATH"`, so the user is not asked for permission to read it.
+2. Read and follow `JOBKIT_PLUGIN_DIR/setup/preflight.md` now. It holds this skill's prerequisites (uv and the jobkit helper, and how to install them with the user's consent) and what to do when a save is not allowed (that applies to every command in this conversation), and it gives you JOBKIT_COMMANDS_DIR, the folder where uv keeps the jobkit commands this skill runs. Without JOBKIT_COMMANDS_DIR none of this skill's commands can run: if JOBKIT_COMMANDS_DIR is not known, finish this step before anything else.
+3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarised), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
+4. Run `jobkit status --setup`. It prints one word, for you only: never say it to the user, or tell them setup is unfinished.
+   - `no-database`: run `jobkit init`, then `jobkit status --setup` again.
+   - `no-resumes`: read and follow `JOBKIT_PLUGIN_DIR/setup/first-run.md`, which imports the resumes, then run `jobkit status --setup` again. If it still prints `no-resumes`, do not start the import again in this conversation; say the next line and stop:
+     > I couldn't import any resumes from that folder. Please check that it holds your resumes, then ask me again.
+   - `no-target` or `ready`: carry on. `no-target` means "what they are preparing for" has not been finished (it may have stopped part way before); a skill with that section does it, from the start, before its first lesson or practice.
+   - `blocked`, `busy`, `too-new`, `failed`, any other output, or no output: the check could not tell. Never guess the stage and never import the resumes on a guess. Read and follow `JOBKIT_PLUGIN_DIR/setup/troubleshoot.md`, and carry on with this skill only if it says so.
+5. Run `profile status` and keep its output; later steps of this skill read it. Do not mention any of this.
+6. If the resumes were just imported, or this is the start of the conversation and the request names no task, read and follow `JOBKIT_PLUGIN_DIR/setup/welcome.md`.
 <!-- /shared:preflight -->
 
 <!-- shared:talking -->
@@ -60,10 +37,15 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 | theme, summary angle, curation | (do not name them; say "I'll label it" or just do it) |
 <!-- /shared:talking -->
 
-## What they are preparing for (once, after the resumes are set up)
-1. Ask:
-   > What are you preparing for? Tell me the kind of role and the technologies it uses, for example AWS, Acme Data or Google Cloud.
+## What they are preparing for (when the setup check printed `no-target`)
+Treat this as the opening of the task the user chose, not as a setup step: never tell the user about a setup check, a status word or unfinished setup.
+1. Ask, one question at a time:
+   > Before we start, what kind of role are you preparing for?
+   Then:
+   > Is there a technology you'd like to focus on, such as AWS, Azure, Google Cloud or large language models? If you're not sure, I can suggest some from your resumes.
+   If the user wants a suggestion, name the two or three technologies the resumes show most and ask which to use.
 2. Run `lead init` and `prep init` (leadership questions and stories come from the resumes whatever the target). Then set up each topic the user named (see "Tracks" in `architecture.md` (in this skill's folder)): `arch init --track aws` for the bundled AWS example; for any other technology build a seed, show it to the user in plain words, register it with `arch track add NAME --seed -`, then run `arch init --track NAME`. Key services are the ones the resumes mention (the user may pin their own list with `profile tier1 ...`). `arch tracks` shows what exists; another topic can be added later the same way.
+3. Last, when every command above has worked, save what they are preparing for, in a few of their own words: `profile set preparing_for "TEXT"`. This marks the section as done. Until it is saved the setup check keeps printing `no-target`, so a setup that stopped part way is done again from the start next time; every command above is safe to run again. Then carry on with the task the user chose, without asking for it again.
 
 Stories, answers and progress are personal data kept on the user's computer. Read and write them only through the commands below.
 
@@ -152,4 +134,7 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
 - Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.
+- Never run a jobkit command, and never answer as if resumes are set up, until `JOBKIT_PLUGIN_DIR/setup/preflight.md` has given you JOBKIT_COMMANDS_DIR in this conversation.
+- When a jobkit command fails and its message does not say what to fix, or its last line points to the troubleshooting guide, read and follow `JOBKIT_PLUGIN_DIR/setup/troubleshoot.md`. Never repair, delete or recreate the stored data yourself.
+- Jobkit does not post issues on GitHub. Never create issues, comments or anything else there; when something should be reported, write it for the user to post.
 <!-- /shared:rules -->

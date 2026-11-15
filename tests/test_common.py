@@ -5,10 +5,11 @@ import io
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
-from jk import common
+from jk import base, common, store
+from jk.interview import arch
 from jk.common import ToolError
 
 
@@ -60,11 +61,100 @@ class RunTests(unittest.TestCase):
             self.assertEqual(common.run(self.ns(fail)), 1)
         self.assertEqual(err.getvalue(), "bad input\n")
 
-    def test_other_exceptions_are_not_swallowed(self):
+    def test_an_unexpected_error_shows_one_line_and_the_hint_never_a_stack_trace(self):
         def boom(a):
-            raise KeyError("x")
-        with self.assertRaises(KeyError):
-            common.run(self.ns(boom))
+            raise KeyError(f"no {Path.home() / 'secret.txt'}")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(common.run(self.ns(boom)), 1)
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertNotIn(str(Path.home()), err.getvalue())
+        self.assertEqual(err.getvalue(), f"error: KeyError: 'no {Path('~') / 'secret.txt'}'\n{common.TROUBLESHOOT_HINT}\n")
+
+    def test_a_tool_error_hides_the_home_folder(self):
+        def fail(a):
+            raise common.ToolError(f"{Path.home() / 'resumes'} is not a folder")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            common.run(self.ns(fail))
+        self.assertEqual(err.getvalue(), f"{Path('~') / 'resumes'} is not a folder\n")
+
+    def test_a_storage_problem_adds_the_hint_and_a_plain_mistake_does_not(self):
+        def busy(a):
+            raise store.StoreError("The database is busy (locked). Try again in a moment.")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(common.run(self.ns(busy)), 1)
+        self.assertEqual(err.getvalue(), "The database is busy (locked). Try again in a moment.\n"
+                         + common.TROUBLESHOOT_HINT + "\n")
+        self.assertTrue(store.NewerDatabaseError.troubleshoot)
+        self.assertFalse(ToolError.troubleshoot)
+
+    def test_the_hint_names_a_guide_that_ships_with_the_plugin(self):
+        name = common.TROUBLESHOOT_HINT.split("read ", 1)[1].split(" in the plugin folder", 1)[0]
+        self.assertTrue((Path(__file__).resolve().parents[1] / "plugins" / "jobkit" / name).is_file(), name)
+
+
+class HomeFolderTests(unittest.TestCase):
+    def test_mac_and_linux_home_becomes_tilde_only_at_a_folder_end(self):
+        home = PurePosixPath("/srv/people/hellouser1")
+        tilde = lambda s: common.hide_home(s, home, windows=False)  # noqa: E731
+        self.assertEqual(tilde("cannot read /srv/people/hellouser1/.jobkit/data/jobkit.db"),
+                         "cannot read ~/.jobkit/data/jobkit.db")
+        self.assertEqual(tilde("/srv/people/hellouser1"), "~")
+        self.assertEqual(tilde("/srv/people/hellouser2/x, /srv/people/hellouser10/x and /srv/people/hellouser1.old"),
+                         "/srv/people/hellouser2/x, /srv/people/hellouser10/x and /srv/people/hellouser1.old")
+        self.assertEqual(tilde("/srv/People/hellouser1/x"), "/srv/People/hellouser1/x", "case counts on Mac and Linux")
+
+    def test_windows_home_becomes_userprofile_in_any_case_slash_or_git_bash_form(self):
+        home = PureWindowsPath(r"D:\Profiles\Hellouser1")
+        hide = lambda s: common.hide_home(s, home, windows=True)  # noqa: E731
+        self.assertEqual(hide(r"cannot read D:\Profiles\Hellouser1\.jobkit\data"), r"cannot read %USERPROFILE%\.jobkit\data")
+        self.assertEqual(hide(r"d:\profiles\HELLOUSER1\x"), r"%USERPROFILE%\x")
+        self.assertEqual(hide("D:/Profiles/Hellouser1/x"), "%USERPROFILE%/x")
+        self.assertEqual(hide("/d/Profiles/Hellouser1/x"), "%USERPROFILE%/x")
+        self.assertNotIn("~", hide(r"D:\Profiles\Hellouser1\x"))
+        self.assertEqual(hide(r"D:\Profiles\Hellouser2\x and D:\Profiles\Hellouser10\x"),
+                         r"D:\Profiles\Hellouser2\x and D:\Profiles\Hellouser10\x")
+
+    def test_a_home_reached_through_a_link_is_hidden_in_both_forms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real-home"
+            real.mkdir()
+            link = Path(tmp) / "linked-home"
+            link.symlink_to(real, target_is_directory=True)
+            with mock.patch.object(Path, "home", return_value=link):
+                text = common.hide_home(f"cannot read {link / 'a.txt'} or {real.resolve() / 'b.txt'}", windows=False)
+        self.assertEqual(text, f"cannot read {Path('~') / 'a.txt'} or {Path('~') / 'b.txt'}")
+
+    def test_the_longer_home_form_wins_and_a_match_starts_at_a_folder_name(self):
+        homes = [PurePosixPath("/people/hellouser1"), PurePosixPath("/var/people/hellouser1")]
+        with mock.patch.object(base, "_known_homes", return_value=homes):
+            self.assertEqual(common.hide_home("/var/people/hellouser1/x and /people/hellouser1/y", windows=False),
+                             "~/x and ~/y")
+            self.assertEqual(common.hide_home("/x/people/hellouser1/z", windows=False), "/x/people/hellouser1/z")
+
+    def test_messages_printed_outside_run_hide_the_home_folder(self):
+        out = io.StringIO()
+        with mock.patch.object(arch.qr, "load", side_effect=OSError(f"cannot open {Path.home() / 'r.txt'}")), \
+                contextlib.redirect_stdout(out):
+            arch.load_resume_context()
+        self.assertNotIn(str(Path.home()), out.getvalue())
+        self.assertIn(str(Path("~") / "r.txt"), out.getvalue())
+
+    def test_a_printed_path_is_read_back_from_the_home_folder(self):
+        self.assertEqual(common.user_path("~/x.md"), Path.home() / "x.md")
+        self.assertEqual(common.user_path("rel/x.md"), Path("rel/x.md"))
+        home = Path("profile-home")
+        forms = ["%userprofile%/.jobkit/x.md", "%USERPROFILE%/.jobkit/x.md"]
+        if sys.platform == "win32":                        # a backslash separates folders only on Windows
+            forms.append(r"%USERPROFILE%\.jobkit\x.md")
+        for given in forms:
+            with self.subTest(given=given):
+                self.assertEqual(common.user_path(given, home, windows=True), home / ".jobkit" / "x.md")
+        self.assertEqual(common.user_path("%USERPROFILE%/x", home, windows=False), Path("%USERPROFILE%/x"),
+                         "only Windows reads %USERPROFILE%")
+        self.assertEqual(common.user_path("a%TEMP%b", home, windows=True), Path("a%TEMP%b"), "nothing else is expanded")
 
 
 class InputErrorTests(unittest.TestCase):
