@@ -496,7 +496,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv), lock=True)
+    readers = {cmd_status, cmd_next, cmd_list, cmd_show}   # these change nothing
+    return common.run_writer(build_parser().parse_args(argv), readers)
 
 
 if __name__ == "__main__":

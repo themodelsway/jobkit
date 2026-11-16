@@ -35,8 +35,12 @@ A session SHALL have a mode of architecture, stories, jd, leadership or tutor, a
 - **THEN** the queue takes a card and a story in turn until one kind runs out, and the start message gives the number of each kind queued and the number of matching items left out
 
 #### Scenario: JD with filters
-- **WHEN** a jd session is started with `--track`, `--area`, `--tier` or `--kind`
+- **WHEN** a jd session is started with `--track`, `--area`, `--tier` or `--kind service`
 - **THEN** only the matched cards that pass every filter are queued
+
+#### Scenario: JD with a kind it cannot match
+- **WHEN** a jd session is started with `--kind` pair, scenario, case or role-play
+- **THEN** the command fails and says that a job posting is matched to service cards only
 
 #### Scenario: JD with another mode
 - **WHEN** `--jd` is given with `--mode stories`
@@ -50,7 +54,11 @@ In tutor sessions a logged confidence SHALL be capped at 1, and a passed quiz (`
 - **THEN** it is stored as 1
 
 ### Requirement: A lesson does not refresh a drill date
-A tutor lesson that does not raise confidence SHALL NOT change the item's last-drilled date, so old solid answers still read as aging.
+A tutor lesson that does not raise confidence SHALL NOT change the item's last-drilled date, so old solid answers still read as aging. A passed quiz SHALL count as a drill and set the last-drilled date to today.
+
+#### Scenario: Quiz on an old solid card
+- **WHEN** a passed quiz (`--quiz`, confidence 2) is logged for a card already at confidence 2 and last drilled long ago
+- **THEN** its last-drilled date is today, so it is no longer aging
 
 #### Scenario: Lesson on an old solid card
 - **WHEN** a tutor lesson without a passed quiz is logged for a card at confidence 2

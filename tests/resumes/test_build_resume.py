@@ -299,3 +299,12 @@ class BuildOptionTests(PipelineCase):
 
     def test_recency_and_include_review_are_accepted(self):
         self.assertTrue(self.build("--recency", "0", "--include-review"))
+
+
+class TitleArgumentTests(unittest.TestCase):
+    def test_a_title_needs_company_equals_title(self):
+        self.assertEqual(br.build_parser().parse_args(["-", "--title", "acme=Lead"]).title, ["acme=Lead"])
+        for bad in ("Lead", "=Lead", "acme="):
+            with self.subTest(title=bad), mock.patch("sys.stderr"), self.assertRaises(SystemExit) as raised:
+                br.build_parser().parse_args(["-", "--title", bad])
+            self.assertEqual(raised.exception.code, 2)

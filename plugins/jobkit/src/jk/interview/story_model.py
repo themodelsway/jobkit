@@ -38,6 +38,7 @@ SNIPPET_AFTER: Final[int] = 60
 
 _NUM = re.compile(r"\d[\d,.]*\s?%|\$\s?\d[\d,.]*\s?[MKB]?\b", re.I)
 _HEDGE = re.compile(r"estimat|approx|about|around|roughly|projected", re.I)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
 _I_WORD = re.compile(r"\bI\b")
 _WE_WORD = re.compile(r"\b(we|our|us)\b", re.I)
 
@@ -184,11 +185,11 @@ def words(text: str | None) -> int:
     return len((text or "").split())
 
 
-def story_text(story: Story, style: str = styles.DEFAULT_STYLE) -> str:
-    """All the text a listener could hear: the parts of the style, then the spoken versions."""
+def story_text(story: Story, style: str = styles.DEFAULT_STYLE, sep: str = " ") -> str:
+    """All the text a listener could hear: the parts of the style, then the spoken versions, joined by `sep`."""
     parts = [styles.part_text(part, story) for part in styles.get(style).parts]
     parts += [story["spoken"].get(key) for key in SPOKEN_LIMITS]
-    return " ".join(str(part) for part in parts if part)
+    return sep.join(str(part) for part in parts if part)
 
 
 def check_fact(fact: Fact) -> list[str]:
@@ -277,15 +278,28 @@ def _squash(text: str) -> str:
     return re.sub(r"\s", "", text)
 
 
+def _numbers(text: str) -> set[str]:
+    """The percentages and money amounts in the text, without spaces or a closing full stop or comma."""
+    return {_squash(x).rstrip(".,") for x in _NUM.findall(text)}
+
+
+def _unhedged_numbers(text: str) -> set[str]:
+    """The numbers quoted in a sentence that has no hedge word ('about', 'estimated', ...)."""
+    return set().union(*(_numbers(s) for s in _SENTENCE.split(text) if not _HEDGE.search(s)))
+
+
 def _check_numbers(story: Story, text: str, facts: Mapping[str, Fact]) -> list[Issue]:
+    """Warn about a number with no metric or fact giving that exact number, and an estimate quoted without a hedge."""
     out: list[Issue] = []
-    known = " ".join(_squash(str(m.get("value", ""))) for m in story["metrics"]) + " " + _squash(
-        " ".join(facts[i]["text"] for i in story["uses_facts"] if i in facts))
-    hedged = {_squash(str(m["value"])) for m in story["metrics"] if m.get("basis") in HEDGED_METRIC_BASES}
-    for number in sorted({_squash(x) for x in _NUM.findall(text)}):
+    backing = [str(m.get("value", "")) for m in story["metrics"]] + [facts[i]["text"] for i in story["uses_facts"]
+                                                                     if i in facts]
+    known = _numbers(" ".join(backing))
+    hedged = _numbers(" ".join(str(m["value"]) for m in story["metrics"] if m.get("basis") in HEDGED_METRIC_BASES))
+    unhedged = _unhedged_numbers(text)
+    for number in sorted(_numbers(text)):
         if number not in known:
             out.append(("warn", f"number {number} in the text has no metric or fact behind it"))
-        elif number in hedged and not _HEDGE.search(text):
+        elif number in hedged and number in unhedged:
             out.append(("warn", f"number {number} is an estimate: say 'estimated' or 'about' when you quote it"))
     return out
 
@@ -314,7 +328,7 @@ def validate_story(story: Story, eng: Engagement | None = None, style: str = sty
     facts = fact_map(eng)
     text = story_text(story, style)
     found = (_check_links(story, eng, facts) + _check_metrics(story) + _check_text_rules(story, text, style, marking)
-             + _check_numbers(story, text, facts) + _check_voice(story))
+             + _check_numbers(story, story_text(story, style, "\n"), facts) + _check_voice(story))
     return [(level, f"{story['id']}: {message}") for level, message in found]
 
 

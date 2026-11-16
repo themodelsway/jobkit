@@ -124,8 +124,9 @@ def cmd_list(entries: list[dict[str, Any]]) -> None:
         return
     VISUAL_DIR.mkdir(parents=True, exist_ok=True)
     for item in entries:
-        print(f"{item['key']}: {STATE_TEXT[item['state']]}\n  reason: {item['reason']}\n  pdf: {item['pdf']}\n"
-              f"  save the transcript as: {item['transcript']}")
+        print(f"{item['key']}: {STATE_TEXT[item['state']]}\n  reason: {common.hide_home(item['reason'])}\n"
+              f"  pdf: {common.hide_home(item['pdf'])}\n"
+              f"  save the transcript as: {common.hide_home(item['transcript'])}")
 
 
 def locate(files: dict[Path, tuple[str, str]], name: str) -> tuple[Path, Path, str]:
@@ -228,7 +229,7 @@ def cmd_confirm(files: dict[Path, tuple[str, str]], name: str, approved: list[st
     else:
         _removals(transcript).unlink(missing_ok=True)
     visual_render.clear(visual_render.pages_folder(transcript))
-    extra = f" with {len(removed)} agreed removal(s), recorded in {_removals(transcript)}" if removed else ""
+    extra = f" with {len(removed)} agreed removal(s), recorded in {common.hide_home(str(_removals(transcript)))}" if removed else ""
     print(f"Confirmed the transcript for {key}{extra}. Run process-resumes to read it.")
 
 
@@ -236,7 +237,7 @@ def cmd_render(files: dict[Path, tuple[str, str]], name: str) -> None:
     """Write the pages of one PDF as images under `output/visual/pages/` and print their paths."""
     path, transcript, _ = locate(files, name)
     for image in visual_render.render(path, visual_render.pages_folder(transcript)):
-        print(image)
+        print(common.hide_home(str(image)))
 
 
 def cmd_compare(files: dict[Path, tuple[str, str]], name: str, reading_text: str) -> None:

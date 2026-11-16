@@ -1,5 +1,7 @@
 """Visual reading of PDFs the parser cannot read: the parser asks first, and a transcript is used only once it is
 confirmed for the PDF as it is. All data is fictional. Run: uv run python -m unittest discover -s tests -t ."""
+import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -34,6 +36,16 @@ class VisualTests(unittest.TestCase):
         self.pdf.write_bytes(content)
         later = self.transcript.stat().st_mtime + 10 if self.transcript.exists() else 0
         os.utime(self.pdf, (later, later))                       # the new PDF is newer than any transcript
+
+    def test_list_shows_the_home_folder_as_a_tilde(self):
+        home = Path.home()
+        item = {"key": "scan.pdf", "state": next(iter(visual.STATE_TEXT)), "reason": f"cannot read {home}/r/scan.pdf",
+                "pdf": f"{home}/r/scan.pdf", "transcript": f"{home}/.jobkit/output/visual/scan.txt"}
+        out = io.StringIO()
+        with mock.patch.object(visual, "VISUAL_DIR", self.tmp / "visual"), contextlib.redirect_stdout(out):
+            visual.cmd_list([item])
+        self.assertNotIn(str(home), out.getvalue())
+        self.assertIn("~/r/scan.pdf", out.getvalue())
 
     def test_without_a_transcript_the_error_is_raised(self):
         with self.assertRaises(extract.NeedsVisualRead):

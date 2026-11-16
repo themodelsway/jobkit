@@ -209,15 +209,23 @@ def need() -> Profile:
     return load()
 
 
+def check_resume_folder(text: str) -> Path:
+    """The resume folder the user named (`~` or `%USERPROFILE%` is the home folder); fails unless it is a folder."""
+    root = common.user_path(text)
+    if not root.is_dir():
+        raise ToolError(f"{common.hide_home(str(root))} is not a folder")
+    return root
+
+
 def resume_root() -> Path:
     """Folder that holds the resume files."""
-    return Path(need()["resume_root"]).expanduser()
+    return common.user_path(need()["resume_root"])
 
 
 def resume_dirs() -> list[Path]:
     """Folders to scan: the chosen subfolders of the resume root, or the root itself."""
     profile = need()
-    root = Path(profile["resume_root"]).expanduser()
+    root = common.user_path(profile["resume_root"])
     return [root / sub for sub in profile.get("resume_dirs") or [""]]
 
 
@@ -314,9 +322,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     With `--replace`, the resume folder and its parts are set to exactly what was given (the whole folder when no
     `--resume-dir` is given), for when the user corrects them; every other setting is kept.
     """
-    root = Path(args.resume_root).expanduser()
-    if not root.is_dir():
-        raise ToolError(f"{root} is not a folder")
+    check_resume_folder(args.resume_root)
     profile = load()
     if args.replace:
         profile["resume_root"] = str(args.resume_root)
@@ -365,6 +371,7 @@ def cmd_set(args: argparse.Namespace) -> None:
     elif args.key == "name":
         profile["name"] = args.value
     else:
+        check_resume_folder(args.value)
         profile["resume_root"] = args.value
     save(profile)
 
@@ -497,7 +504,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.cmd == "terms" and args.action == "check" and not store.db_path().exists():
         print("personal terms: no database here, nothing to check (skipped)")
         return 0
-    return common.run(args, lock=args.cmd != "terms" or args.action not in (None, "list", "check"))
+    read_only = args.cmd == "status" or (args.cmd in ("terms", "companies", "header", "open")
+                                          and args.action in (None, "list", "check"))
+    return common.run(args, lock=not read_only, read_only=read_only)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 
 | Table | One row is | Notes |
 |---|---|---|
-| `meta` | a named setting or document header | The catalog's `dimensions` and `tracks`, the stories and engagements `schema_version`. |
+| `meta` | a named setting or document header | The catalog's `tracks` (and a `dimensions` list left by older versions, no longer read), the stories and engagements `schema_version`. |
 | `session` | a practice session | Columns: `id`, `title`, `mode`, `status`, `created`, `updated` (the listing reads them). The creation time never changes. `body` holds the rest (`topic`, `jd`). |
 | `session_item` | one queued item of a session | `session_id`, `position`, `item`, `kind` (`card`, `story`, `leader`); no `body`. A new entry must name an item that exists. If the item is removed later the entry stays and is shown as unavailable. |
 | `match_result` | one finished match score | Added by schema step 10. Columns: `key`, `created`, `last_used`; `body` holds the whole result, including `label`, `band` and the scores, which the listing reads from it (see Match scores). Entries not used for 90 days are removed when `match-score run` finishes. |
@@ -185,11 +185,11 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
 
 ---
 
-## Architecture drill cards
+## Knowledge drill cards
 
 ### Catalog (`card`; export kind `arch-catalog`)
 ```json
-{ "dimensions": ["scale", "cost", "security"], "scenarios_note": "...", "tracks": ["aws", "acmedata"],
+{ "scenarios_note": "...", "tracks": ["aws", "acmedata"],
   "cards": [ {
       "id": "acmedata-table-store", "track": "acmedata", "kind": "service", "area": "Storage",
       "name": "Table Store", "tier": 2, "aliases": [], "members": [],
@@ -197,9 +197,9 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
       "recent_changes": [ { "date": "2026-02-01", "summary": "...", "source": "https://..." } ],
       "verified_on": "2026-11-05" } ] }
 ```
-- `kind`: `service` (a product or feature), `pair` (a "which one and why" comparison; `members` lists the compared names), `scenario` (a design question).
+- `kind`: `service` (any topic: a product, feature, concept or method), `pair` (a "which one and why" comparison; `members` lists the compared names), `scenario` (a design or situational question), `case` (a question developed over several turns; `situation` holds the opening), `role-play` (the agent plays `part` while the user pursues `goal`).
 - `tier`: 1 = on your resume or pinned with `profile tier1`; 2 = core; 3 = optional.
-- `id`: AWS cards are unprefixed (`vpc`); other tracks use `<track>-<slug>`, `<track>-pair-...`, `<track>-scn-...`. A card without `track` counts as AWS, and a catalog without `tracks` counts as AWS enabled, so older files keep working.
+- `id`: AWS cards are unprefixed (`vpc`); other tracks use `<track>-<slug>`, `<track>-pair-...`, `<track>-scn-...`, `<track>-case-...`, `<track>-role-...`. A card without `track` counts as AWS, and a catalog without `tracks` counts as AWS enabled, so older files keep working.
 - `lifecycle.status`: `active`, `maintenance` (closed to new customers, no new features), `sunset` (has an end date), `unverified`. `seeded: true` means an unverified lead, not a checked fact. `verified_on` is set only by `arch refresh`.
 - Facts (`lifecycle`, `recent_changes`) are recorded only with a `source` URL on the card's track hosts. The catalog and progress are separate files, so refreshing facts never touches your progress.
 
@@ -212,9 +212,11 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
   "services": [ { "area": "Storage", "name": "Table Store", "tier": 2, "aliases": ["Store"] } ],
   "pairs": [ { "topic": "Table format", "name": "Format A vs Format B", "members": ["Format A", "Format B"] } ],
   "scenarios": ["Design a lakehouse for 50 TB/day of events"],
-  "dimensions": ["scale", "cost"] }
+  "family": "engineering", "dimensions": ["scale", "cost"], "country": "United Kingdom",
+  "cases": [ { "title": "Pipeline is late", "situation": "The nightly load now finishes at 9am. Find out why.", "area": "Operations" } ],
+  "role_plays": [ { "title": "Explain a cost overrun", "part": "a finance lead who wants the bill cut", "goal": "agree what to change first" } ] }
 ```
-Added with `arch track add NAME --seed FILE|-`, which validates it. The seed holds topic names and the documentation hosts only, never facts. `source_hosts` are bare host names, not URLs. `tier` is 2 or 3. `name` is 2-31 lower-case letters, digits or `-`, and not `aws`. The AWS seed is built in (`interview/aws/arch_seed.py`) and has no file.
+Added with `arch track add NAME --seed FILE|-`, which validates it. The seed holds topic names and the source hosts only, never facts. `source_hosts` are bare host names, not URLs. `tier` is 2 or 3. `name` is 2-31 lower-case letters, digits or `-`, and not `aws`. Every list is optional, but the seed needs at least one card of some kind. `family` is one of the role families `arch families` lists (`engineering` when missing). `dimensions` is the rubric, at most 12 lines (a track stored by an earlier version keeps a longer rubric); without it the family's default rubric is used. Two cards may not get the same id: an id is the track, a kind marker (none for services, `pair-`, `scn-`, `case-`, `role-`) and the slug of the name, so a service "Role conflict" and a role-play "Conflict" clash and the seed is refused. `country` (at most 60 characters) is for knowledge that differs by country. Each case needs `title` and `situation`, each role-play `title`, `part` and `goal`; `area` defaults to `Cases` or `Role-plays`. The AWS seed is built in (`interview/aws/arch_seed.py`), has no file, and keeps its own rubric.
 
 ---
 

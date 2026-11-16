@@ -1,0 +1,73 @@
+[
+  {
+    "name": "engineering",
+    "label": "Engineering",
+    "description": "Software, data, cloud, infrastructure, security and architecture roles: frontend, backend, platform, data engineering, architecture.",
+    "dimensions": [
+      "What it is and the problem it solves",
+      "When to choose it, and the alternatives (why not those)",
+      "Key limits and gotchas",
+      "Security (identity, encryption, exposure)",
+      "Cost drivers",
+      "Scaling and failure behaviour (regions and zones, limits, quotas)",
+      "Where you have used it",
+      "What changed in the last 3 years, and anything deprecated"
+    ]
+  },
+  {
+    "name": "product",
+    "label": "Product",
+    "description": "Product managers and product owners, and product-minded roles in design and analytics.",
+    "dimensions": [
+      "The user problem, and who has it",
+      "How success is measured, and why those measures",
+      "What goes first, and what is left out",
+      "Trade-offs and risks, and how to test them cheaply",
+      "Working with engineering, design and stakeholders",
+      "Where you have done it",
+      "A clear recommendation and the next step"
+    ]
+  },
+  {
+    "name": "delivery",
+    "label": "Delivery",
+    "description": "Project, programme and delivery managers, and scrum masters.",
+    "dimensions": [
+      "Scope, goals and what done means",
+      "The plan: milestones, dependencies and the critical path",
+      "Risks and issues: how they are found, owned and escalated",
+      "Stakeholders and communication",
+      "The method chosen (agile, phased or a mix) and why",
+      "Budget, people and the trade-offs between scope, time and cost",
+      "Where you have done it"
+    ]
+  },
+  {
+    "name": "people",
+    "label": "People",
+    "description": "HR, recruiting, people operations and learning roles.",
+    "dimensions": [
+      "The policy or practice, and why it exists",
+      "Legal and compliance points for the country",
+      "Fairness, consistency and records",
+      "How the people involved are treated and told",
+      "Risks, and when to escalate or take advice",
+      "How success is measured (for example retention, time to hire, engagement)",
+      "Where you have done it"
+    ]
+  },
+  {
+    "name": "operations",
+    "label": "Operations",
+    "description": "Back-office, finance, accounting, operations and customer-support roles.",
+    "dimensions": [
+      "The process: inputs, steps, outputs and owners",
+      "Controls and accuracy (checks, reconciliations, approvals)",
+      "Rules and compliance for the country",
+      "The tools and systems used, and their limits",
+      "How it is measured (for example cycle time, error rate, cost) and improved",
+      "Handling exceptions and escalations",
+      "Where you have done it"
+    ]
+  }
+]

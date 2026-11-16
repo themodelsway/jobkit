@@ -12,15 +12,15 @@ Requests use plain language and fall into these categories:
 - General readiness.
 - Readiness for a supplied job posting.
 
-**Teaching.** The skill covers three kinds of topic: technical questions, leadership questions and personal stories. It first asks what the user already knows, then teaches in short pieces and pauses for questions. For a technical card it covers what the technology is, when to choose it, limits, security, cost and recent changes. For a leadership question it explains what an interviewer is testing for and what a strong answer looks like, then helps the user find personal examples. For a story it teaches the purpose of each part of the STAR format, starting from the resume line, and helps fill in what is missing in the user's own words. It never makes up facts about the user's experience.
+**Teaching.** The skill covers three kinds of topic: role knowledge (technical or field cards), leadership questions and personal stories. It first asks what the user already knows, then teaches in short pieces and pauses for questions. For a knowledge card it follows the rubric of the card's track, for example what a technology is, when to choose it, limits, security, cost and recent changes for an engineering card. For a case or a role-play it explains what the interviewer looks for and walks through a short example exchange before any practice. For a leadership question it explains what an interviewer is testing for and what a strong answer looks like, then helps the user find personal examples. For a story it teaches the purpose of each part of the STAR format, starting from the resume line, and helps fill in what is missing in the user's own words. It never makes up facts about the user's experience.
 
 **Quiz.** After each lesson the skill asks one short question, corrects the answer, and asks a variation after a wrong answer. A lesson alone counts as "some gaps"; only a correct quiz answer lets a topic count as solid. The skill then asks whether to go deeper, move on, try a practice question or check readiness. It never skips ahead without asking.
 
-**Facts.** For technical cards the skill checks the card first. If the lifecycle and recent-change records have never been verified or are about six months old, it checks the vendor's own documentation and records the source. Limits, prices and features are not stored, so they are looked up in the vendor's documentation every time.
+**Facts.** For knowledge cards the skill tells the agent to check the card first. If the lifecycle and recent-change records have never been verified or are about six months old, the agent checks the official sources for the card's track (for a product, the vendor's own documentation) and records the source. Limits, prices, rules and features are not stored, so they are looked up every time, for the track's country where one is set.
 
 ## Readiness report
 
-A readiness request produces the readiness report. It shows coverage and evidence for each area (technical cards, leadership questions and stories), optionally limited to one job posting. Each item carries one of these labels:
+A readiness request produces the readiness report. It shows coverage and evidence for each area (knowledge cards, leadership questions and stories), optionally limited to one job posting. Each item carries one of these labels:
 
 - **untested**: no real answer yet.
 - **some gaps**: tried, with gaps.

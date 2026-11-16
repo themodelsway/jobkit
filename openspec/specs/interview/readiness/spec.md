@@ -42,7 +42,7 @@ Stories SHALL be labelled empty, draft, done, done-rehearsed (done, with an answ
 - **THEN** it is labelled done-aging
 
 ### Requirement: Limit to a job description
-With `--jd` the report SHALL cover only architecture cards and stories that the job description touches.
+With `--jd` the report SHALL cover only architecture cards and stories that the job description touches. A story touches the job description when its theme or one of its other themes is among the job description's themes.
 
 #### Scenario: JD filter
 - **WHEN** `--jd jd.txt` is given

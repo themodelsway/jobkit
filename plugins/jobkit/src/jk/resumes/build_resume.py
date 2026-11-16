@@ -590,6 +590,14 @@ def build_and_write(args: argparse.Namespace) -> None:
     print(f"Status: draft. After you have reviewed it: build-resume --approve {common.hide_home(str(out))}")
 
 
+def company_title(text: str) -> str:
+    """An argparse type: a `COMPANY=TITLE` pair, kept as given."""
+    company, sep, title = text.partition("=")
+    if not sep or not company.strip() or not title.strip():
+        raise argparse.ArgumentTypeError(f"expected COMPANY=TITLE, got {text!r}")
+    return text
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The command-line parser."""
     parser = common.make_parser(__doc__)
@@ -600,7 +608,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", help="output path (default output/resumes/<jd file name>.md, "
                         "or -2, -3 ... when that file exists; an explicit path is overwritten)")
     parser.add_argument("--top", type=int, default=4, help="bullets per company (default 4; old companies get at most 2)")
-    parser.add_argument("--title", action="append", default=[], metavar="COMPANY=TITLE",
+    parser.add_argument("--title", action="append", default=[], metavar="COMPANY=TITLE", type=company_title,
                         help='override the job title shown for a company id, e.g. --title <company-id>="placeholder"')
     parser.add_argument("--max-bullets", type=int, help="limit the total number of bullets in the resume")
     parser.add_argument("--recency", type=float, default=2.0, help="recency weight, as in query-resume for-jd")

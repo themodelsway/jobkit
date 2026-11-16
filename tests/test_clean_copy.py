@@ -16,7 +16,7 @@ NEEDED = (*CATALOGS, "plugins/jobkit/plugin.json", "plugins/jobkit/.claude-plugi
           "plugins/jobkit/setup/preflight.md", "plugins/jobkit/setup/first-run.md",
           "plugins/jobkit/setup/welcome.md", "plugins/jobkit/setup/troubleshoot.md",
           "plugins/jobkit/src/jk/common.py", "plugins/jobkit/skills/tutor/SKILL.md",
-          "plugins/jobkit/skills/interview-prep/architecture.md")
+          "plugins/jobkit/skills/interview-prep/role-knowledge.md")
 ABSENT = (".git", ".venv", "tmp", ".ruff_cache", ".DS_Store", "tests", "docs", "openspec", ".claude", ".githooks",
           "tools", "AGENTS.md", "CLAUDE.md", "README.md", "LICENSE", "ruff.toml", ".pylintrc", "pyrightconfig.json",
           "plugins/jobkit/.venv", "plugins/jobkit/tests", "pyproject.toml", "uv.lock", "plugins/jobkit/uv.lock")

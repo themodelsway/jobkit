@@ -246,8 +246,8 @@ class ShippedSkillTests(unittest.TestCase):
         guides = {p.resolve() for p in all_skill_files() if p.name != "SKILL.md"}
         self.assertEqual(guides - named, set(), "a guide ships that no skill names")
 
-    def test_tutor_reads_the_architecture_guide_from_interview_prep(self):
-        self.assertIn("`../interview-prep/architecture.md` (a path from this skill's folder)", skill_text("tutor"))
+    def test_tutor_reads_the_role_knowledge_guide_from_interview_prep(self):
+        self.assertIn("`../interview-prep/role-knowledge.md` (a path from this skill's folder)", skill_text("tutor"))
 
     def test_skills_and_guides_name_no_app_vendor_or_app_tool(self):
         for path in instruction_files():
@@ -255,9 +255,34 @@ class ShippedSkillTests(unittest.TestCase):
                 hit = APP_NAMES.search(line)
                 self.assertIsNone(hit, f"{rel(path)}:{number} names {hit.group(0) if hit else ''!r}")
 
-    def test_vendor_facts_come_from_official_documentation(self):
-        text = (SKILLS / "interview-prep" / "architecture.md").read_text(encoding="utf-8")
-        self.assertIn("search and read the vendor's official documentation", text)
+    def test_facts_come_from_official_sources_for_the_tracks_country(self):
+        text = (SKILLS / "interview-prep" / "role-knowledge.md").read_text(encoding="utf-8")
+        self.assertIn("search and read the official sources on the hosts `arch tracks` lists", text)
+        self.assertIn("If `arch show` prints a country, check the fact for that country", text)
+        self.assertIn("For a vendor's product the official source is the vendor's own documentation", text)
+
+    def test_role_knowledge_guide_runs_each_card_kind_and_grades_against_the_printed_rubric(self):
+        text = (SKILLS / "interview-prep" / "role-knowledge.md").read_text(encoding="utf-8")
+        for needed in ("Grade every answer against those lines and no others",
+                       "Reveal more only when the user asks for it",
+                       "say it is made up for practice. Never store it",
+                       "Push back at least once",
+                       "Stay in the part until the user reaches the goal or says they are done",
+                       "Step out of the part and say so, then grade the exchange against the rubric",
+                       "save only once they respond with yes",
+                       "Ask one question only when the role could fit more than one"):
+            self.assertIn(needed, text)
+
+    def test_skills_adapt_setup_and_leadership_to_the_role(self):
+        for skill in ("tutor", "interview-prep"):
+            text = skill_text(skill)
+            with self.subTest(skill=skill):
+                self.assertIn("or a field such as product, project delivery, HR or finance", text)
+                self.assertIn("choose its role family yourself", text)
+                self.assertIn("only once they respond with yes register it", text)
+                self.assertIn("for other roles, do not suggest them unless the user asks", text)
+                self.assertNotIn("architecture.md", text)
+        self.assertIn("Case or role-play: explain what the interviewer is looking for", skill_text("tutor"))
 
 
 def tool_parsers() -> dict[str, argparse.ArgumentParser]:
@@ -488,12 +513,14 @@ class SharedTextTests(unittest.TestCase):
             self.assertLess(section.index("`arch init"), section.index("preparing_for"), skill)
             self.assertIn("safe to run again", section, skill)
             self.assertIn("never tell the user about a setup check", section, skill)
-            role, tech = section.index("what kind of role"), section.index("technology you'd like to focus on")
-            self.assertLess(role, tech, f"{skill}: the role is asked first, then the technology")
+            role, tech = section.index("what kind of role"), section.index("anything you'd like to focus on")
+            self.assertLess(role, tech, f"{skill}: the role is asked first, then what to focus on")
             self.assertIn("carry on with the task the user chose", section, skill)
         for skill in ("tutor", "interview-prep", "resume-workflows"):
-            self.assertIn("for you only: never say it to the user", skill_text(skill), skill)
-        self.assertNotIn('"JOBKIT_COMMANDS_DIR"', text, "JOBKIT_COMMANDS_DIR is the commands folder, not the resume folder")
+            text = skill_text(skill)
+            self.assertIn("for you only: never say it to the user", text, skill)
+            self.assertNotIn('"JOBKIT_COMMANDS_DIR"', text,
+                             f"{skill}: JOBKIT_COMMANDS_DIR is the commands folder, not the resume folder")
 
     def test_newer_helper_is_ready_and_never_installed_over(self):
         text = setup_text("preflight")
@@ -607,10 +634,23 @@ class WindowsInstallScriptTests(unittest.TestCase):
     def test_script_downloads_to_a_file_and_leaves_settings_alone(self):
         text = self.SCRIPT.read_text(encoding="utf-8")
         for needed in ("UV_NO_MODIFY_PATH", "https://astral.sh/uv/$UvVersion/install.ps1", "-OutFile", "--check",
-                       "tool install --force", "$ErrorActionPreference = 'Stop'", "Remove-Item"):
+                       "'tool', 'install', '--force'", "$ErrorActionPreference = 'Stop'", "Remove-Item"):
             self.assertIn(needed, text)
         for forbidden in ("Read-Host", "Set-ExecutionPolicy", "| iex", "Invoke-Expression", "SetEnvironmentVariable"):
             self.assertNotIn(forbidden, text)
+
+    def test_programs_run_only_through_the_helper_that_relaxes_errors(self):
+        """Windows PowerShell 5.1 stops on any standard error line of a redirected program while the preference is
+        'Stop', so every program runs through Invoke-Native, which relaxes it, and nothing else redirects."""
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        helper = text[text.index("function Invoke-Native"):text.index("function Find-Uv")]
+        self.assertIn("$ErrorActionPreference = 'Continue'", helper)
+        rest = text.replace(helper, "")
+        for redirect in ("2>", "*>", "& $uv", "& powershell", "& (Join-Path"):
+            self.assertNotIn(redirect, rest)
+
+    def test_uv_is_looked_for_in_the_user_profile(self):
+        self.assertIn("$env:USERPROFILE", self.SCRIPT.read_text(encoding="utf-8"))
 
     def test_same_check_answers_as_the_shell_script(self):
         text = self.SCRIPT.read_text(encoding="utf-8")

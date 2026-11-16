@@ -191,6 +191,18 @@ class ReadinessTests(SessionCase):
         self.assertIn("(cards matching the JD)", out)
         self.assertIn("LEADERSHIP: not filtered by a JD", out)
 
+    def test_case_and_role_play_cards_are_labelled_per_area(self):
+        seed = {"label": "Product", "family": "product", "source_hosts": ["www.gov.uk"],
+                "cases": [{"title": "Sign-ups fell", "situation": "Sign-ups fell. Why?"}],
+                "role_plays": [{"title": "Push back", "part": "a sales director", "goal": "agree a plan"}]}
+        self.assertEqual(self.cli(arch.main, "track", "add", "product", "--seed", "-", stdin=json.dumps(seed))[0], 0)
+        self.cli(arch.main, "init", "--track", "product")
+        out = self.cli(readiness.main)[1]
+        self.assertRegex(out, r"product: Cases\s+1 items")
+        self.assertRegex(out, r"product: Role-plays\s+1 items")
+        sid = self.new_session("--kind", "role-play")
+        self.assertEqual([i["id"] for i in self.session(sid)["queue"]], ["product-role-push-back"])
+
     def test_requires_catalog(self):
         drop_catalog()
         code, _, err = self.cli(readiness.main)
@@ -386,6 +398,20 @@ class SessionFilterTests(SessionCase):
         code, _, err = self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--area", "NO SUCH AREA")
         self.assertEqual(code, 1, err)
 
+    def test_count_must_be_one_or_more(self):
+        for bad in ("0", "-3", "x"):
+            with self.subTest(count=bad), mock.patch("sys.stderr"), self.assertRaises(SystemExit) as raised:
+                sessions.build_parser().parse_args(["new", "x", "--count", bad])
+            self.assertEqual(raised.exception.code, 2)
+
+    def test_jd_with_a_kind_it_cannot_match_is_refused(self):
+        self.assertEqual(self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--kind", "service")[0], 0)
+        for kind in ("pair", "scenario", "case", "role-play"):
+            with self.subTest(kind=kind):
+                code, _, err = self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--kind", kind)
+                self.assertEqual(code, 1)
+                self.assertIn("service cards only", err)
+
     def test_jd_alone_means_jd_mode(self):
         code, out, err = self.cli(sessions.main, "new", "implicit", "--jd", self.jd())
         self.assertEqual(code, 0, err)
@@ -438,6 +464,16 @@ class MixedQueueTests(SessionCase):
         self.assertIn("with 4 items (3 cards, 1 story).", out)
 
 
+class JdThemeTests(unittest.TestCase):
+    def test_a_story_counts_for_a_jd_through_its_other_themes(self):
+        jd = "Led a move to Kubernetes and mentored engineers."
+        stories = [{"id": "a", "theme": "ownership", "also_themes": ["mentoring"]},
+                   {"id": "b", "theme": "ownership", "also_themes": []},
+                   {"id": "c", "theme": "topic-b", "also_themes": []}]
+        with mock.patch.object(readiness.qr, "analyze", return_value=argparse.Namespace(themes={"mentoring", "topic-b"})):
+            self.assertEqual([s["id"] for s in readiness.in_jd_themes(stories, jd)], ["a", "c"])
+
+
 class ReadinessLabelTests(unittest.TestCase):
     def test_old_solid_answers_read_as_aging_even_with_recent_lesson(self):
         today = date.today()
@@ -463,6 +499,17 @@ class LessonDateTests(SessionCase):
         tables.replace_progress(cards)
         sessions.record_confidence("card", "vpc", 1, True)
         self.assertEqual(sessions.arch.progress()["cards"]["vpc"]["last_drilled"], "2000-01-01")
+
+    def test_passed_quiz_refreshes_the_date_of_an_aging_solid_card(self):
+        cards = dict(sessions.arch.progress()["cards"])
+        entry = cards.setdefault("vpc", sessions.arch.blank_progress())
+        entry["confidence"], entry["last_drilled"] = 2, "2000-01-01"
+        tables.replace_progress(cards)
+        sid = self.new_session("--mode", "tutor", "--topic", "architecture")
+        code, _, err = self.cli(sessions.main, "log", sid, "vpc", "--question", "Q", "--answer", "a", "--grade", "g",
+                                "--confidence", "2", "--quiz")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(sessions.arch.progress()["cards"]["vpc"]["last_drilled"], date.today().isoformat())
 
 
 class QueueTests(SessionCase):

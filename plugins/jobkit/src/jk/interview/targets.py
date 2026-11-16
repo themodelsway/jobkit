@@ -300,7 +300,8 @@ def values(company: Mapping[str, Any]) -> list[Record]:
 
 def mentions(words: Iterable[str], text: str) -> bool:
     """True when any of the words appears in the text as a whole word, in any letter case."""
-    return any(re.search(rf"\b{re.escape(word)}\b", text, re.IGNORECASE) for word in words)
+    return any(re.search(rf"(?<![A-Za-z0-9]){re.escape(word)}(?![A-Za-z0-9])", text, re.IGNORECASE)
+               for word in words)      # not \b, which fails next to a symbol such as the + of C++
 
 
 def how(value: Mapping[str, Any], item: Item) -> str | None:

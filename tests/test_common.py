@@ -11,6 +11,7 @@ from unittest import mock
 from jk import base, common, store
 from jk.interview import arch
 from jk.common import ToolError
+from tests.support import HomeCase
 
 
 class HomeTests(unittest.TestCase):
@@ -93,6 +94,20 @@ class RunTests(unittest.TestCase):
     def test_the_hint_names_a_guide_that_ships_with_the_plugin(self):
         name = common.TROUBLESHOOT_HINT.split("read ", 1)[1].split(" in the plugin folder", 1)[0]
         self.assertTrue((Path(__file__).resolve().parents[1] / "plugins" / "jobkit" / name).is_file(), name)
+
+
+class ReadOnlyRunTests(HomeCase):
+    def write(self, args):
+        del args
+        with store.transaction() as conn:
+            conn.execute("INSERT INTO meta(key, value) VALUES('probe', '1')")
+
+    def test_a_read_only_run_refuses_any_change_and_the_next_run_can_write(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(common.run_writer(argparse.Namespace(fn=self.write), {self.write}), 1)
+        self.assertIn("readonly", err.getvalue())
+        self.assertEqual(common.run_writer(argparse.Namespace(fn=self.write)), 0)
 
 
 class HomeFolderTests(unittest.TestCase):

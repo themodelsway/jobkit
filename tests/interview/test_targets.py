@@ -304,6 +304,13 @@ class ProfileSettingTests(HomeCase):
         self.assertIn("no longer exists", str(caught.exception))
 
 
+class MentionTests(unittest.TestCase):
+    def test_hint_words_with_symbols_match_as_whole_words(self):
+        self.assertTrue(targets.mentions(["C++"], "Wrote the engine in C++ for speed"))
+        self.assertTrue(targets.mentions(["C#"], "Services in C#."))
+        self.assertFalse(targets.mentions(["own"], "a shared ownership model"))
+
+
 if __name__ == "__main__":
     unittest.main()
 

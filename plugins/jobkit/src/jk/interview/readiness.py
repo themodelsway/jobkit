@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
 from typing import Final, TypedDict, cast
 
@@ -191,6 +191,12 @@ def story_notes(story: Story, engagements: Sequence[Engagement]) -> list[str]:
     return notes
 
 
+def in_jd_themes(stories: Iterable[Story], jd_text: str) -> list[Story]:
+    """The stories whose theme, or one of their other themes, is among the JD's themes."""
+    themes = set(qr.analyze(jd_text).themes)
+    return [s for s in stories if {s["theme"], *s.get("also_themes", [])} & themes]
+
+
 def story_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int = 30) -> list[tuple[str, str, str]]:
     """Print the story summary; returns the stories still to write (company, theme, label)."""
     stories = prep.stories() if tables.has_stories() else []
@@ -198,8 +204,7 @@ def story_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int =
         print("\nSTAR STORIES: none yet (run prep init).")
         return []
     if jd_text is not None:
-        themes = qr.analyze(jd_text).themes
-        stories = [s for s in stories if s["theme"] in themes]
+        stories = in_jd_themes(stories, jd_text)
     by_company: dict[str, list[str]] = defaultdict(list)
     todo: list[tuple[str, str, str]] = []
     quality: list[tuple[str, str, list[str]]] = []
@@ -269,8 +274,7 @@ def target_items(jd_text: str | None) -> dict[str, targets.Item]:
     the JD's themes (leadership questions are not selected by a JD)."""
     stories = prep.stories() if tables.has_stories() else []
     if jd_text is not None:
-        themes = qr.analyze(jd_text).themes
-        stories = [s for s in stories if s["theme"] in themes]
+        stories = in_jd_themes(stories, jd_text)
     items = {s["id"]: targets.story_item(s) for s in stories}
     if tables.has_questions() and jd_text is None:
         progress = lead.prog()["questions"]

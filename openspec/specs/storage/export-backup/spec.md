@@ -48,6 +48,10 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 - **WHEN** a valid backup is restored
 - **THEN** the data matches the backup and the previous database is kept as a backup
 
+#### Scenario: Restore with no usable database
+- **WHEN** a valid backup is restored and the current database is missing, damaged or from a newer version
+- **THEN** the restore succeeds; a damaged or newer database is first copied file by file to the backup folder, and with no database the output says there was none
+
 #### Scenario: Wrong file
 - **WHEN** the file is not a jobkit database
 - **THEN** the command exits with status 1 and the current database is unchanged

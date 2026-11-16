@@ -2,7 +2,7 @@
 """Interview-prep sessions, kept in the database. Standard library only.
 
   sessions new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
-                                   [--track T] [--area A] [--tier N] [--kind service|pair|scenario] [--company C] [--count 10]
+                                   [--track T] [--area A] [--tier N] [--kind service|pair|scenario|case|role-play] [--company C] [--count 10]
                                    [--target COMPANY] [--style star|soar|carl]
   sessions list
   sessions resume ID [--style S]  # what was covered, last answers, and the next item to ask; --style changes the
@@ -223,6 +223,9 @@ def build_queue(args: argparse.Namespace) -> tuple[list[QueueItem], str | None]:
         return [{"id": q["id"], "kind": "leader"} for q in lead.ordered(args, not only_open(args))], None
     if not args.jd:
         raise ToolError("--jd is required for mode jd")
+    if args.kind and args.kind != "service":
+        raise ToolError(f"A job posting is matched to service cards only, so --kind {args.kind} would find nothing: "
+                        "drop --kind, or drop --jd and use --mode architecture.")
     text = common.read_text_arg(args.jd)
     cards = card_queue(args, arch.flt(arch.matches(text, arch.catalog()), args))
     return take_turns(cards, story_queue(args, text)), args.jd
@@ -371,14 +374,14 @@ def check_log_flags(session: Session, args: argparse.Namespace, kind: str) -> No
                         "and --confidence 2.")
 
 
-def record_confidence(kind: str, item: str, confidence: int, tutor: bool) -> None:
+def record_confidence(kind: str, item: str, confidence: int, tutor: bool, quiz: bool = False) -> None:
     """Save the confidence for a card or question; a lesson never lowers what a real drill earned, nor
-    refreshes the date of the last real drill."""
+    refreshes the date of the last real drill. A passed quiz counts as a drill and refreshes the date."""
     if kind == "card":
         entry: dict[str, Any] = dict(arch.progress()["cards"].get(item) or arch.blank_progress())
     else:
         entry = dict(lead.prog()["questions"].get(item) or lead.blank())
-    if not tutor or confidence > entry["confidence"]:
+    if not tutor or quiz or confidence > entry["confidence"]:
         entry["confidence"] = confidence
         entry["last_drilled"] = date.today().isoformat()
     elif not entry["last_drilled"]:
@@ -415,7 +418,7 @@ def cmd_log(args: argparse.Namespace) -> None:
         raise ToolError("Architecture cards have no answer style: omit --style for a card.")
     session["log"].append(entry)
     if confidence is not None:
-        record_confidence(kind, args.item, confidence, tutor)
+        record_confidence(kind, args.item, confidence, tutor, bool(args.quiz))
     put_session(session)
     print(f"Logged answer for {args.item} in {session['id']} ({len(session['log'])} entries)."
           + (f" Confidence recorded: {confidence}." if confidence is not None else ""))
@@ -460,7 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("--topic", choices=["architecture", "leadership", "stories"], default="architecture",
                      help="tutor mode: what to teach")
     new.add_argument("--category")
-    new.add_argument("--count", type=int, default=10)
+    new.add_argument("--count", type=common.positive_int, default=10)
     new.add_argument("--only-open", action="store_true",
                      help="queue only unfinished and weak items (default: finished stories and solid cards follow them)")
     new.add_argument("--due", action="store_true",
@@ -491,7 +494,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv), lock=True)
+    readers = {cmd_list}   # these change nothing
+    return common.run_writer(build_parser().parse_args(argv), readers)
 
 
 if __name__ == "__main__":

@@ -254,6 +254,19 @@ def transaction(*, write: bool = True) -> Iterator[sqlite3.Connection]:
 
 
 @contextlib.contextmanager
+def query_only(conn: sqlite3.Connection, on: bool = True) -> Iterator[None]:
+    """While the block runs (when `on`), refuse every change to the database on this connection."""
+    if not on:
+        yield
+        return
+    conn.execute("PRAGMA query_only=ON")
+    try:
+        yield
+    finally:
+        conn.execute("PRAGMA query_only=OFF")
+
+
+@contextlib.contextmanager
 def _savepoint(conn: sqlite3.Connection, write: bool) -> Iterator[None]:
     """A nested write: its changes are undone when it raises, so a caller that handles the error carries on clean.
 
@@ -432,15 +445,57 @@ def _check_copy(file: Path, copy: Path) -> None:
         _check_records(file, conn, have)
 
 
-def restore_from(file: Path) -> Path:
-    """Replace the database with a backup, after saving the current one; returns that saved copy.
+def _database_files(path: Path) -> list[Path]:
+    """The database file and the write-ahead log files beside it that exist."""
+    return [p for p in (path, Path(f"{path}-wal"), Path(f"{path}-shm")) if p.exists()]
+
+
+def _copy_files(path: Path, saved: Path) -> Path:
+    """Copy the database file and its write-ahead log as they are on disk to `saved` (and `saved`-wal)."""
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, saved)
+    wal = Path(f"{path}-wal")
+    if wal.exists():
+        shutil.copy2(wal, Path(f"{saved}-wal"))
+    return saved
+
+
+def _save_before_restore(path: Path) -> Path | None:
+    """Keep the database a restore will replace, and return the copy (None when there is no database).
+
+    A database this program can open is copied consistently. One it cannot open, because a newer version wrote it or
+    it is damaged, is copied file by file; a damaged one is then removed so the restore can write a new file. A busy
+    database fails the restore.
+    """
+    if not path.exists():
+        return None
+    saved = default_backup_path("jobkit-before-restore")
+    try:
+        return backup_to(saved)
+    except NewerDatabaseError:
+        return _copy_files(path, saved)
+    except sqlite3.OperationalError:
+        raise                                   # busy or locked: another command is using it
+    except sqlite3.DatabaseError:
+        close()
+        _copy_files(path, saved)
+        for file in _database_files(path):
+            file.unlink()
+        return saved
+
+
+def restore_from(file: Path) -> Path | None:
+    """Replace the database with a backup, after saving the current one; returns that saved copy, or None when there
+    was no database to save.
 
     Raises:
         ToolError: the file is not a usable jobkit database (the current database is left alone).
     """
     check_backup_file(file)
-    saved = backup_to(default_backup_path("jobkit-before-restore"))
+    path = db_path()
+    saved = _save_before_restore(path)
     close()
-    with contextlib.closing(sqlite3.connect(file)) as source, contextlib.closing(sqlite3.connect(db_path())) as target:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.closing(sqlite3.connect(file)) as source, contextlib.closing(sqlite3.connect(path)) as target:
         source.backup(target)
     return saved

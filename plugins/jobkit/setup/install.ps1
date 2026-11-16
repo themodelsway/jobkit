@@ -44,11 +44,22 @@ function Compare-Version($Left, $Right) {
     return 0
 }
 
+# Run a program and return its standard output; its standard error is dropped and the caller checks $LASTEXITCODE.
+# Windows PowerShell 5.1 turns every standard error line of a redirected program into a terminating error while
+# $ErrorActionPreference is 'Stop', and uv prints its progress there, so the preference is relaxed in here only.
+function Invoke-Native($Program, [string[]]$Arguments) {
+    $ErrorActionPreference = 'Continue'
+    & $Program @Arguments 2>$null
+}
+
 function Find-Uv {
     $found = Get-Command uv -ErrorAction SilentlyContinue
     if ($found) { return $found.Source }
-    foreach ($candidate in @("$HOME\.local\bin\uv.exe", "$HOME\.cargo\bin\uv.exe")) {
-        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    # uv installs into the user profile folder; $HOME can point elsewhere (a network home folder).
+    foreach ($home_dir in @($env:USERPROFILE, $HOME) | Where-Object { $_ } | Select-Object -Unique) {
+        foreach ($candidate in @("$home_dir\.local\bin\uv.exe", "$home_dir\.cargo\bin\uv.exe")) {
+            if (Test-Path -LiteralPath $candidate) { return $candidate }
+        }
     }
     return $null
 }
@@ -57,14 +68,14 @@ function Find-Uv {
 function Get-ToolFolder {
     $uv = Find-Uv
     if (-not $uv) { return $null }
-    try { $folder = (& $uv tool dir --bin 2>$null | Select-Object -First 1) } catch { return $null }
+    try { $folder = (Invoke-Native $uv @('tool', 'dir', '--bin') | Select-Object -First 1) } catch { return $null }
     if ($LASTEXITCODE -ne 0 -or -not $folder) { return $null }
     if (Test-Path -LiteralPath (Join-Path $folder 'jobkit.exe')) { return $folder }
     return $null
 }
 
 function Get-InstalledVersion($Folder) {
-    try { $line = (& (Join-Path $Folder 'jobkit.exe') --version 2>$null | Select-Object -First 1) } catch { return '' }
+    try { $line = (Invoke-Native (Join-Path $Folder 'jobkit.exe') @('--version') | Select-Object -First 1) } catch { return '' }
     return ($line -replace '^jobkit ', '')
 }
 
@@ -88,7 +99,7 @@ if ($state -like 'ok:*' -or $state -like 'newer:*') { Write-Output $state; exit 
 $uv = Find-Uv
 if ($uv) {
     $have = ''
-    try { $line = (& $uv --version 2>$null | Select-Object -First 1) } catch { $line = '' }
+    try { $line = (Invoke-Native $uv @('--version') | Select-Object -First 1) } catch { $line = '' }
     if ("$line" -match '^uv (\d[\d.]*)') { $have = $Matches[1] }
     if ((Compare-Version $have $UvMinimum) -lt 0) {
         Fail "uv is too old (found $have, need $UvMinimum or newer); it was left as it is" 3
@@ -107,7 +118,7 @@ if ($uv) {
             Fail 'uv could not be downloaded'
         }
         $env:UV_NO_MODIFY_PATH = '1'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $script *> $null
+        Invoke-Native 'powershell' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script) | Out-Null
         if ($LASTEXITCODE -ne 0) { Fail 'uv could not be installed' }
     } finally {
         Remove-Item -Recurse -Force -LiteralPath $scratch -ErrorAction SilentlyContinue
@@ -116,7 +127,7 @@ if ($uv) {
 
 $uv = Find-Uv
 if (-not $uv) { Fail 'uv was not found after installing it' }
-& $uv tool install --force --python $PythonVersion --constraints $Constraints $Root *> $null
+Invoke-Native $uv @('tool', 'install', '--force', '--python', $PythonVersion, '--constraints', $Constraints, $Root) | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail 'the jobkit commands could not be installed' }
 
 $result = Get-State

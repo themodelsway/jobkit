@@ -45,6 +45,14 @@ The system SHALL keep the words that must never be committed (products, clients,
 - **WHEN** a term is ignored with `profile terms ignore TEXT`
 - **THEN** `check` no longer reports it and `list` marks it ignored
 
+#### Scenario: Ignored text is checked like an added term
+- **WHEN** `profile terms ignore` is given text shorter than three characters or a pattern that is not valid
+- **THEN** it is refused, as `profile terms add` refuses it, and nothing is stored
+
+#### Scenario: Company folder below a chosen resume folder
+- **WHEN** a chosen resume folder has more than one level, such as `2026/tech`, and a resume is in `2026/tech/Acme Air/`
+- **THEN** the company folder term is "Acme Air", not "tech"
+
 ### Requirement: Personal terms check
 `profile terms check` SHALL report each hit as file and line and exit 1, scanning the staged files as staged (`--staged`), every committable file (`--all`) or given paths, and SHALL skip with a message when there is no database.
 

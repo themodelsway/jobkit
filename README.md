@@ -61,7 +61,7 @@ The tutor teaches a card, question or story first, then checks understanding wit
 ### Mock interviews and practice
 
 - **Stories.** Stories seeded from the resumes, one per employer and theme. Each is written once and can be told as STAR (situation, task, action, result), SOAR (situation, obstacle, action, result) or CARL (challenge, action, result, learning). Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
-- **Technical drill cards.** Cards for the services, decision pairs and scenarios of the technologies an interview covers. One example technology is bundled, and any other is added from a JSON topic list, with no code. Lifecycle facts such as "closed to new customers" or "sunset" are recorded only with a link to the vendor's own documentation, never from memory.
+- **Knowledge drill cards for any role.** Cards for the topics, comparisons and scenarios of the technologies or fields an interview covers, plus cases (a question developed over several turns) and role-plays (the agent plays a part, such as a sceptical stakeholder). Each topic belongs to a role family (engineering, product, delivery, people or operations), and answers are graded against that topic's rubric. One example technology is bundled, and any other technology or field is added from a JSON topic list, with no code. Facts come from official sources (vendor documentation, regulators, standards bodies), for the user's country where it matters, never from memory. Coding exercises, tests with one right answer and written work samples are not covered.
 - **Leadership questions.** A question set (roadmapping, mentoring, conflict, prioritisation and more), each with the user's principle and one example per recent employer.
 - **Company research.** For a named company, where the agent can read web pages, the skill tells the agent to look up how that company hires (published values, interview rounds, what interviewers look for, typical questions) and to save each fact with its link, a short quote and the date read, leaving out reviews and other user-written posts. Stories and practice sessions can then be ranked against that company's values. Nothing about any company is shipped. The skill tells the agent to recheck stale facts when they are next needed; the default research window is 30 days. The commands refuse a fact without a link or quote, but cannot check that a quote is on its page; each fact keeps its link to open.
 - **Practice sessions.** Resumable. A session keeps the complete answers and grades; later drills add entries and never edit old ones.
@@ -277,7 +277,7 @@ uv run match-score extract --jd jd.txt   # first of three steps; the resume-work
 uv run build-resume jd.txt               # tailored resume in ~/.jobkit/output/resumes/
 uv run prep init                         # seed interview stories from the resume data
 uv run lead init                         # seed the leadership questions
-uv run arch init --track NAME            # seed drill cards for a technology (see docs/guides/interview-prep.md)
+uv run arch init --track NAME            # seed drill cards for a technology or field (see docs/guides/interview-prep.md)
 uv run readiness --jd jd.txt             # what to rehearse for this job
 ```
 

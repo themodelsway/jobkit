@@ -87,7 +87,8 @@ def cmd_backup(args: argparse.Namespace) -> None:
     """Save a copy of the database, or restore one."""
     if args.restore:
         saved = store.restore_from(common.user_path(args.restore))
-        print(f"Restored {shown(args.restore)}. The previous database was saved as {shown(saved)}.")
+        kept = f"The previous database was saved as {shown(saved)}." if saved else "There was no database before."
+        print(f"Restored {shown(args.restore)}. {kept}")
         return
     path = store.backup_to(common.user_path(args.output) if args.output else store.default_backup_path())
     print(f"Backup written to {shown(path)} ({path.stat().st_size} bytes).")

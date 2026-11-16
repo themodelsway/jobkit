@@ -233,6 +233,9 @@ class TestFollowupsSearchExport(PrepCase):
         self.assertEqual(run("new", "acme-x", "--company", "acme", "--theme", "budget-financial")[0], 0)
         self.assertEqual(run("new", "acme-x", "--company", "acme", "--theme", "budget-financial")[0], 1)
         self.assertEqual(run("new", "acme-y", "--company", "acme", "--theme", "t", "--engagement", "missing")[0], 1)
+        code, out = run("new", "acme-y", "--company", "acme", "--theme", "t", "--engagement", "")
+        self.assertEqual(code, 1)
+        self.assertIn("No engagement", out)
 
     def test_no_engagement_warning_only_for_started_stories(self):
         _, out = run("validate", "acme-topic-a")

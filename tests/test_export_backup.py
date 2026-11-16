@@ -175,6 +175,42 @@ class BackupTests(SeededCase):
         self.assertEqual(code, 1)
         self.assertIn("only knows version", err)
 
+    def good_backup(self) -> Path:
+        target = self.home / "good.db"
+        self.assertEqual(jobkit("backup", "-o", str(target))[0], 0)
+        store.close()
+        return target
+
+    def assert_restored(self, saved_expected: bool) -> None:
+        code, out, err = jobkit("backup", "--restore", str(self.home / "good.db"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(records.counts()["stories"], 1)
+        saved = list((self.home / "backup").glob("jobkit-before-restore-*.db"))
+        self.assertEqual(len(saved), int(saved_expected))
+        self.assertIn("previous database was saved" if saved_expected else "no database before", out)
+
+    def test_restore_works_when_there_is_no_database(self):
+        self.good_backup()
+        store.db_path().unlink()
+        self.assert_restored(saved_expected=False)
+
+    def test_restore_works_over_a_damaged_database_and_keeps_its_bytes(self):
+        self.good_backup()
+        for extra in store._database_files(store.db_path())[1:]:
+            extra.unlink()
+        store.db_path().write_bytes(b"damaged" * 100)
+        self.assert_restored(saved_expected=True)
+        saved = next((self.home / "backup").glob("jobkit-before-restore-*.db"))
+        self.assertEqual(saved.read_bytes(), b"damaged" * 100)
+
+    def test_restore_works_over_a_database_from_a_newer_version(self):
+        self.good_backup()
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            conn.execute(f"PRAGMA user_version={store.version() + 3}")
+        self.assert_restored(saved_expected=True)
+        with store.transaction(write=False) as conn:
+            self.assertEqual(store.stored_version(conn), store.version())
+
 
 class StatusTests(SeededCase):
     def test_status_shows_counts_per_kind(self):

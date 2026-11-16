@@ -8,6 +8,7 @@ import argparse
 import io
 import re
 import sys
+from collections.abc import Callable, Collection
 from typing import Final
 
 from jk import store
@@ -50,6 +51,17 @@ def read_text_arg(arg: str) -> str:
         raise ToolError(f"cannot read {arg}: {exc.strerror or exc}") from exc
 
 
+def positive_int(text: str) -> int:
+    """An argparse type: a whole number of 1 or more."""
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"expected a whole number of 1 or more, got {text!r}")
+    return value
+
+
 def make_parser(doc: str | None) -> argparse.ArgumentParser:
     """Argument parser whose help shows the module docstring (usage examples) as written."""
     return argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -66,20 +78,28 @@ def use_utf8_output() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-def run(args: argparse.Namespace, *, lock: bool = False) -> int:
+def run(args: argparse.Namespace, *, lock: bool = False, read_only: bool = False) -> int:
     """Call the chosen subcommand (`args.fn`) in one database transaction and return the exit status.
 
     A handler may return None (success) or an int status. Any error is printed to standard error by
     `report_failure` and becomes status 1; its transaction is rolled back. With `lock`, the transaction takes
-    the write lock at once (use it for commands that change data).
+    the write lock at once (use it for commands that change data). With `read_only`, it takes no write lock and
+    any attempt to change data fails, so a subcommand marked read-only by mistake cannot write unlocked.
     """
     use_utf8_output()
     try:
-        with store.transaction(write=lock):
+        with store.transaction(write=lock and not read_only) as conn, store.query_only(conn, read_only):
             status = args.fn(args)
     except Exception as exc:  # pylint: disable=broad-exception-caught  # every failure ends in a status
         return report_failure(exc)
     return status or 0
+
+
+def run_writer(args: argparse.Namespace, readers: Collection[Callable[..., object]] = ()) -> int:
+    """`run` for a tool that changes data: its subcommands take the write lock at once, except the `readers`
+    handlers, which run read-only."""
+    read_only = args.fn in readers
+    return run(args, lock=not read_only, read_only=read_only)
 
 
 def report_failure(exc: Exception) -> int:

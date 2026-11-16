@@ -27,9 +27,13 @@ SKIP_SUFFIX = {".png", ".jpg", ".pdf", ".pyc"}
 
 
 def committable():
-    out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=ROOT, capture_output=True, text=True, check=False).stdout
-    return [ROOT / f for f in out.splitlines() if (ROOT / f).is_file() and (ROOT / f).suffix not in SKIP_SUFFIX
-            and f != "tests/test_no_personal.py"]
+    """Every file git would commit; fails rather than scanning nothing when git cannot list them."""
+    out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    files = [ROOT / f for f in out.splitlines() if (ROOT / f).is_file() and (ROOT / f).suffix not in SKIP_SUFFIX
+             and f != "tests/test_no_personal.py"]
+    if not files:
+        raise AssertionError("git listed no committable files, so nothing would be checked")
+    return files
 
 
 class TestNoPersonalData(unittest.TestCase):

@@ -74,12 +74,14 @@ def contact_terms(header: str | None) -> list[Term]:
 def folder_names(files: Iterable[str], skip: Iterable[str] = ()) -> list[str]:
     """The company a resume was written for: the first folder on the file's path that is not a date folder (a
     year, a quarter or a month) or one of the `skip` names (the resume folders chosen at setup). So
-    "2026/Acme Air/me.docx", "Acme Air/me.docx" and "2026/Acme Air/October/me.pdf" all give "Acme Air". A folder
+    "2026/Acme Air/me.docx", "Acme Air/me.docx" and "2026/Acme Air/October/me.pdf" all give "Acme Air", and so does
+    "2026/tech/Acme Air/me.pdf" when "2026/tech" is a chosen resume folder. A folder
     joined with underscores ("Acme_Air_Co") gives each part; a file straight under the resume folder gives nothing."""
-    skipped = {s.lower() for s in skip}
+    chosen = sorted({s.replace("\\", "/").strip("/").lower() for s in skip} - {""}, key=len, reverse=True)
     names: set[str] = set()
     for file in files:
-        folders = [f for f in file.split("/")[:-1] if f.lower() not in skipped and not DATE_FOLDER.fullmatch(f)]
+        inside = next((file[len(c) + 1:] for c in chosen if file.lower().startswith(c + "/")), file)
+        folders = [f for f in inside.split("/")[:-1] if f.lower() not in chosen and not DATE_FOLDER.fullmatch(f)]
         if folders:
             names |= {piece.strip() for piece in folders[0].split("_") if piece.strip()}
     return sorted(names)
@@ -203,8 +205,9 @@ def import_file(path: str) -> int:
     return count
 
 
-def add(text: str, kind: str, match: str) -> None:
-    """Store a term after checking its kind, mode and (for a pattern) that the expression is valid."""
+def add(text: str, kind: str, match: str, ignored: bool = False) -> None:
+    """Store a term (or, with `ignored`, a common word the hook skips) after checking its kind, mode and (for a
+    pattern) that the expression is valid."""
     if kind not in KINDS or match not in MATCHES:
         raise ToolError(f"kind is one of {', '.join(KINDS)}; match is one of {', '.join(MATCHES)}")
     if len(text.strip()) < MIN_TERM:
@@ -213,7 +216,7 @@ def add(text: str, kind: str, match: str) -> None:
         pattern(Term(text.strip(), kind, match, "stored"))
     except re.error as exc:
         raise ToolError(f"Not a valid pattern: {exc}") from exc
-    tables.save_term(text.strip(), kind, match, False)
+    tables.save_term(text.strip(), kind, match, ignored)
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -234,7 +237,7 @@ def run(args: argparse.Namespace, derived: Sequence[Term]) -> int:
     if action == "add":
         add(_one(args), args.kind, args.match or guess_match(_one(args)))
     elif action == "ignore":
-        tables.save_term(_one(args), args.kind, args.match or guess_match(_one(args)), True)
+        add(_one(args), args.kind, args.match or guess_match(_one(args)), ignored=True)
     elif action == "rm":
         if not tables.delete_term(_one(args)):
             raise ToolError(f"No stored term {_one(args)!r}. `profile terms list` shows them.")

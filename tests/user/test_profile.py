@@ -3,6 +3,7 @@ import contextlib
 import io
 import re
 import unittest
+from unittest import mock
 
 from jk.interview import styles
 from jk.user import profile as up, tables as utables
@@ -54,6 +55,20 @@ class ProfileTests(ProfileCase):
         code, _, err = self.run_cli("init", "--resume-root", str(self.tmp / "nope"))
         self.assertEqual(code, 1)
         self.assertIn("is not a folder", err)
+
+    def test_set_resume_root_also_rejects_a_missing_folder(self):
+        self.run_cli("init", "--resume-root", str(self.resumes))
+        code, _, err = self.run_cli("set", "resume_root", str(self.tmp / "nope"))
+        self.assertEqual(code, 1)
+        self.assertIn("is not a folder", err)
+        self.assertEqual(up.resume_root(), self.resumes)
+
+    def test_a_windows_home_folder_path_is_understood(self):
+        with mock.patch("jk.base._is_windows", return_value=True), \
+                mock.patch("jk.base.Path.home", return_value=self.tmp):
+            code, _, err = self.run_cli("init", "--resume-root", "%USERPROFILE%\\" + self.resumes.name)
+            self.assertEqual(code, 0, err)
+            self.assertEqual(up.resume_root(), self.resumes)
 
     def test_header_is_saved_in_the_database_and_shown(self):
         self.run_cli("init", "--resume-root", str(self.resumes))

@@ -90,6 +90,10 @@ Several commands running at the same time SHALL NOT lose each other's changes. A
 - **WHEN** a read-only command runs while another command is writing
 - **THEN** the reader sees the data as it was before or after that write, never half of it
 
+#### Scenario: Read-only subcommands take no write lock
+- **WHEN** a subcommand that only shows data (such as `arch show`, `prep list` or `sessions list`) runs while another command holds the write lock
+- **THEN** it does not wait for that lock, and any attempt it made to change data would fail
+
 ### Requirement: References stay valid
 The database SHALL refuse a record that refers to a missing record (for example a logged answer for an unknown item, or a fact for a missing engagement), and SHALL report this as a user-readable error. A new queue entry or logged answer SHALL name an item that exists now. Entries already stored SHALL stay readable after their item is removed. Curation entries that name a bullet id are exempt, because a rebuild can legitimately change that id; they are reported as orphaned instead.
 

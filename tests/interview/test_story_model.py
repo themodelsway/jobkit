@@ -75,6 +75,18 @@ class ValidateTests(unittest.TestCase):
         s["result"] = "Cut about 45% of cost"
         self.assertEqual([m for lvl, m in sm.validate_story(s) if "estimate" in m], [])
 
+    def test_a_number_needs_the_exact_number_behind_it(self):
+        s = story(status="draft", result="Cut 10% of cost.", metrics=[{"name": "c", "value": "100%", "basis": "measured"}])
+        self.assertIn(("warn", "s1: number 10% in the text has no metric or fact behind it"), sm.validate_story(s))
+        s["result"] = "Cut 100% of cost."
+        self.assertEqual([m for _, m in sm.validate_story(s) if "number" in m], [])
+
+    def test_the_hedge_must_be_in_the_same_sentence_or_part(self):
+        s = story(status="draft", situation="About forty people worked there", result="Cut 45% of cost",
+                  metrics=[{"name": "c", "value": "45%", "basis": "estimated"}])
+        self.assertIn(("warn", "s1: number 45% is an estimate: say 'estimated' or 'about' when you quote it"),
+                      sm.validate_story(s))
+
     def test_engagement_validation(self):
         self.assertEqual(sm.validate_engagement(eng()), [
             ("error", "e1.f3: a verified-doc fact needs a source URL"),

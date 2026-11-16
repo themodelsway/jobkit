@@ -457,8 +457,8 @@ def cmd_new(args: argparse.Namespace) -> None:
     company = companies.get(args.company)
     if not company:
         raise ToolError(f"Unknown company {args.company}. Known: " + ", ".join(sorted(companies)))
-    if args.engagement:
-        find(engagements(), args.engagement, "engagement")
+    if args.engagement is not None:
+        find(engagements(), args.engagement, "engagement")   # an empty id is no engagement either
     story = sm.normalize_story({"id": args.id, "company": company["id"], "company_name": company["name"],
                                 "theme": args.theme, "headline": args.headline or args.theme,
                                 "engagement": args.engagement})
@@ -991,7 +991,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the exit status."""
-    return common.run(build_parser().parse_args(argv), lock=True)
+    readers = {cmd_status, cmd_list, cmd_next, cmd_show, cmd_styles, cmd_for_jd, cmd_engagement_list,   # these change
+               cmd_engagement_show, cmd_search, cmd_validate, cmd_export, cmd_evidence}                 # nothing
+    return common.run_writer(build_parser().parse_args(argv), readers)
 
 
 if __name__ == "__main__":

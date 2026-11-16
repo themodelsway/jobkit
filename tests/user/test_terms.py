@@ -29,6 +29,11 @@ class DeriveTests(unittest.TestCase):
                  "2026/Acme Co/October/me.pdf", "2025/Acme Co/Oct 2025/me.pdf"]
         self.assertEqual(terms.folder_names(files, skip=["Resumes"]), ["Acme", "Acme Air", "Acme Co"])
 
+    def test_a_chosen_resume_folder_with_several_levels_is_skipped_whole(self):
+        files = ["2026/tech/Acme Air/me.pdf", "2026/Tech/Beta Co/me.docx", "2025/Gamma/me.pdf"]
+        self.assertEqual(terms.folder_names(files, skip=["2026/tech", "2025"]), ["Acme Air", "Beta Co", "Gamma"])
+        self.assertEqual(terms.folder_names(files, skip=["2026\\tech/"]), ["Acme Air", "Beta Co", "Gamma"])
+
     def test_short_employer_is_a_whole_word(self):
         found = terms.derive(None, "/data/resumes", None, ["ACME", "Acme Corp"])
         short = next(t for t in found if t.text == "ACME")
@@ -83,6 +88,14 @@ class CommandTests(HomeCase):
         code, _, err = self.run_cli("terms", "add", "(oops", "--match", "regex")
         self.assertEqual(code, 1)
         self.assertIn("valid pattern", err)
+
+    def test_bad_pattern_cannot_be_ignored_either(self):
+        code, _, err = self.run_cli("terms", "ignore", "[oops")
+        self.assertEqual(code, 1)
+        self.assertIn("valid pattern", err)
+        page = self.home / "page.txt"
+        page.write_text("fine\n", encoding="utf-8")
+        self.assertEqual(self.run_cli("terms", "check", "--exhaustive", str(page))[0], 0)
 
     def test_check_paths_finds_and_ignore_clears(self):
         page = self.home / "page.txt"
