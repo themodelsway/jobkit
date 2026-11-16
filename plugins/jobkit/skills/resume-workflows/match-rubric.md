@@ -56,7 +56,7 @@ If the stored work is related but a different responsibility, rate `profile_miss
 - `core_skills`: tools, languages, platforms, methods the person uses.
 - `impact`: results and outcomes (money, time, scale, quality, growth).
 - `functional_leadership`: technical or functional leadership: setting methods, standards and direction for a discipline (architecture and design standards in engineering, policy and frameworks in HR or finance, the craft bar in design) and mentoring others in it. Mentoring counts here when the posting asks to mentor.
-- `people_leadership`: managing reports, hiring, performance, building or reshaping an organisation, organisation size.
+- `people_leadership`: managing reports, hiring, performance, building or reshaping an organization, organization size.
 - `strategy`: business strategy, budget or P&L, executive and cross-department influence, vendors and partners.
 - `domain`: industry, market, regulation, customer segment. At the Executive and Senior Executive bands, a technology area named as an area of expertise rather than a tool ("deep understanding of cloud and AI") is `domain`.
 - `education`: degrees and certifications.
@@ -70,7 +70,7 @@ If the stored work is related but a different responsibility, rate `profile_miss
 
 ## Choosing the band
 
-Read the responsibilities and who the role reports to, not just the title (a "Director" can run one team of eight). Bands: `junior-ic` (early career, learns under guidance), `mid-senior-ic` (owns work independently; includes staff, principal and architect roles), `mid-manager` (manages a team, up to senior manager), `executive` (director or senior director: manages managers, owns a budget), `senior-executive` (VP and above: sets direction for a large organisation). If it could fit two bands, set `band` to either and list the other in `band_alternatives`; the command uses the lower one and says so.
+Read the responsibilities and who the role reports to, not just the title (a "Director" can run one team of eight). Bands: `junior-ic` (early career, learns under guidance), `mid-senior-ic` (owns work independently; includes staff, principal and architect roles), `mid-manager` (manages a team, up to senior manager), `executive` (director or senior director: manages managers, owns a budget), `senior-executive` (VP and above: sets direction for a large organization). If it could fit two bands, set `band` to either and list the other in `band_alternatives`; the command uses the lower one and says so.
 
 ## Flags (use sparingly)
 
@@ -111,4 +111,4 @@ Posting: "Experience with Kubernetes." Stored skills include Kubernetes but no l
 
 ### Example 5: a field other than engineering
 
-HR posting: "Set compensation standards and coach the HR team on them." Line: "Designed the pay framework and levelling guide used by 400 staff." Category `functional_leadership`, `full` for the framework; coaching the team is a second requirement rated on its own evidence.
+HR posting: "Set compensation standards and coach the HR team on them." Line: "Designed the pay framework and leveling guide used by 400 staff." Category `functional_leadership`, `full` for the framework; coaching the team is a second requirement rated on its own evidence.

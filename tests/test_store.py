@@ -1,21 +1,19 @@
-"""Tests for plugins/jobkit/src/jk/store.py and plugins/jobkit/src/jk/admin.py (the database and the `jobkit` command)."""
+"""Tests for plugins/jobkit/src/jk/store.py and schema.py: transactions, locking, schema upgrades and restore checks."""
 import contextlib
 import io
 import os
-import shutil
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from jk import admin, base, common, schema, store
+from jk import base, common, schema, store
 from jk.base import ToolError
-from jk.interview import prep, tables
-from tests.support import HomeCase
+from jk.interview import tables
+from tests.support import DatabaseFileCase, HomeCase, has_meta, put_meta
 
 HOLD = """
 import sqlite3, sys, time
@@ -28,26 +26,6 @@ conn.execute("COMMIT")
 """
 
 
-def put(key: str) -> None:
-    """Store one meta row (a small change to test transactions with)."""
-    with store.transaction() as conn:
-        conn.execute("INSERT INTO meta(key, value) VALUES(?, '1')", (key,))
-
-
-def has(key: str) -> bool:
-    """True when the meta row exists."""
-    with store.transaction(write=False) as conn:
-        return conn.execute("SELECT 1 FROM meta WHERE key=?", (key,)).fetchone() is not None
-
-
-def run_admin(*argv: str) -> tuple[int, str, str]:
-    """Run the `jobkit` command in-process; (status, stdout, stderr)."""
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = admin.main(list(argv))
-    return code, out.getvalue(), err.getvalue()
-
-
 class TransactionTests(HomeCase):
     def test_commit_keeps_changes(self):
         with store.transaction() as conn:
@@ -58,28 +36,28 @@ class TransactionTests(HomeCase):
     def test_failure_stores_none_of_the_changes(self):
         with self.assertRaises(RuntimeError), store.transaction() as conn:
             conn.execute("INSERT INTO meta(key, value) VALUES('a', '1')")
-            put("x")
+            put_meta("x")
             raise RuntimeError("boom")
-        self.assertFalse(has("x"))
+        self.assertFalse(has_meta("x"))
         with store.transaction(write=False) as conn:
             self.assertIsNone(conn.execute("SELECT 1 FROM meta WHERE key='a'").fetchone())
 
     def test_nested_use_joins_the_outer_transaction(self):
         with self.assertRaises(RuntimeError), store.transaction():
-            put("a")
-            put("b")
+            put_meta("a")
+            put_meta("b")
             raise RuntimeError("boom")
-        self.assertFalse(has("a") or has("b"))
+        self.assertFalse(has_meta("a") or has_meta("b"))
 
     def test_handled_nested_failure_leaves_none_of_its_own_changes(self):
         with store.transaction():
-            put("outer")
+            put_meta("outer")
             with self.assertRaises(RuntimeError), store.transaction():
-                put("inner")
+                put_meta("inner")
                 raise RuntimeError("handled")
-            put("after")
-        self.assertTrue(has("outer") and has("after"))
-        self.assertFalse(has("inner"))
+            put_meta("after")
+        self.assertTrue(has_meta("outer") and has_meta("after"))
+        self.assertFalse(has_meta("inner"))
 
     def test_handled_session_save_failure_inside_a_larger_change(self):
         first = {"id": "s1", "title": "old", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
@@ -88,10 +66,10 @@ class TransactionTests(HomeCase):
         tables.replace_catalog({"cards": [{"id": "vpc", "kind": "service", "name": "VPC"}]})
         tables.save_session({**first, "log": [entry]})
         with store.transaction():
-            put("outer")
+            put_meta("outer")
             with self.assertRaises(common.ToolError):
                 tables.save_session({**first, "title": "new", "queue": [], "log": []})
-        self.assertTrue(has("outer"))
+        self.assertTrue(has_meta("outer"))
         saved = tables.load_session("s1")
         assert saved is not None
         self.assertEqual((saved["title"], saved["queue"], saved["log"]), ("old", [], [entry]))
@@ -107,12 +85,12 @@ class TransactionTests(HomeCase):
 
     def test_tool_error_in_run_rolls_back(self):
         def handler(_args):
-            put("x")
+            put_meta("x")
             raise common.ToolError("no")
         with contextlib.redirect_stderr(io.StringIO()):
             code = common.run(mock.Mock(fn=handler), lock=True)
         self.assertEqual(code, 1)
-        self.assertFalse(has("x"))
+        self.assertFalse(has_meta("x"))
 
     def test_foreign_keys_are_enforced(self):
         with store.transaction() as conn:
@@ -133,18 +111,18 @@ class ConcurrencyTests(HomeCase):
     def test_second_writer_waits_and_both_changes_are_stored(self):
         self.hold(1.0)
         started = time.monotonic()
-        put("mine")
+        put_meta("mine")
         self.assertGreater(time.monotonic() - started, 0.5)
         with store.transaction(write=False) as conn:
             self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='held'").fetchone()[0], "1")
-        self.assertTrue(has("mine"))
+        self.assertTrue(has_meta("mine"))
 
     def test_writer_gives_up_with_a_clear_message(self):
         with mock.patch.object(store, "BUSY_TIMEOUT_MS", 200):
             store.close()
             self.hold(1.5)
             with self.assertRaisesRegex(common.ToolError, "busy"):
-                put("mine")
+                put_meta("mine")
 
     def test_reader_is_not_blocked_by_a_writer(self):
         self.hold(1.0)
@@ -152,24 +130,6 @@ class ConcurrencyTests(HomeCase):
         with store.transaction(write=False) as conn:
             self.assertIsNone(conn.execute("SELECT 1 FROM meta WHERE key='held'").fetchone())
         self.assertLess(time.monotonic() - started, 0.5)
-
-
-class DatabaseFileCase(unittest.TestCase):
-    def setUp(self):
-        self.home = Path(tempfile.mkdtemp(prefix="jobkit-schema-"))
-        self.previous = os.environ["JOBKIT_HOME"]
-        os.environ["JOBKIT_HOME"] = str(self.home)
-        store.close()
-        self.addCleanup(self.restore)
-
-    def restore(self):
-        store.close()
-        os.environ["JOBKIT_HOME"] = self.previous
-        shutil.rmtree(self.home, ignore_errors=True)
-
-    def pragma_version(self) -> int:
-        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
-            return conn.execute("PRAGMA user_version").fetchone()[0]
 
 
 class SchemaTests(DatabaseFileCase):
@@ -350,53 +310,6 @@ class SchemaTests(DatabaseFileCase):
             self.assertIsNone(conn.execute("SELECT 1 FROM sqlite_master WHERE name='half'").fetchone())
 
 
-class AdminTests(DatabaseFileCase):
-    def test_init_creates_the_layout(self):
-        code, out, _ = run_admin("init")
-        self.assertEqual(code, 0)
-        self.assertIn("Created", out)
-        for folder in ("data", "backup", "output", "profile"):
-            self.assertTrue((self.home / folder).is_dir(), folder)
-        self.assertTrue(store.db_path().exists())
-
-    def test_repeat_init_changes_nothing(self):
-        run_admin("init")
-        put("keep")
-        code, out, _ = run_admin("init")
-        self.assertEqual(code, 0)
-        self.assertIn("Already set up", out)
-        self.assertTrue(has("keep"))
-
-    def test_commands_need_init_and_never_create_the_database(self):
-        code, _, err = run_admin("status")
-        self.assertEqual(code, 1)
-        self.assertIn("jobkit init", err)
-        self.assertFalse(store.db_path().exists())
-
-    def test_other_commands_point_at_init(self):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-            code = prep.main(["list"])
-        self.assertEqual(code, 1)
-        self.assertIn("jobkit init", err.getvalue())
-        self.assertFalse(store.db_path().exists())
-
-    def test_status_shows_location_version_and_counts(self):
-        run_admin("init")
-        code, out, _ = run_admin("status")
-        self.assertEqual(code, 0)
-        self.assertIn(str(store.db_path()), out)
-        self.assertIn(f"schema version: {store.version()}", out)
-        self.assertIn("stories: 0", out)
-
-    def test_status_does_not_change_the_database(self):
-        run_admin("init")
-        before = store.db_path().read_bytes()
-        run_admin("status")
-        store.close()
-        self.assertEqual(store.db_path().read_bytes(), before)
-
-
 class HomeTests(unittest.TestCase):
     def test_nothing_is_resolved_from_the_source_tree(self):
         with mock.patch.dict(os.environ, {"JOBKIT_HOME": "/elsewhere"}):
@@ -404,5 +317,21 @@ class HomeTests(unittest.TestCase):
             self.assertFalse(str(base.output_dir()).startswith(str(Path(base.__file__).parents[2])))
 
 
-if __name__ == "__main__":
-    unittest.main()
+class RestoreCheckTests(HomeCase):
+    def test_look_alike_database_is_refused_and_current_data_kept(self):
+        fake = self.home / "fake.db"
+        with contextlib.closing(sqlite3.connect(fake)) as conn:
+            conn.execute("CREATE TABLE meta (unrelated TEXT)")
+            conn.execute(f"PRAGMA user_version={store.version()}")
+            conn.commit()
+        before = (self.home / "data" / "jobkit.db").read_bytes()
+        with self.assertRaises(ToolError):
+            store.restore_from(fake)
+        store.close()
+        self.assertEqual(store.stored_version(sqlite3.connect(self.home / "data" / "jobkit.db")), store.version())
+        self.assertEqual(len(list((self.home / "backup").glob("*before-restore*"))), 0)
+        self.assertTrue(before)
+
+    def test_real_backup_is_accepted(self):
+        copy = store.backup_to(self.home / "backup" / "ok.db")
+        store.check_backup_file(copy)

@@ -1,6 +1,6 @@
 ---
 name: interview-prep
-description: Mock-interview practice: asks first, no hints, then grades. Use to be quizzed or practise answers (architecture, leadership questions, STAR stories), continue an earlier session, or see what to rehearse for a posting. Not for being taught or a readiness report (use tutor).
+description: Mock-interview practice: asks first, no hints, then grades. Use to be quizzed or practice answers (architecture, leadership questions, STAR stories), continue an earlier session, or see what to rehearse for a posting. Not for being taught or a readiness report (use tutor).
 ---
 
 # Interview practice
@@ -10,7 +10,7 @@ description: Mock-interview practice: asks first, no hints, then grades. Use to 
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep JOBKIT_COMMANDS_DIR and carry on.
 1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. JOBKIT_PLUGIN_DIR below is the folder two levels above this skill file (where the plugin's setup and skill files are). JOBKIT_PLUGIN_DIR and JOBKIT_COMMANDS_DIR are folders you work out, not environment variables; only JOBKIT_HOME (the data folder) is one. Put these paths in quotes, since they may contain spaces. Read every file this skill names (the setup guides, the guides next to this skill, and another skill's file) by printing it with `cat "PATH"`, so the user is not asked for permission to read it.
 2. Read and follow `JOBKIT_PLUGIN_DIR/setup/preflight.md` now. It holds this skill's prerequisites (uv and the jobkit helper, and how to install them with the user's consent) and what to do when a save is not allowed (that applies to every command in this conversation), and it gives you JOBKIT_COMMANDS_DIR, the folder where uv keeps the jobkit commands this skill runs. Without JOBKIT_COMMANDS_DIR none of this skill's commands can run: if JOBKIT_COMMANDS_DIR is not known, finish this step before anything else.
-3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarised), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
+3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarized), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
 4. Run `jobkit status --setup`. It prints one word, for you only: never say it to the user, or tell them setup is unfinished.
    - `no-database`: run `jobkit init`, then `jobkit status --setup` again.
    - `no-resumes`: read and follow `JOBKIT_PLUGIN_DIR/setup/first-run.md`, which imports the resumes, then run `jobkit status --setup` again. If it still prints `no-resumes`, do not start the import again in this conversation; say the next line and stop:
@@ -30,7 +30,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 | JD | the job posting |
 | confidence 0, 1, 2 | how comfortable you feel: not yet, a little, solid |
 | needs review, wrong figure | a few lines with numbers that may be off |
-| track | a topic to practise (AWS, Acme Data, ...) |
+| track | a topic to practice (AWS, Acme Data, ...) |
 | tier-1 service | a key service |
 | bullet | a line on your resume |
 | readiness | how prepared you are |
@@ -55,7 +55,7 @@ Stories, answers and progress are personal data kept on the user's computer. Rea
 - `prep show STORY_ID [--style star|soar|carl]`
 - `prep set STORY_ID FIELD "VALUE" [--style S]`: FIELD is situation, task, action, result, metric, lessons, notes, follow_ups, likely_questions, never_say, also_themes (lists: use ` | ` between items), spoken.60s, spoken.2min (the spoken versions, kept as written) or status (empty, draft, done). A style also names its own parts: obstacle (soar), challenge and learning (carl).
 - `prep styles`: the three answer styles (star, soar, carl) and the one in force: `--style`, then the saved `profile set answer_style`, then star. `status done` is accepted only when the story is complete in that style; if it is refused, the message names the missing part, so ask for that part.
-- `prep new STORY_ID --company C --theme T`: an extra story beyond the ones `prep init` makes. `prep list [--company C]` lists every story. `prep evidence STORY` shows the dates it was practised.
+- `prep new STORY_ID --company C --theme T`: an extra story beyond the ones `prep init` makes. `prep list [--company C]` lists every story. `prep evidence STORY` shows the dates it was practiced.
 - `prep for-jd -`: stories ranked for a job posting (posting on stdin), with typical questions and the unfinished ones
 - `prep for-target COMPANY`: stories ranked for a researched company, every company value with its state, and whether each story is complete in the company's suggested style
 - `target show NAME`, `target list`, `target save NAME --seed -`, `target none-found NAME`, `target stale`, `target recheck NAME FACT [--remove]`, `target remove NAME`: researched companies (see "Preparing for a specific company")
@@ -112,12 +112,12 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 ## Preparing for a specific company
 1. When the user names a company they are interviewing with, or a job posting names one, run `target show NAME`. If it is not researched or is stale, research it first by following `research.md` (in this skill's folder): only if you can read web pages, with only the company name and role title, leaving out anything written by individual users. Say what you are doing first:
    > I'll look up what this company has published about how it interviews. I'll only use what the company or a proper article says, not reviews or forum posts.
-   Steps 2 to 5 need stored facts. When `target show NAME` reports `none found`, or you could not read pages and nothing is stored for the company, skip them: practise as usual in the answer structure the user chose, and run no `prep for-target`, `readiness --target` or `--target` for that company (each of them refuses a company without facts).
+   Steps 2 to 5 need stored facts. When `target show NAME` reports `none found`, or you could not read pages and nothing is stored for the company, skip them: practice as usual in the answer structure the user chose, and run no `prep for-target`, `readiness --target` or `--target` for that company (each of them refuses a company without facts).
 2. Run `prep for-target NAME` and report in plain words: which stories fit which of the company's values, which values have no story yet, and which values need the user's own judgment. Explain a value in the company's own words, and say beside every fact where it came from:
    > This comes from the company's own site.
    > This comes from another site, not the company itself.
 3. If the company suggests an answer structure, say so and whether it was the company's own words or your suggestion, then ask which structure the user wants; their choice wins.
-4. In practice, grade each answer against what the company's interviewers look for, as listed by `sessions resume`, without adding anything the stored facts do not say. Practise the values that need the user's judgment from their stored typical questions, as open questions.
+4. In practice, grade each answer against what the company's interviewers look for, as listed by `sessions resume`, without adding anything the stored facts do not say. Practice the values that need the user's judgment from their stored typical questions, as open questions.
 5. Before saving a challenge over a story that already has a task, tell the user the two parts will be joined into one and ask; use `--merge` only on a yes.
 
 ## Preparing for a specific job posting
@@ -130,7 +130,7 @@ People-leadership questions (roadmapping, prioritization, mentoring, conflict, t
 
 <!-- shared:rules -->
 ## Rules
-- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarise it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
+- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarize it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
 - Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.

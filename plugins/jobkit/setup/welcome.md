@@ -6,11 +6,11 @@ First run `jobkit status --summary` (by its full path inside JOBKIT_COMMANDS_DIR
 > You have an unfinished practice session, "TITLE". Would you like to continue it, or start something below?
 
 If the user wants to continue it: a session whose mode is `tutor` continues in the tutor skill, any other in the interview-prep skill (its "Sessions" section, with `sessions resume ID`). If `due for a retest` is above 0, add after the list:
-> A few things you practised a while ago are due for a quick refresh. Just ask when you want to go over them.
+> A few things you practiced a while ago are due for a quick refresh. Just ask when you want to go over them.
 
 > Your resumes are ready. Here is what we can do with them:
 > 1. **Learn a topic.** I explain a technology, a design choice or one of your own stories, then check with a short quiz.
-> 2. **Practise an interview.** I ask, give no hints, then grade your answer: technical questions, leadership questions, and your stories told the way you prefer (STAR, SOAR or CARL).
+> 2. **Practice an interview.** I ask, give no hints, then grade your answer: technical questions, leadership questions, and your stories told the way you prefer (STAR, SOAR or CARL).
 > 3. **Prepare for a company.** Name a company and I look up how it hires (its values, interview rounds, typical questions) from what the company and proper articles publish, then focus your practice on it.
 > 4. **See how prepared you are.** A report of what is solid, what needs work and what you haven't tried yet, for one job posting if you give me one.
 > 5. **Check how well you match a job (early preview).** Give me a job posting and I rate how well your resumes cover it, and list what it asks for that they don't show yet.

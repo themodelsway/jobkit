@@ -1,13 +1,14 @@
-"""Tests for query-resume."""
+"""Tests for plugins/jobkit/src/jk/resumes/query_resume.py: skill names in a job description, ranking and the command."""
 import contextlib
 import io
 import unittest
 from typing import Any
 from unittest import mock
 
-from jk.resumes import parse_resume as pr, query_resume as qr, tables
-from tests.resumes.match_fixtures import jd_from_bullets, line, role
-from tests.resumes.test_resume_pipeline import PipelineCase
+from jk.resumes import parse_resume as pr
+from jk.resumes import query_resume as qr
+from jk.resumes import tables
+from tests.resumes.support import PipelineCase, jd_from_bullets, line, role
 from tests.support import HomeCase
 
 

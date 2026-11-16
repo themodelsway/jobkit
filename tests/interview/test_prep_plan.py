@@ -250,7 +250,3 @@ class DeterminismTests(unittest.TestCase):
         for a in pp.plan(s, TODAY):
             for word in ("id", "json", "database", "confidence"):
                 self.assertNotIn(f" {word} ", f" {a.reason.lower()} ")
-
-
-if __name__ == "__main__":
-    unittest.main()

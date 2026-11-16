@@ -1,7 +1,7 @@
 # interview/answer-styles Specification
 
 ## Purpose
-Let the user choose how a story is told: STAR, SOAR or CARL. A story is stored once and each style is a labelled view of it, so nothing is rewritten per style.
+Let the user choose how a story is told: STAR, SOAR or CARL. A story is stored once and each style is a labeled view of it, so nothing is rewritten per style.
 
 ## Requirements
 

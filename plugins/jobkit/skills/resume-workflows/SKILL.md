@@ -10,7 +10,7 @@ description: Use when building a tailored resume for a job posting, rating how w
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep JOBKIT_COMMANDS_DIR and carry on.
 1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. JOBKIT_PLUGIN_DIR below is the folder two levels above this skill file (where the plugin's setup and skill files are). JOBKIT_PLUGIN_DIR and JOBKIT_COMMANDS_DIR are folders you work out, not environment variables; only JOBKIT_HOME (the data folder) is one. Put these paths in quotes, since they may contain spaces. Read every file this skill names (the setup guides, the guides next to this skill, and another skill's file) by printing it with `cat "PATH"`, so the user is not asked for permission to read it.
 2. Read and follow `JOBKIT_PLUGIN_DIR/setup/preflight.md` now. It holds this skill's prerequisites (uv and the jobkit helper, and how to install them with the user's consent) and what to do when a save is not allowed (that applies to every command in this conversation), and it gives you JOBKIT_COMMANDS_DIR, the folder where uv keeps the jobkit commands this skill runs. Without JOBKIT_COMMANDS_DIR none of this skill's commands can run: if JOBKIT_COMMANDS_DIR is not known, finish this step before anything else.
-3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarised), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
+3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarized), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
 4. Run `jobkit status --setup`. It prints one word, for you only: never say it to the user, or tell them setup is unfinished.
    - `no-database`: run `jobkit init`, then `jobkit status --setup` again.
    - `no-resumes`: read and follow `JOBKIT_PLUGIN_DIR/setup/first-run.md`, which imports the resumes, then run `jobkit status --setup` again. If it still prints `no-resumes`, do not start the import again in this conversation; say the next line and stop:
@@ -30,7 +30,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 | JD | the job posting |
 | confidence 0, 1, 2 | how comfortable you feel: not yet, a little, solid |
 | needs review, wrong figure | a few lines with numbers that may be off |
-| track | a topic to practise (AWS, Acme Data, ...) |
+| track | a topic to practice (AWS, Acme Data, ...) |
 | tier-1 service | a key service |
 | bullet | a line on your resume |
 | readiness | how prepared you are |
@@ -129,7 +129,7 @@ Use this only when the user asks to shorten, tighten or polish long lines. Never
 
 <!-- shared:rules -->
 ## Rules
-- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarise it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
+- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarize it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
 - Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.

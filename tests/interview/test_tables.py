@@ -1,31 +1,10 @@
 """Tests for plugins/jobkit/src/jk/interview/tables.py: round trips, integrity rules and the append-only answer log."""
 import copy
-import unittest
 
 from jk import common, store
 from jk.interview import tables
+from tests.seed_data import CARD, ENGAGEMENT, ENTRY, PROGRESS, STORY, session
 from tests.support import HomeCase
-
-CARD = {"id": "vpc", "track": "aws", "kind": "service", "area": "Network", "name": "VPC", "tier": 1, "aliases": [],
-        "members": [], "lifecycle": {"status": "active"}, "recent_changes": [], "verified_on": None}
-PROGRESS = {"confidence": 1, "notes": "", "last_drilled": "2026-11-01", "links": {"acme": ["b1"]}}
-ENGAGEMENT = {"id": "acme-platform", "company": "acme", "title": "Platform", "my_role": "Lead", "period": "2022",
-              "summary": "s", "notes": None, "updated": "2026-11-01T10:00:00", "counters": {"f": 2, "d": 1},
-              "facts": [{"id": "f1", "text": "12 engineers", "basis": "stated", "source": None, "note": None, "added": "d"},
-                        {"id": "f2", "text": "x", "basis": "unsure", "source": None, "note": None, "added": "d"}],
-              "decisions": [{"id": "d1", "what": "ECS", "why": "w", "alternatives": ["EKS"], "tradeoffs": "t",
-                             "ownership": "mine"}],
-              "people": [{"role": "Owner", "note": "n"}]}
-STORY = {"id": "acme-platform-story", "company": "acme", "company_name": "Acme", "theme": "platform", "headline": "h",
-         "status": "draft", "engagement": "acme-platform", "uses_facts": ["f1"], "updated": "2026-11-01T10:00:00",
-         "metrics": [], "resolved": [{"q": "q", "answer": "a", "at": "t"}], "spoken": {"60s": None, "2min": None}}
-ENTRY = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "question": "q", "answer": "a full answer",
-         "grade": "solid", "confidence_after": 2, "tutor": False, "quiz": False}
-
-
-def session(log=(), sid="s1"):
-    return {"id": sid, "title": "t", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
-            "updated": "2026-11-01T09:00:00", "jd": None, "queue": [{"id": "vpc", "kind": "card"}], "log": list(log)}
 
 
 class RoundTripTests(HomeCase):
@@ -212,6 +191,7 @@ class ReferenceTests(HomeCase):
         self.assertEqual(tables.load_engagements()["engagements"], [])
         self.assertIsNone(tables.load_stories())
 
+
 class ItemReferenceTests(HomeCase):
     def setUp(self):
         super().setUp()
@@ -254,7 +234,3 @@ class ItemReferenceTests(HomeCase):
         tables.save_session({**session(), "queue": queue})
         with self.assertRaises(common.ToolError):
             tables.save_session({**session(sid="s2"), "queue": [{"id": "q1", "kind": "card"}]})
-
-
-if __name__ == "__main__":
-    unittest.main()

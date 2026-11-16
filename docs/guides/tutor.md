@@ -25,7 +25,7 @@ A readiness request produces the readiness report. It shows coverage and evidenc
 - **untested**: no real answer yet.
 - **some gaps**: tried, with gaps.
 - **solid-once** or **solid-repeated**: answered well once, or on more than one day.
-- **aging**: answered well, but not practised for longer than the retest window.
+- **aging**: answered well, but not practiced for longer than the retest window.
 - **solid-unlogged**: confidence recorded by hand, with no logged answer.
 
 Stories carry their own labels: empty, draft, done, done-rehearsed or done-aging. These record attempts, not answer quality.
@@ -34,7 +34,7 @@ The report deliberately has no single score. It comes from practice answers the 
 
 For a named company that has been researched (see [Company research](interview-prep.md#company-research)), the report can also show evidence per company value: each value's state and the stories and leadership questions that match it, still with no score. The tutor reads stored research and never looks a company up; the skill tells the agent to leave research to interview-prep.
 
-The skill names the three to five most valuable gaps and offers to teach or practise the first one. When well-answered items are older than the retest window, it offers to re-check some of them, handing over to interview-prep. A retest never starts without confirmation.
+The skill names the three to five most valuable gaps and offers to teach or practice the first one. When well-answered items are older than the retest window, it offers to re-check some of them, handing over to interview-prep. A retest never starts without confirmation.
 
 ## Commands it uses
 

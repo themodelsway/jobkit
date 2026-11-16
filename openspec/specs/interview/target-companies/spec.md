@@ -1,7 +1,7 @@
 # interview/target-companies Specification
 
 ## Purpose
-Hold researched facts about how a company hires, each with a reference link and the date it was read, so the user can rank stories and practise against a company's emphasis. The `interview-prep` skill tells the agent to research and vet; the commands check what they can see, and store, date and age the facts. Requirements that describe the agent's part say what the skill SHALL tell the agent to do, because the commands cannot check it. Nothing is shipped in the package.
+Hold researched facts about how a company hires, each with a reference link and the date it was read, so the user can rank stories and practice against a company's emphasis. The `interview-prep` skill tells the agent to research and vet; the commands check what they can see, and store, date and age the facts. Requirements that describe the agent's part say what the skill SHALL tell the agent to do, because the commands cannot check it. Nothing is shipped in the package.
 
 ## Requirements
 
@@ -43,7 +43,7 @@ A fact's label SHALL be `company-references` when its link is on a site the comp
 - **THEN** each fact shows its label and the name of the site it came from
 
 ### Requirement: No user-written content
-The skill SHALL tell the agent not to take a fact from reviews, interview reports, salary posts, comments or other content written by individual users, on any site. The command SHALL refuse a link on a known user-content site or page pattern (a fixed list in code); it cannot recognise other user-written pages.
+The skill SHALL tell the agent not to take a fact from reviews, interview reports, salary posts, comments or other content written by individual users, on any site. The command SHALL refuse a link on a known user-content site or page pattern (a fixed list in code); it cannot recognize other user-written pages.
 
 #### Scenario: Forum link
 - **WHEN** a fact is saved with a link on a forum or question-and-answer site
@@ -122,7 +122,7 @@ When no page qualifies, the skill SHALL tell the agent to record `none found` (t
 
 #### Scenario: Practice without the company
 - **WHEN** `prep for-target`, `readiness --target` or `sessions new --target` names a company recorded as none found, or the command falls back to a default company recorded as none found
-- **THEN** the command exits with status 1, says that research found nothing to prepare against, and the skill tells the agent to practise without the company
+- **THEN** the command exits with status 1, says that research found nothing to prepare against, and the skill tells the agent to practice without the company
 
 ### Requirement: No web access
 When the agent cannot read pages (for example Codex in its default sandbox), the skill SHALL tell the agent not to research, to say so once in plain words, to use the style in force, and to record nothing. The skill SHALL NOT offer a fallback that asks the user to paste page text.
@@ -230,7 +230,7 @@ Typical questions SHALL be shown with their value, whatever its state, when the 
 
 #### Scenario: Questions for a value that needs judgment
 - **WHEN** a value is needs your judgment and has stored questions
-- **THEN** its questions are still listed, so it can be practised
+- **THEN** its questions are still listed, so it can be practiced
 
 #### Scenario: No questions found
 - **WHEN** a value has no stored typical question

@@ -1,7 +1,7 @@
 # cli-conventions Specification
 
 ## Purpose
-Give every tool the same command shape so one habit works everywhere. Checked by `tests/test_cli_contract.py`.
+Give every tool the same command shape so one habit works everywhere. Checked by `tests/meta/test_cli_contract.py`.
 
 ## Requirements
 

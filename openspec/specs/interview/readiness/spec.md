@@ -20,7 +20,7 @@ Only log entries with a non-empty answer SHALL count, and tutor-lesson entries S
 - **THEN** it is ignored
 
 ### Requirement: Aging
-A solid answer last drilled more than `--days` ago SHALL be labelled aging; when `--days` is not given the window SHALL be the stored retest window (30 when none is stored). An item whose solid answers are all older than the window SHALL also be aging, whatever later lessons logged.
+A solid answer last drilled more than `--days` ago SHALL be labeled aging; when `--days` is not given the window SHALL be the stored retest window (30 when none is stored). An item whose solid answers are all older than the window SHALL also be aging, whatever later lessons logged.
 
 #### Scenario: Old solid answer
 - **WHEN** the last solid answer is 45 days old
@@ -31,15 +31,15 @@ A solid answer last drilled more than `--days` ago SHALL be labelled aging; when
 - **THEN** the label is not aging, and `--days 30` makes it aging for that run
 
 ### Requirement: Story and leadership status
-Stories SHALL be labelled empty, draft, done, done-rehearsed (done, with an answer logged within `--days`) or done-aging (done, but every logged answer is older). The label says attempted, not graded. Leadership questions SHALL show how many examples with content are filled against the target (up to three employers).
+Stories SHALL be labeled empty, draft, done, done-rehearsed (done, with an answer logged within `--days`) or done-aging (done, but every logged answer is older). The label says attempted, not graded. Leadership questions SHALL show how many examples with content are filled against the target (up to three employers).
 
 #### Scenario: Rehearsed story
 - **WHEN** a done story is logged in a session
-- **THEN** it is labelled done-rehearsed
+- **THEN** it is labeled done-rehearsed
 
 #### Scenario: Old rehearsal
 - **WHEN** the only logged answer for a done story is 45 days old
-- **THEN** it is labelled done-aging
+- **THEN** it is labeled done-aging
 
 ### Requirement: Limit to a job description
 With `--jd` the report SHALL cover only architecture cards and stories that the job description touches. A story touches the job description when its theme or one of its other themes is among the job description's themes.
@@ -56,7 +56,7 @@ The report SHALL NOT change any stored data.
 - **THEN** the database is unchanged, including its modification time
 
 ### Requirement: List answers due for a retest
-`readiness --due` SHALL list, instead of the report, the items labelled aging or done-aging, each with its id, name, the date of its last good answer and its age in days. It SHALL be read-only, use the same window rules as the report, and print "none due" when the list is empty.
+`readiness --due` SHALL list, instead of the report, the items labeled aging or done-aging, each with its id, name, the date of its last good answer and its age in days. It SHALL be read-only, use the same window rules as the report, and print "none due" when the list is empty.
 
 #### Scenario: Two items due
 - **WHEN** two items have good answers older than the window and one has a recent one

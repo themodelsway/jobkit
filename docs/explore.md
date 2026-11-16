@@ -27,7 +27,7 @@ Commands run from a terminal in the repository root, as `uv run` followed by the
 |---|---|
 | `readiness` | Preparation by area: technical topics, leadership questions and stories, with the next items to work on |
 
-The report deliberately has no single percentage. Technical cards and leadership questions carry an evidence label: untested, some gaps, solid once, solid on more than one day, or aging (good once, but not practised lately). A separate label marks confidence recorded by hand with no logged answer. Stories show their status and whether they were rehearsed recently.
+The report deliberately has no single percentage. Technical cards and leadership questions carry an evidence label: untested, some gaps, solid once, solid on more than one day, or aging (good once, but not practiced lately). A separate label marks confidence recorded by hand with no logged answer. Stories show their status and whether they were rehearsed recently.
 
 ### Technical topics
 

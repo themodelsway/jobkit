@@ -27,7 +27,7 @@ The system SHALL keep all user data in one database file, `data/jobkit.db`, unde
 - **WHEN** `jobkit init` is run again
 - **THEN** no data changes and the command reports that the home already exists
 
-### Requirement: Commands need an initialised home
+### Requirement: Commands need an initialized home
 A command that reads or writes data SHALL stop with a message naming `jobkit init` when the database does not exist, and SHALL NOT create one as a side effect.
 
 #### Scenario: No database

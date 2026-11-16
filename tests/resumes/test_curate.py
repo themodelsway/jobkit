@@ -1,11 +1,12 @@
 """Tests for `process-resumes curate` (plugins/jobkit/src/jk/resumes/curate.py): every kind applies on rebuild and can be removed."""
 import contextlib
 import io
-from unittest import mock
 
-from jk.resumes import curate, process_resumes as proc, resume_data as rd, tables
-from tests.resumes.test_extract import as_txt
-from tests.resumes.test_integrity import EXTRA_BULLET, RebuildCase
+from jk.resumes import curate, tables
+from jk.resumes import process_resumes as proc
+from jk.resumes import resume_data as rd
+from tests.resumes.support import EXTRA_BULLET, RebuildCase, as_txt
+from tests.support import call
 
 
 class CurateCase(RebuildCase):
@@ -15,13 +16,8 @@ class CurateCase(RebuildCase):
         self.rebuild()
 
     def curate(self, *argv):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            try:
-                code = proc.main(["curate", *argv])
-            except SystemExit as exc:
-                code = exc.code
-        return code, out.getvalue(), err.getvalue()
+        """Run `process-resumes curate`; (status, stdout, stderr)."""
+        return call(proc.main, "curate", *argv)
 
     def force(self):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -149,7 +145,8 @@ class AppliesOnRebuildTests(CurateCase):
             self.assertIn("replaces the list parsed from your resumes", note)
         self.assertNotIn("replaces the list", self.curate("add", "tag-only", "Leadership")[1])
 
-    def test_summary_angle(self):
+    def test_summary_angle(self) -> None:
+        """Apply both supported summary angles and retain them on rebuild."""
         data = {"companies": {}, "skills": {"groups": {}}, "profile": {**rd.empty_profile(),
                 "summaries": [{"id": "sum-1", "text": "Engineer.", "angles": []}]}}
         self.curate("add", "summary-angle", "sum-1", "focus-1", "focus-2")
@@ -168,7 +165,8 @@ class ThemeListTests(CurateCase):
         self.assertEqual(set(rd.KNOWN_THEMES), used)
         self.assertEqual(set(rd.SUMMARY_ANGLES), set(qr.ANGLE_HINTS))
 
-    def test_themes_verb_lists_both(self):
+    def test_themes_verb_lists_both(self) -> None:
+        """List built-in themes and supported summary angles."""
         code, out, _ = self.curate("themes")
         self.assertEqual(code, 0)
         self.assertIn("team-leadership", out)
@@ -190,13 +188,8 @@ class ThemeListTests(CurateCase):
 
 class BatchTests(CurateCase):
     def batch(self, kind, text):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), mock.patch("sys.stdin", io.StringIO(text)):
-            try:
-                code = proc.main(["curate", "add", kind, "-"])
-            except SystemExit as exc:
-                code = exc.code
-        return code, out.getvalue(), err.getvalue()
+        """Run `process-resumes curate add KIND -` with the text on standard input."""
+        return call(proc.main, "curate", "add", kind, "-", stdin=text)
 
     def test_many_themes_in_one_call(self):
         bullet = self.bullet()["id"]
@@ -216,7 +209,8 @@ class BatchTests(CurateCase):
         self.assertIn("Line 2", err)
         self.assertNotIn("Traceback", err)
 
-    def test_one_bad_line_saves_nothing(self):
+    def test_one_bad_line_saves_nothing(self) -> None:
+        """Roll back a valid entry if a later line has an unknown angle."""
         bullet = self.bullet()["id"]
         code, _, err = self.batch("summary-angle", f"{bullet} focus-1\n{bullet} nonsense\n")
         self.assertNotEqual(code, 0)

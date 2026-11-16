@@ -13,14 +13,14 @@ The system SHALL expose `parse_resume(text, layout_text)` that takes extracted t
 - **THEN** the results are identical
 
 ### Requirement: Layout families
-The system SHALL recognise layout A (`WORK EXPERIENCE`, company with dates, title below, `•` bullets, `Present`) and layout B (`Work History`, `Company – Title`, optional `Role:`/`Client:`, `●` bullets, `§` profile points, `Current`), and the other forms in the requirements below.
+The system SHALL recognize layout A (`WORK EXPERIENCE`, company with dates, title below, `•` bullets, `Present`) and layout B (`Work History`, `Company – Title`, optional `Role:`/`Client:`, `●` bullets, `§` profile points, `Current`), and the other forms in the requirements below.
 
 #### Scenario: Layout B resume
 - **WHEN** a resume uses `Work History` and `●` bullets
 - **THEN** each company's bullets and dates are parsed
 
-### Requirement: Section headings are recognised by meaning
-The system SHALL recognise a section heading from a table of synonyms (for example `Experience`, `Professional Experience`, `Employment History` for work; `Career Highlights`, `Key Achievements`, `Accomplishments` for profile points; `Core Competencies` for skills), ignoring case, a trailing colon, `&` for `and` and letter spacing. `Skills: a, b` SHALL start the skills section with its content; inside the work history only the skills headings (`Skills:`, `Technical Skills:`, `Leadership Skills:`), `Education:`, `Certifications:` and `Summary:` do so, and a job label such as `Technologies:`, `Tech stack:` or `Leadership:` stays in the bullet. A job label on a line of its own (`Technologies` above `Redis, Go`, or `Accomplishments` above bullets) SHALL stay in the job when a dated employer follows before the next heading that is not a job label: its line below is read as `Technologies: Redis, Go` would be, and bullets below it stay bullets of the job. After the last job such a label starts its own section. A known heading whose content is not stored (awards, volunteering, publications, languages, interests, references) SHALL end the section before it. An unknown ALL-CAPS heading inside the work history, with no date range within the next lines and that is not a job title, SHALL end the work history and be reported. A combined `Education and Certifications` block SHALL be split by whether a line names a certification. A file whose work heading has no date range under it SHALL be reported as not a resume.
+### Requirement: Section headings are recognized by meaning
+The system SHALL recognize a section heading from a table of synonyms (for example `Experience`, `Professional Experience`, `Employment History` for work; `Career Highlights`, `Key Achievements`, `Accomplishments` for profile points; `Core Competencies` for skills), ignoring case, a trailing colon, `&` for `and` and letter spacing. `Skills: a, b` SHALL start the skills section with its content; inside the work history only the skills headings (`Skills:`, `Technical Skills:`, `Leadership Skills:`), `Education:`, `Certifications:` and `Summary:` do so, and a job label such as `Technologies:`, `Tech stack:` or `Leadership:` stays in the bullet. A job label on a line of its own (`Technologies` above `Redis, Go`, or `Accomplishments` above bullets) SHALL stay in the job when a dated employer follows before the next heading that is not a job label: its line below is read as `Technologies: Redis, Go` would be, and bullets below it stay bullets of the job. After the last job such a label starts its own section. A known heading whose content is not stored (awards, volunteering, publications, languages, interests, references) SHALL end the section before it. An unknown ALL-CAPS heading inside the work history, with no date range within the next lines and that is not a job title, SHALL end the work history and be reported. A combined `Education and Certifications` block SHALL be split by whether a line names a certification. A file whose work heading has no date range under it SHALL be reported as not a resume.
 
 #### Scenario: Job label above its list
 - **WHEN** `Technologies` stands on its own line with `Redis, Go` below it, and another dated employer follows
@@ -93,7 +93,7 @@ The system SHALL report a file that yields no work history as unparsed with a re
 - **THEN** it appears in the unparsed list
 
 ### Requirement: Company, title and dates on separate lines
-The system SHALL recognise a work-history entry written as the company on one line, the job title on the next and the date range on the next, and SHALL take the company line as the employer. A line above the dates SHALL be read as a title only when it looks like a job title and the line above it could be a company name. Otherwise the line above the dates stays the employer.
+The system SHALL recognize a work-history entry written as the company on one line, the job title on the next and the date range on the next, and SHALL take the company line as the employer. A line above the dates SHALL be read as a title only when it looks like a job title and the line above it could be a company name. Otherwise the line above the dates stays the employer.
 
 #### Scenario: Three-line entry
 - **WHEN** a work history has `Acme Corp`, then `Senior Engineer`, then `01/2020 - Present`

@@ -1,4 +1,4 @@
-"""Synthetic data for every kind, written into a test database by `seed()`."""
+"""Synthetic data for every kind, written into a test database by `seed()`, and the sample records it uses."""
 from collections.abc import Callable
 from typing import Any
 
@@ -6,8 +6,21 @@ from jk import store
 from jk.interview import tables
 from jk.resumes import tables as resume_tables
 from jk.user import tables as user_tables
-from tests.interview.test_tables import CARD, ENGAGEMENT, PROGRESS, STORY, session
 
+# One record of each interview kind, also used by the table tests.
+CARD = {"id": "vpc", "track": "aws", "kind": "service", "area": "Network", "name": "VPC", "tier": 1, "aliases": [],
+        "members": [], "lifecycle": {"status": "active"}, "recent_changes": [], "verified_on": None}
+PROGRESS = {"confidence": 1, "notes": "", "last_drilled": "2026-11-01", "links": {"acme": ["b1"]}}
+ENGAGEMENT = {"id": "acme-platform", "company": "acme", "title": "Platform", "my_role": "Lead", "period": "2022",
+              "summary": "s", "notes": None, "updated": "2026-11-01T10:00:00", "counters": {"f": 2, "d": 1},
+              "facts": [{"id": "f1", "text": "12 engineers", "basis": "stated", "source": None, "note": None, "added": "d"},
+                        {"id": "f2", "text": "x", "basis": "unsure", "source": None, "note": None, "added": "d"}],
+              "decisions": [{"id": "d1", "what": "ECS", "why": "w", "alternatives": ["EKS"], "tradeoffs": "t",
+                             "ownership": "mine"}],
+              "people": [{"role": "Owner", "note": "n"}]}
+STORY = {"id": "acme-platform-story", "company": "acme", "company_name": "Acme", "theme": "platform", "headline": "h",
+         "status": "draft", "engagement": "acme-platform", "uses_facts": ["f1"], "updated": "2026-11-01T10:00:00",
+         "metrics": [], "resolved": [{"q": "q", "answer": "a", "at": "t"}], "spoken": {"60s": None, "2min": None}}
 ENTRY = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "question": "q", "answer": "a full answer",
          "grade": "solid", "confidence_after": 2, "tutor": False, "quiz": False}
 SEED = {"name": "acmedata", "label": "Acme Data", "source_hosts": ["docs.example.com"], "services": [],
@@ -15,6 +28,13 @@ SEED = {"name": "acmedata", "label": "Acme Data", "source_hosts": ["docs.example
 QUESTION = {"id": "team-scope", "category": "Scope and facts", "question": "How big was the team?", "themes": []}
 LEAD_PROGRESS = {"confidence": 1, "principle": "p", "notes": "", "last_drilled": "2026-11-01",
                  "examples": {"acme": {"situation": "s", "task": "t", "action": "a", "result": "r", "metric": "m"}}}
+
+
+def session(log=(), sid="s1"):
+    """A practice session holding the given answer log."""
+    return {"id": sid, "title": "t", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
+            "updated": "2026-11-01T09:00:00", "jd": None, "queue": [{"id": "vpc", "kind": "card"}], "log": list(log)}
+
 
 DATA: dict[str, Any] = {
     "settings": {"resume_root": "/example", "resume_dirs": [], "tier1_services": ["VPC"]},
@@ -54,8 +74,6 @@ DATA: dict[str, Any] = {
     "resume-ledger": {"a.pdf": {"mtime": 100.0, "size": 1, "sha256": "x", "processed_at": "t", "kind": "resume"}},
     "resume-unparsed": {"b.pdf": ["no work history found"]},
 }
-
-
 
 
 def _save_tracks(data: dict[str, Any]) -> None:

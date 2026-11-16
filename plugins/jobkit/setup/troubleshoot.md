@@ -2,7 +2,7 @@
 
 Read by the jobkit skills when the setup check (`jobkit status --setup`) prints `blocked`, `busy`, `too-new`, `failed`, anything else that is not one of its four stage words, or nothing; and whenever a jobkit command fails and its message does not say what to fix, or its last line is "For help, read setup/troubleshoot.md in the plugin folder." The skill that is running explained JOBKIT_PLUGIN_DIR and JOBKIT_COMMANDS_DIR and how to run commands. Do the checks yourself and quietly: the user only sees the lines that start with `>`. When a check here says to carry on, go back to the skill.
 
-A mistake in how a command was run (a wrong option, a missing or misspelt name) is not a reason to read this guide: its message says what to fix, so fix it and run the command again.
+A mistake in how a command was run (a wrong option, a missing or misspelled name) is not a reason to read this guide: its message says what to fix, so fix it and run the command again.
 
 ## Never
 - Never guess the setup stage, and never import the resumes on a guess.

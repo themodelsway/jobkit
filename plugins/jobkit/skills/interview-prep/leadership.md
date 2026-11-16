@@ -6,7 +6,7 @@ Used by the `interview-prep` skill in leadership mode. Data lives in the local d
 Each question gets two parts:
 1. **Principle**: how the user handles this in general, in their own words (2-4 sentences). Saved with `lead set ID principle "..."`.
 2. **One STAR example per company** for the three most recent companies (`lead show` or `lead profile show` lists them). Saved with `lead example ID COMPANY situation|task|action|result|metric "..."`.
-A strong interview answer is the principle followed by one example, so practise both.
+A strong interview answer is the principle followed by one example, so practice both.
 
 ## Profile facts (scope questions)
 Questions like "how many people have you led" need exact numbers per role. Ask for them one at a time, never guess, and save with `lead profile set COMPANY FIELD VALUE` (fields: title, direct_reports, indirect_team, team_composition, budget, stakeholders, reporting_to, cadence, notes). Distinguish direct reports, indirect/matrixed team, and contractors or vendors. Do not copy numbers from the resume unless the user confirms them.

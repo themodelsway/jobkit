@@ -1,8 +1,7 @@
 """Pins the exact messages and ordering of story_model.validate_* and the markdown/search output.
-Messages and their order are part of the prep.py contract (the skills quote them). Run: uv run python -m unittest discover -s tests -t ."""
+Messages and their order are part of the prep.py contract (the skills quote them)."""
 import copy
 import unittest
-
 
 from jk.interview import story_model as sm
 
@@ -203,7 +202,3 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(hits[0][:3], ("story", "s1", "situation"))
         self.assertTrue(hits[0][3].startswith("..."))
         self.assertEqual([h[:3] for h in sm.search([], [eng()], "a queue")], [("engagement", "e1", "decision d2.what")])
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -59,7 +59,7 @@ A seed is topic names only, never facts. Search and read an official index of th
 - Aim for 20 to 60 topics in areas the field itself uses, 6 to 10 comparisons, and 6 to 8 scenarios, cases or role-plays, whichever fit how the role is interviewed.
 - Re-running `arch track add` with the same name replaces the seed; `arch init --track NAME` then adds the new cards and keeps progress. Card ids of non-AWS tracks start with the track name (`acmedata-turbo`).
 
-Use `--track T` on `arch next|list` and `sessions new` to drill one track; without it, cards from all enabled tracks are mixed. Use `--kind case` or `--kind role-play` to practise only those (not with a job posting, which matches topic cards only).
+Use `--track T` on `arch next|list` and `sessions new` to drill one track; without it, cards from all enabled tracks are mixed. Use `--kind case` or `--kind role-play` to practice only those (not with a job posting, which matches topic cards only).
 
 ## Flow per question
 1. Ask one question (or open the case, or step into the role-play). Do not give hints or the answer.

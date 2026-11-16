@@ -1,12 +1,13 @@
 """Tests for plugins/jobkit/src/jk/user/terms.py (personal terms and the commit scan) in a temp home folder."""
 import contextlib
-import io
 import subprocess
 import unittest
 
 from jk import store
-from jk.user import profile as up, tables as utables, terms
+from jk.user import tables as utables
+from jk.user import terms
 from tests.support import HomeCase
+from tests.user.support import run_profile
 
 HEADER = "# Pat Example\nCity, ST | 5550001234 | pat@example.org | linkedin.com/in/patexample\n"
 
@@ -65,65 +66,59 @@ class DeriveTests(unittest.TestCase):
 
 
 class CommandTests(HomeCase):
-    def run_cli(self, *argv):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = up.main(list(argv))
-        return code, out.getvalue(), err.getvalue()
-
     def setUp(self):
         super().setUp()
-        self.run_cli("init", "--resume-root", str(self.home / "resumes"))
-        self.run_cli("header", "set", "Pat Example", "City, ST | 5550001234 | pat@example.org")
+        run_profile("init", "--resume-root", str(self.home / "resumes"))
+        run_profile("header", "set", "Pat Example", "City, ST | 5550001234 | pat@example.org")
         utables.replace_employers({"e1": {"name": "Acme Corp", "regex": "acme"}})
 
     def test_list_shows_derived_and_stored(self):
-        self.run_cli("terms", "add", "acme.ai", "--kind", "product")
-        _, out, _ = self.run_cli("terms")
+        run_profile("terms", "add", "acme.ai", "--kind", "product")
+        _, out, _ = run_profile("terms")
         self.assertIn("Acme Corp", out)
         self.assertIn("derived", out)
         self.assertRegex(out, r"product\s+phrase\s+stored\s+acme.ai")
 
     def test_bad_pattern_is_refused(self):
-        code, _, err = self.run_cli("terms", "add", "(oops", "--match", "regex")
+        code, _, err = run_profile("terms", "add", "(oops", "--match", "regex")
         self.assertEqual(code, 1)
         self.assertIn("valid pattern", err)
 
     def test_bad_pattern_cannot_be_ignored_either(self):
-        code, _, err = self.run_cli("terms", "ignore", "[oops")
+        code, _, err = run_profile("terms", "ignore", "[oops")
         self.assertEqual(code, 1)
         self.assertIn("valid pattern", err)
         page = self.home / "page.txt"
         page.write_text("fine\n", encoding="utf-8")
-        self.assertEqual(self.run_cli("terms", "check", "--exhaustive", str(page))[0], 0)
+        self.assertEqual(run_profile("terms", "check", "--exhaustive", str(page))[0], 0)
 
     def test_check_paths_finds_and_ignore_clears(self):
         page = self.home / "page.txt"
         page.write_text("fine\nworked at acme corp once\n", encoding="utf-8")
-        code, out, _ = self.run_cli("terms", "check", str(page))
+        code, out, _ = run_profile("terms", "check", str(page))
         self.assertEqual(code, 1)
         self.assertIn(":2: employer term 'Acme Corp'", out)
-        self.run_cli("terms", "ignore", "Acme Corp")
-        self.assertEqual(self.run_cli("terms", "check", str(page))[0], 0)
-        self.run_cli("terms", "rm", "Acme Corp")
-        self.assertEqual(self.run_cli("terms", "check", str(page))[0], 1)
+        run_profile("terms", "ignore", "Acme Corp")
+        self.assertEqual(run_profile("terms", "check", str(page))[0], 0)
+        run_profile("terms", "rm", "Acme Corp")
+        self.assertEqual(run_profile("terms", "check", str(page))[0], 1)
 
     def test_exhaustive_includes_ignored_common_words(self):
         page = self.home / "page.txt"
         page.write_text("an acme of the sun\n", encoding="utf-8")
-        self.run_cli("terms", "ignore", "Acme")
-        self.assertEqual(self.run_cli("terms", "check", str(page))[0], 0)
-        code, out, _ = self.run_cli("terms", "check", "--exhaustive", str(page))
+        run_profile("terms", "ignore", "Acme")
+        self.assertEqual(run_profile("terms", "check", str(page))[0], 0)
+        code, out, _ = run_profile("terms", "check", "--exhaustive", str(page))
         self.assertEqual(code, 1)
         self.assertIn("Word: Acme", out)
         self.assertIn("page.txt (1)", out)
-        self.assertIn("common word", self.run_cli("terms")[1])
+        self.assertIn("common word", run_profile("terms")[1])
 
     def test_common_words_are_one_block_per_word(self):
         (self.home / "a.txt").write_text("acme\nacme again\n", encoding="utf-8")
         (self.home / "b.txt").write_text("x\nacme\nacme\nacme\n", encoding="utf-8")
-        self.run_cli("terms", "ignore", "Acme")
-        _, out, _ = self.run_cli("terms", "check", "--exhaustive", str(self.home / "a.txt"), str(self.home / "b.txt"))
+        run_profile("terms", "ignore", "Acme")
+        _, out, _ = run_profile("terms", "check", "--exhaustive", str(self.home / "a.txt"), str(self.home / "b.txt"))
         out = out.replace(str(self.home) + "/", "")
         self.assertEqual(out.count("Word: Acme"), 1)
         self.assertIn("\n  a.txt (1, 2)\n", out)
@@ -132,14 +127,14 @@ class CommandTests(HomeCase):
     def test_exhaustive_with_no_common_words_says_so(self):
         page = self.home / "page.txt"
         page.write_text("nothing here\n", encoding="utf-8")
-        code, out, _ = self.run_cli("terms", "check", "--exhaustive", str(page))
+        code, out, _ = run_profile("terms", "check", "--exhaustive", str(page))
         self.assertEqual(code, 0)
         self.assertIn("No common words are recorded", out)
 
     def test_import_file(self):
         source = self.home / "terms.txt"
         source.write_text("Acme Air\n# comment\nacme[ _.-]?ai\n\n", encoding="utf-8")
-        _, out, _ = self.run_cli("terms", "import", str(source))
+        _, out, _ = run_profile("terms", "import", str(source))
         self.assertIn("Imported 2", out)
         self.assertEqual(sorted(r["match"] for r in utables.load_terms()), ["phrase", "regex"])
 
@@ -152,7 +147,7 @@ class CommandTests(HomeCase):
         subprocess.run(["git", "add", "a.txt"], cwd=repo, check=True)
         (repo / "a.txt").write_text("clean now\n", encoding="utf-8")      # the working copy is clean; the staged one is not
         with contextlib.chdir(repo):
-            code, out, _ = self.run_cli("terms", "check", "--staged")
+            code, out, _ = run_profile("terms", "check", "--staged")
         self.assertEqual(code, 1)
         self.assertIn("a.txt:1", out)
 
@@ -173,20 +168,20 @@ class CommandTests(HomeCase):
         self.assertTrue(status.stdout.startswith("R"), status.stdout)      # git really reports a rename
         (repo / "after.txt").write_text("clean now\n", encoding="utf-8")   # the working copy is clean; the staged one is not
         with contextlib.chdir(repo):
-            code, out, _ = self.run_cli("terms", "check", "--staged")
+            code, out, _ = run_profile("terms", "check", "--staged")
         self.assertEqual(code, 1)
         self.assertIn("after.txt:101", out)
 
     def test_nothing_staged_says_so(self):
         with contextlib.chdir(self.home):
             subprocess.run(["git", "init", "-q"], check=True)
-            code, out, _ = self.run_cli("terms", "check", "--staged")
+            code, out, _ = run_profile("terms", "check", "--staged")
         self.assertEqual(code, 0)
         self.assertIn("no files to check", out)
 
     def test_check_without_a_database_is_skipped(self):
         store.close()
         (self.home / "data" / "jobkit.db").rename(self.home / "data" / "gone.db")
-        code, out, _ = self.run_cli("terms", "check", "--staged")
+        code, out, _ = run_profile("terms", "check", "--staged")
         self.assertEqual(code, 0)
         self.assertIn("skipped", out)

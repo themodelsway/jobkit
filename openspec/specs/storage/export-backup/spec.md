@@ -38,7 +38,7 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 - **THEN** the copy opens cleanly and holds a state from before or after that write
 
 ### Requirement: Restore
-`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a complete jobkit database. The file SHALL be checked on a temporary copy before anything is replaced. A refusal SHALL name the table and SHALL NOT print the record's content.
+`jobkit backup --restore FILE` SHALL replace the database with a backup after first saving the current database, and SHALL refuse a file that is not a complete jobkit database. The file SHALL be checked on a temporary copy, and the database SHALL be replaced with the same snapshot that was checked, at the file's own schema version. A refusal SHALL name the table and SHALL NOT print the record's content.
 
 #### Scenario: Checks before replacing
 - **WHEN** a file is restored
@@ -50,7 +50,23 @@ An export in JSON SHALL contain every stored record with all of its fields, so t
 
 #### Scenario: Restore with no usable database
 - **WHEN** a valid backup is restored and the current database is missing, damaged or from a newer version
-- **THEN** the restore succeeds; a damaged or newer database is first copied file by file to the backup folder, and with no database the output says there was none
+- **THEN** the restore succeeds; a database SQLite can read (a newer version, or one with missing tables) is first copied to the backup folder as one consistent file, one it cannot read is copied file by file, and with no database the output says there was none
+
+#### Scenario: Backup with a write-ahead log
+- **WHEN** the file has a write-ahead log beside it (`FILE-wal`)
+- **THEN** the checks read the file together with its log, the database is replaced with exactly the checked copy, and the backup file and its log are not changed
+
+#### Scenario: Older backup
+- **WHEN** a valid backup from an older schema version is restored
+- **THEN** the database keeps that version until the next command opens and upgrades it, so the older release can open it
+
+#### Scenario: Read-only backup
+- **WHEN** the backup file is read-only and needs an upgrade
+- **THEN** it is checked and restored, and its contents and permissions are not changed
+
+#### Scenario: Busy database
+- **WHEN** another command holds the database for longer than the busy timeout
+- **THEN** the restore exits with status 1 saying the database is busy, the database is not replaced and no partial copy is left in the backup folder
 
 #### Scenario: Wrong file
 - **WHEN** the file is not a jobkit database

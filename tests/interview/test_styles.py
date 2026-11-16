@@ -1,5 +1,4 @@
-"""Tests for interview/styles.py: the three styles, the part mapping, the challenge save rule and the style in force.
-Run: uv run python -m unittest discover -s tests -t ."""
+"""Tests for interview/styles.py: the three styles, the part mapping, the challenge save rule and the style in force."""
 import copy
 import unittest
 
@@ -190,7 +189,3 @@ class TestStyleInForce(HomeCase):
         self.set_default("carl")
         styles.in_force("soar")
         self.assertEqual(profile.answer_style(), "carl")
-
-
-if __name__ == "__main__":
-    unittest.main()

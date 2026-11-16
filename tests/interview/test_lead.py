@@ -1,10 +1,9 @@
-"""Tests for the `lead` command."""
+"""Tests for plugins/jobkit/src/jk/interview/lead.py: leadership questions, examples and a company's emphasis."""
 import json
 
 from jk.interview import lead, readiness, tables
 from jk.user import profile as up
-from tests.interview.test_targets import fact, store_company
-from tests.interview.test_sessions import SessionCase
+from tests.interview.support import SessionCase, fact, store_company
 
 
 class LeadershipTests(SessionCase):
@@ -80,8 +79,7 @@ class LeadCommandTests(SessionCase):
         saved = tables.load_lead_progress()[qid]
         self.assertEqual((saved["principle"], saved["confidence"]), ("Ask, then decide", 2))
         self.assertEqual(self.cli(lead.main, "set", qid, "confidence", "9")[0], 1)
-        with self.assertRaises(SystemExit):
-            self.cli(lead.main, "set", qid, "colour", "x")
+        self.assertEqual(self.cli(lead.main, "set", qid, "colour", "x")[0], 2)      # an argparse usage error
 
     def test_example_and_profile(self):
         qid = self.first_id()

@@ -1,7 +1,7 @@
 # privacy-boundaries Specification
 
 ## Purpose
-Keep everything personal out of the repository and out of the resume data, and keep the user's resume files untouched. Enforced partly by `tests/test_no_personal.py`.
+Keep everything personal out of the repository and out of the resume data, and keep the user's resume files untouched. Enforced partly by `tests/meta/test_no_personal.py`.
 
 ## Requirements
 

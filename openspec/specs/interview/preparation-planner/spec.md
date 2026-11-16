@@ -1,7 +1,7 @@
 # interview/preparation-planner Specification
 
 ## Purpose
-Decide what the user should practise next, why, and which of their experience can answer it, keeping knowledge, work experience and performance apart and treating unknown as not yet asked. Rules only: no stored state. Implemented as a rules module that no command uses yet.
+Decide what the user should practice next, why, and which of their experience can answer it, keeping knowledge, work experience and performance apart and treating unknown as not yet asked. Rules only: no stored state. Implemented as a rules module that no command uses yet.
 
 ## Requirements
 

@@ -1,9 +1,8 @@
-"""Tests for researched target companies: save checks, state, matching and the `target` command.
-All data is fictional. Run: uv run python -m unittest discover -s tests -t ."""
+"""Tests for plugins/jobkit/src/jk/interview/targets.py and target.py: save checks, state, matching, the `target`
+command and the settings it reads. All data is fictional."""
 import contextlib
 import io
 import json
-import sys
 import unittest
 from datetime import date, timedelta
 from unittest import mock
@@ -12,24 +11,8 @@ from jk.common import ToolError
 from jk.interview import target, targets
 from jk.interview import target_tables as tt
 from jk.user import profile
-from tests.support import HomeCase
-
-TODAY = date(2026, 11, 14)
-
-
-def fact(fid="v1", **fields):
-    """A valid fictional fact; `fields` override."""
-    base = {"id": fid, "kind": "value", "name": "Ownership", "wording": "Owns outcomes end to end.",
-            "quote": "We act on behalf of the entire company.", "link": "https://example.com/careers/values",
-            "label": "company-references", "pulled": TODAY.isoformat(), "vetted": True,
-            "themes": ["team-leadership"], "hints": ["deadline"]}
-    base.update(fields)
-    return base
-
-
-def save(*facts, name="Company X", **extra):
-    """A save holding the given facts."""
-    return {"name": name, "facts": list(facts), **extra}
+from tests.interview.support import TODAY, fact, save
+from tests.support import HomeCase, call
 
 
 class FactCheckTests(unittest.TestCase):
@@ -156,11 +139,9 @@ class MatchTests(unittest.TestCase):
 
 class TargetCommandTests(HomeCase):
     def cli(self, *argv, stdin=None):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            with mock.patch.object(sys, "stdin", io.StringIO(stdin or "")):
-                code = target.main(list(argv))
-        return code, out.getvalue() + err.getvalue()
+        """Run `target`; (status, stdout and stderr together)."""
+        code, out, err = call(target.main, *argv, stdin=stdin or "")
+        return code, out + err
 
     def save(self, data, name="Company X"):
         return self.cli("save", name, "--seed", "-", stdin=json.dumps(data))
@@ -309,15 +290,3 @@ class MentionTests(unittest.TestCase):
         self.assertTrue(targets.mentions(["C++"], "Wrote the engine in C++ for speed"))
         self.assertTrue(targets.mentions(["C#"], "Services in C#."))
         self.assertFalse(targets.mentions(["own"], "a shared ownership model"))
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-def store_company(*facts, name="Company X", **extra):
-    """Save a fictional researched company, dated today; return it as stored."""
-    today = date.today().isoformat()
-    dated = [{**f, "pulled": today} for f in facts]
-    tt.save_company(targets.merge_save(None, save(*dated, name=name, **extra), date.today()))
-    return tt.load_company(name)

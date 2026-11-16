@@ -13,6 +13,7 @@ import json
 import shutil
 import sqlite3
 import tempfile
+import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
@@ -21,6 +22,8 @@ from jk import base, schema
 from jk.base import ToolError
 
 BUSY_TIMEOUT_MS: Final[int] = 5000
+BUSY_CODES: Final[frozenset[int]] = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+"""SQLite's primary result codes for a database another connection holds."""
 HINT: Final[str] = "Run `jobkit init` first."
 
 Migration = Callable[[sqlite3.Connection], None]
@@ -65,6 +68,28 @@ class StoreError(ToolError):
 
 class NewerDatabaseError(StoreError):
     """The database was written by a newer version of the program; nothing was changed."""
+
+
+class BusyTooLong(sqlite3.OperationalError):
+    """A copy waited `BUSY_TIMEOUT_MS` for another connection's lock and gave up; reads as SQLite's busy code."""
+
+    sqlite_errorcode = sqlite3.SQLITE_BUSY
+
+
+def copy_database(source: sqlite3.Connection, target: sqlite3.Connection) -> None:
+    """`source.backup(target)`, giving up once it has waited `BUSY_TIMEOUT_MS` for a lock (Python's backup retries
+    a busy or locked database without limit, whatever the connection's timeout).
+
+    Raises:
+        BusyTooLong: another connection held the source or the target for longer than that.
+    """
+    deadline = time.monotonic() + BUSY_TIMEOUT_MS / 1000
+
+    def progress(status: int, _remaining: int, _total: int) -> None:
+        if status in BUSY_CODES and time.monotonic() > deadline:
+            raise BusyTooLong("database is locked")
+
+    source.backup(target, progress=progress, sleep=0.05)
 
 
 def _open(path: Path) -> sqlite3.Connection:
@@ -147,7 +172,7 @@ def save_committed_copy(conn: sqlite3.Connection, label: str, action: str) -> Pa
         source_file = conn.execute("PRAGMA database_list").fetchone()[2]
         with contextlib.closing(sqlite3.connect(source_file, timeout=BUSY_TIMEOUT_MS / 1000)) as source, \
                 contextlib.closing(sqlite3.connect(path)) as target:
-            source.backup(target)
+            copy_database(source, target)
     except (OSError, sqlite3.Error) as err:
         if path is not None:
             with contextlib.suppress(OSError):
@@ -360,7 +385,7 @@ def backup_to(path: Path) -> Path:
     source = connect()
     target = sqlite3.connect(path)
     try:
-        source.backup(target)
+        copy_database(source, target)
     finally:
         target.close()
     return path
@@ -375,21 +400,37 @@ def _columns(conn: sqlite3.Connection) -> dict[str, set[str]]:
 def check_backup_file(file: Path) -> None:
     """Fail unless `file` is a jobkit database this program can read and upgrade.
 
-    The file is checked on a temporary copy: SQLite's integrity check, the upgrade to the current schema, and
-    every table and column the current schema has. The file itself is never changed.
+    The file is checked on a temporary, writable copy, together with the write-ahead log beside it (SQLite reads
+    both): SQLite's integrity check, the upgrade to the current schema, and every table and column the current schema
+    has. The file itself is never changed and only needs to be readable.
 
     Raises:
         ToolError: the file is missing, damaged, not a jobkit database, incomplete, or from a newer version.
     """
+    with _checked_copy(file):
+        pass
+
+
+@contextlib.contextmanager
+def _checked_copy(file: Path) -> Iterator[Path]:
+    """`file` with the committed changes of its write-ahead log, as one temporary file at the file's own schema
+    version, after a copy of exactly that file passed the checks of `check_backup_file` (the checks upgrade their
+    copy, not this one, so an older backup is restored at its own version). It is removed when the block ends.
+
+    Raises:
+        ToolError: as `check_backup_file`.
+    """
     if not file.is_file():
         raise ToolError(f"{file} does not exist.")
     with tempfile.TemporaryDirectory() as tmp:
-        copy = Path(tmp) / "candidate.db"
-        shutil.copyfile(file, copy)
+        snapshot, check = Path(tmp) / "snapshot.db", Path(tmp) / "check.db"
         try:
-            _check_copy(file, copy)
+            _snapshot(_copy_files(file, Path(tmp) / "backup.db"), snapshot)
+            shutil.copyfile(snapshot, check)
+            _check_copy(file, check)
         except sqlite3.DatabaseError as exc:
             raise ToolError(f"{file} is not a jobkit database ({exc}).") from exc
+        yield snapshot
 
 
 NOT_RECORDS: Final[frozenset[str]] = frozenset({"resume_item", "curation", "unparsed", "setting", "meta"})
@@ -451,51 +492,83 @@ def _database_files(path: Path) -> list[Path]:
 
 
 def _copy_files(path: Path, saved: Path) -> Path:
-    """Copy the database file and its write-ahead log as they are on disk to `saved` (and `saved`-wal)."""
+    """Copy the database file and its write-ahead log as they are on disk to `saved` (and `saved`-wal); the copies
+    are new writable files, whatever the originals' permissions."""
     saved.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(path, saved)
+    shutil.copyfile(path, saved)
     wal = Path(f"{path}-wal")
     if wal.exists():
-        shutil.copy2(wal, Path(f"{saved}-wal"))
+        shutil.copyfile(wal, Path(f"{saved}-wal"))
     return saved
+
+
+def _snapshot(path: Path, saved: Path) -> Path:
+    """Copy the database at `path` to the one file `saved` as SQLite reads it (with the committed changes of its
+    write-ahead log), without upgrading it, so a database of any version or with missing tables is copied too.
+
+    Raises:
+        BusyTooLong: another connection held the database for longer than `BUSY_TIMEOUT_MS`.
+    """
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.closing(sqlite3.connect(path, timeout=BUSY_TIMEOUT_MS / 1000)) as source, \
+            contextlib.closing(sqlite3.connect(saved)) as target:
+        copy_database(source, target)
+    return saved
+
+
+def _is_busy(exc: sqlite3.Error) -> bool:
+    """True when SQLite's primary result code says another connection holds the database (busy or locked)."""
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(code, int) and code & 0xFF in BUSY_CODES
 
 
 def _save_before_restore(path: Path) -> Path | None:
     """Keep the database a restore will replace, and return the copy (None when there is no database).
 
-    A database this program can open is copied consistently. One it cannot open, because a newer version wrote it or
-    it is damaged, is copied file by file; a damaged one is then removed so the restore can write a new file. A busy
-    database fails the restore.
+    A database SQLite can read is copied as one consistent file, whatever its version or tables. One SQLite cannot
+    read is copied file by file and then removed so the restore can write a new file. A busy database fails the
+    restore.
+
+    Raises:
+        StoreError: another command holds the database.
     """
     if not path.exists():
         return None
     saved = default_backup_path("jobkit-before-restore")
+    close()
     try:
-        return backup_to(saved)
-    except NewerDatabaseError:
-        return _copy_files(path, saved)
-    except sqlite3.OperationalError:
-        raise                                   # busy or locked: another command is using it
-    except sqlite3.DatabaseError:
-        close()
-        _copy_files(path, saved)
-        for file in _database_files(path):
-            file.unlink()
-        return saved
+        return _snapshot(path, saved)
+    except sqlite3.DatabaseError as exc:
+        for file in _database_files(saved):
+            file.unlink()                       # a partial snapshot
+        if _is_busy(exc):
+            raise StoreError(f"The database is busy ({exc}). Try again in a moment; nothing was changed.") from exc
+    _copy_files(path, saved)
+    for file in _database_files(path):
+        file.unlink()
+    return saved
 
 
 def restore_from(file: Path) -> Path | None:
     """Replace the database with a backup, after saving the current one; returns that saved copy, or None when there
-    was no database to save.
+    was no database to save. What is written is the snapshot that was checked, at the backup's own schema version
+    (the next command upgrades it), so the backup file is never opened by SQLite and never changed.
 
     Raises:
         ToolError: the file is not a usable jobkit database (the current database is left alone).
+        StoreError: another command holds the database (it is not replaced).
     """
-    check_backup_file(file)
-    path = db_path()
-    saved = _save_before_restore(path)
-    close()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with contextlib.closing(sqlite3.connect(file)) as source, contextlib.closing(sqlite3.connect(path)) as target:
-        source.backup(target)
+    with _checked_copy(file) as snapshot:
+        path = db_path()
+        saved = _save_before_restore(path)
+        close()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with contextlib.closing(sqlite3.connect(snapshot)) as source, \
+                    contextlib.closing(sqlite3.connect(path, timeout=BUSY_TIMEOUT_MS / 1000)) as target:
+                copy_database(source, target)
+        except sqlite3.DatabaseError as exc:
+            if _is_busy(exc):
+                raise StoreError(f"The database is busy ({exc}). Try again in a moment; it was not replaced.") from exc
+            raise
     return saved

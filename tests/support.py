@@ -1,13 +1,69 @@
-"""Shared test helpers."""
+"""Shared test helpers: repository paths, the command table, running a command in-process, and home-folder cases.
+
+Helpers used by one test package only live in that package's `support.py`; a test module never imports another.
+"""
+import contextlib
+import io
 import os
 import shutil
 import sqlite3
+import sys
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
+from unittest import mock
 
-from jk import store
+from jk import admin, store
+from jk.user import tables as user_tables
 from tests import REAL_HOME
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_ROOT = REPO_ROOT / "plugins" / "jobkit"
+
+# Every command the plugin installs, and the module whose `main` it runs.
+COMMANDS = {"jobkit": "jk.admin", "profile": "jk.user.profile", "process-resumes": "jk.resumes.process_resumes",
+            "query-resume": "jk.resumes.query_resume", "build-resume": "jk.resumes.build_resume",
+            "resume-lines": "jk.resumes.lines", "match-score": "jk.resumes.match_score",
+            "arch": "jk.interview.arch", "lead": "jk.interview.lead", "prep": "jk.interview.prep",
+            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness", "target": "jk.interview.target"}
+TOOLS = list(COMMANDS.values())
+
+
+def call(main: Callable[[list[str]], int | None], *argv: object, stdin: str | None = None) -> tuple[int, str, str]:
+    """Run a command's `main` in-process; (exit status, stdout, stderr).
+
+    Arguments are turned into strings, an argparse error (SystemExit) becomes its exit status, and with `stdin`
+    standard input reads that text.
+    """
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(contextlib.redirect_stdout(out))
+        stack.enter_context(contextlib.redirect_stderr(err))
+        if stdin is not None:
+            stack.enter_context(mock.patch.object(sys, "stdin", io.StringIO(stdin)))
+        try:
+            code = main([str(a) for a in argv])
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 2
+    return code or 0, out.getvalue(), err.getvalue()
+
+
+def jobkit(*argv: str) -> tuple[int, str, str]:
+    """Run the `jobkit` command in-process; (status, stdout, stderr)."""
+    return call(admin.main, *argv)
+
+
+def put_meta(key: str) -> None:
+    """Store one meta row (a small change to test transactions with)."""
+    with store.transaction() as conn:
+        conn.execute("INSERT INTO meta(key, value) VALUES(?, '1')", (key,))
+
+
+def has_meta(key: str) -> bool:
+    """True when the meta row exists."""
+    with store.transaction(write=False) as conn:
+        return conn.execute("SELECT 1 FROM meta WHERE key=?", (key,)).fetchone() is not None
 
 
 class HomeCase(unittest.TestCase):
@@ -30,13 +86,6 @@ class HomeCase(unittest.TestCase):
         else:
             os.environ["JOBKIT_HOME"] = self.previous
         shutil.rmtree(self.home, ignore_errors=True)
-
-
-def drop_catalog() -> None:
-    """Remove the architecture catalog (and with it every card's progress), as before `arch init`."""
-    with store.transaction() as conn:
-        conn.execute("DELETE FROM meta WHERE key='arch.catalog'")
-        conn.execute("DELETE FROM card")
 
 
 class HomeClassCase(unittest.TestCase):
@@ -62,6 +111,29 @@ class HomeClassCase(unittest.TestCase):
             os.environ["JOBKIT_HOME"] = cls._previous
         shutil.rmtree(cls.home, ignore_errors=True)
         super().tearDownClass()
+
+
+class DatabaseFileCase(unittest.TestCase):
+    """A test case with its own empty home folder and no database yet (for creating and upgrading one)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.home = Path(tempfile.mkdtemp(prefix="jobkit-schema-"))
+        self.previous = os.environ["JOBKIT_HOME"]
+        os.environ["JOBKIT_HOME"] = str(self.home)
+        store.close()
+        self.addCleanup(self.restore)
+
+    def restore(self) -> None:
+        """Back to the run-wide test home."""
+        store.close()
+        os.environ["JOBKIT_HOME"] = self.previous
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def pragma_version(self) -> int:
+        """The database file's `user_version`."""
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            return conn.execute("PRAGMA user_version").fetchone()[0]
 
 
 def open_real_database() -> sqlite3.Connection | None:
@@ -93,3 +165,10 @@ def real_resume_texts() -> dict[str, str]:
     finally:
         conn.close()
     return out
+
+
+def add_resumes() -> None:
+    """A profile and the marker that resume data exists, as after the first import."""
+    user_tables.replace_settings({"resume_root": "resumes"})
+    with store.transaction() as conn:
+        store.meta_put(conn, "resume.skills", {"groups": {}})

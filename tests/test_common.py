@@ -1,4 +1,4 @@
-"""Tests for plugins/jobkit/src/jk/common.py. Run: uv run python -m unittest discover -s tests -t ."""
+"""Tests for plugins/jobkit/src/jk/common.py and base.py: paths, errors, running a command and UTF-8 output."""
 import argparse
 import contextlib
 import io
@@ -9,9 +9,9 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 from jk import base, common, store
-from jk.interview import arch
 from jk.common import ToolError
-from tests.support import HomeCase
+from jk.interview import arch
+from tests.support import PLUGIN_ROOT, HomeCase
 
 
 class HomeTests(unittest.TestCase):
@@ -93,7 +93,7 @@ class RunTests(unittest.TestCase):
 
     def test_the_hint_names_a_guide_that_ships_with_the_plugin(self):
         name = common.TROUBLESHOOT_HINT.split("read ", 1)[1].split(" in the plugin folder", 1)[0]
-        self.assertTrue((Path(__file__).resolve().parents[1] / "plugins" / "jobkit" / name).is_file(), name)
+        self.assertTrue((PLUGIN_ROOT / name).is_file(), name)
 
 
 class ReadOnlyRunTests(HomeCase):
@@ -181,10 +181,6 @@ class InputErrorTests(unittest.TestCase):
             common.read_text_arg("/no/such/jd.txt")
         with self.assertRaisesRegex(ToolError, "cannot read"):
             common.read_text_arg("/")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class Utf8OutputTests(unittest.TestCase):

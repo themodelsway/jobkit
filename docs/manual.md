@@ -12,7 +12,7 @@ The pages in `plugins/jobkit/skills/` are the agent's instructions; these pages 
 
 ## Running the commands directly
 
-Twelve commands are installed by `uv sync` into `.venv`. The commands run from the repository root as `uv run <command>`, or as `uv run python -m jk.<group>.<tool>`. `--help` works on every command and subcommand.
+Thirteen commands are installed by `uv sync` into `.venv`. The commands run from the repository root as `uv run <command>`, or as `uv run python -m jk.<group>.<tool>`. `--help` works on every command and subcommand.
 
 Conventions shared by all commands:
 
@@ -37,6 +37,7 @@ Conventions shared by all commands:
 | `query-resume` | Rank and search resume lines | [resume-workflows.md](guides/resume-workflows.md#query-resume) |
 | `readiness` | The readiness report | [tutor.md](guides/tutor.md#readiness) |
 | `sessions` | Resumable practice sessions | [interview-prep.md](guides/interview-prep.md#sessions) |
+| `target` | Researched target companies | [interview-prep.md](guides/interview-prep.md#target) |
 
 ---
 
@@ -50,11 +51,11 @@ The home folder and its database. Standard library only.
 |---|---|---|
 | `jobkit init` | none | Create the home folder and an empty database. Safe to repeat: existing data is never changed. |
 | `jobkit status` | `--setup`, `--summary` | Show the database location, schema version, size and the number of records per kind of data. With `--setup`, print only how far setup has got, as one word: `no-database`, `no-resumes` (no resumes imported), `no-target` (resumes imported, but "what are you preparing for" has not been finished: `preparing_for` is not saved yet, even if some of its stories, leadership questions or drill cards were) or `ready`. When the check itself fails it prints why instead, decided from the error's type and SQLite's result code: `blocked` (saving not allowed), `busy` (another command holds the database), `too-new` (written by a newer version) or `failed` (anything else); it then exits 1 with one error line (type and message, the home folder shown as `~`, or `%USERPROFILE%` on Windows) and the troubleshooting line on standard error. With `--summary`, print the setup line; then, always, where this running copy keeps its data (`JOBKIT_HOME`), the launchers it was started from (`JOBKIT_COMMANDS_DIR`) and its Python environment with the jobkit and Python versions (`JOBKIT_PROGRAM_DIR`), with the home folder shown the same way; and, once resumes are imported, the open sessions and the latest one, how many items are due for a retest, each researched company's state and the default target company. Neither option creates the database (like every command, they upgrade an existing one from an older version when opening it); the skills act on their output. |
-| `jobkit --version` | none | Print the installed version (`jobkit 0.3.0`). The plugin's setup check compares it with the plugin's version: same is ready, lower is offered an update, higher is left alone. |
-| `jobkit export` | `--format json\|md`, `--only KIND`, `-o DIR` | The way to look at stored data. Prints all of it (or one kind) as JSON (default) or Markdown; with `-o` writes one file per kind into `DIR`. Never changes the database and writes nothing unless `-o` is given. Kinds: `stories`, `engagements`, `themes`, `arch-catalog`, `arch-progress`, `arch-tracks`, `lead-questions`, `lead-progress`, `lead-scope`, `sessions`, `settings`, `employers`, `open-items`, `terms`, `resume-companies`, `resume-skills`, `resume-profile`, `resume-index`, `resume-ledger`, `resume-unparsed`, `curated`, `curation-themes`. |
-| `jobkit backup` | `-o FILE`, `--restore FILE` | Write a consistent copy of the database to `backup/` (or `FILE`), also while other commands are running. `--restore FILE` replaces the database with a backup after saving the current one; a current database that cannot be opened (damaged, or from a newer version) is saved file by file, and a missing one is not needed. The file is first checked on a temporary copy (integrity, upgrade, every table, column and protective trigger, no broken references, every stored record readable); a file that is damaged, incomplete, not a jobkit database, or from a newer version is refused and nothing is changed. A refusal names the table, never the record's content. |
+| `jobkit --version` | none | Print the installed version (`jobkit` and the version number). The plugin's setup check compares it with the plugin's version: same is ready, lower is offered an update, higher is left alone. |
+| `jobkit export` | `--format json\|md`, `--only KIND`, `-o DIR` | The way to look at stored data. Prints all of it (or one kind) as JSON (default) or Markdown; with `-o` writes one file per kind into `DIR`. Never changes the database and writes nothing unless `-o` is given. Kinds: `stories`, `engagements`, `themes`, `arch-catalog`, `arch-progress`, `arch-tracks`, `lead-questions`, `lead-progress`, `lead-scope`, `sessions`, `research`, `settings`, `employers`, `open-items`, `terms`, `resume-companies`, `resume-skills`, `resume-profile`, `resume-index`, `resume-ledger`, `resume-unparsed`, `curated`, `curation-themes`, `match-results`. |
+| `jobkit backup` | `-o FILE`, `--restore FILE` | Write a consistent copy of the database to `backup/` (or `FILE`), also while other commands are running. `--restore FILE` replaces the database with a backup after saving the current one; a current database is saved without being upgraded, so one from a newer version or with missing tables is saved too; one SQLite cannot read (damaged) is saved file by file, and a missing one is not needed. The file is first checked on a temporary copy, together with its write-ahead log (`FILE-wal`) when there is one: integrity, upgrade, every table, column and protective trigger, no broken references, every stored record readable. The file only needs to be readable. A file that is damaged, incomplete, not a jobkit database, or from a newer version is refused and nothing is changed. The database is replaced with the same copy that was checked, at the file's own version (the next command upgrades it); the backup file itself is never changed. When another command holds the database for more than a few seconds, the restore stops with a busy message and the database is not replaced. A refusal names the table, never the record's content. |
 
-The first command after an update that changes the database layout upgrades the database by itself. An existing database is first copied to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db`; if that copy cannot be written, nothing is upgraded. An upgrade cannot be reversed: to go back, run `jobkit backup --restore` with that copy and use the older release. These copies are not removed automatically.
+The first command after an update that changes the database layout upgrades the database by itself. An existing database is first copied to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db`; if that copy cannot be written, nothing is upgraded. An upgrade cannot be reversed: to go back, run `jobkit backup --restore` with that copy, then switch to the older release before any other jobkit command runs (the next command of the newer release upgrades the database again). These copies are not removed automatically.
 
 ### `profile`
 
@@ -64,7 +65,7 @@ Per-user settings, stored in the database. Standard library only.
 |---|---|---|
 | `profile status` | none | Show the saved profile and what is missing. |
 | `profile init` | `--resume-root PATH` (required), `--resume-dir SUB...`, `--name NAME`, `--replace` | Record where the resume files are. `--resume-dir` limits the scan to subfolders (repeatable). Run again, it only fills in what is unset and keeps existing answers (it says so); change the name or resume root with `profile set`. With `--replace`, the resume root and subfolders are set to exactly what is given (the whole folder when no `--resume-dir` is given) and every other setting is kept: the way to correct the folder choice; the next `process-resumes` drops resumes that are no longer in it. |
-| `profile set` | `KEY VALUE` | Change one setting. `KEY` is `name`, `resume_root`, `years_experience` (a whole number such as `26` or `26+`; built summaries show it as "placeholder" in place of the years written in the stored summary) `reassess_days` (the retest window: a whole number of days from 1 to 365, default 30; `profile status` shows it) `answer_style` (`star`, `soar` or `carl`: the default way a story is shown and judged complete, `star` when not set; a `--style` option overrides it for one run and `profile status` shows it), `research_days` (a whole number of days of 1 or more, default 30: researched company facts older than this make the company stale) `target_company` (a researched company, in any letter case, used by `target show` and `prep for-target` when no company is given and by no other command; `""` clears it; an unknown company, or one recorded as none found, is refused) or `preparing_for` (what the user is preparing for, in a few words, up to 200 characters; the skills save it last in "what are you preparing for", and `jobkit status --setup` prints `ready` only once it is saved); any other key is an error. |
+| `profile set` | `KEY VALUE` | Change one setting. `KEY` is `name`, `resume_root`, `years_experience` (a whole number from 1 to 60, such as `26` or `26+`; built summaries show it as "placeholder" in place of the years written in the stored summary), `reassess_days` (the retest window: a whole number of days from 1 to 365, default 30; `profile status` shows it), `answer_style` (`star`, `soar` or `carl`: the default way a story is shown and judged complete, `star` when not set; a `--style` option overrides it for one run and `profile status` shows it), `research_days` (a whole number of days of 1 or more, default 30: researched company facts older than this make the company stale), `target_company` (a researched company, in any letter case, used by `target show` and `prep for-target` when no company is given and by no other command; `""` clears it; an unknown company, or one recorded as none found, is refused) or `preparing_for` (what the user is preparing for, in a few words, up to 200 characters; the skills save it last in "what are you preparing for", and `jobkit status --setup` prints `ready` only once it is saved); any other key is an error. |
 | `profile companies` | `[rename ID NAME \| merge FROM INTO]` | List the employers found by the first resume scan. `rename` changes the name shown for an employer; `merge` folds the employer `FROM` into `INTO`, so both spellings count as one. Run `process-resumes --force` afterwards to rebuild with the change. |
 | `profile tier1` | `[SERVICE ...]` | Pin custom tier-1 topics (any track, matched by name). No arguments shows the current list. |
 | `profile header` | `[set NAME CONTACT_LINE]` | The name and contact line printed at the top of built resumes. No arguments shows it; `set` saves it. It is the only place contact details are kept. |
@@ -75,7 +76,7 @@ Per-user settings, stored in the database. Standard library only.
 
 This section is for contributors who commit to this repository. Users of jobkit who only use the skills can skip it.
 
-Committed files must hold nothing personal: the contributor's name, phone, email, LinkedIn, resume folder, employers, clients or products. The pre-commit hook and `tests/test_no_personal.py` enforce it against a list of personal terms kept in the contributor's own database (`~/.jobkit`), never in the repository.
+Committed files must hold nothing personal: the contributor's name, phone, email, LinkedIn, resume folder, employers, clients or products. The pre-commit hook and `tests/meta/test_no_personal.py` enforce it against a list of personal terms kept in the contributor's own database (`~/.jobkit`), never in the repository.
 
 ### Where the terms come from
 
@@ -91,7 +92,7 @@ A derived term of four characters or fewer (for example ACME) matches only as a 
 ```
 profile terms                        # list every term with its kind, match mode and source
 profile terms add acme.ai --kind product
-profile terms add "acme[ _.-]?ai" --kind client      # a pattern (regular expression), recognised by its characters
+profile terms add "acme[ _.-]?ai" --kind client      # a pattern (regular expression), recognized by its characters
 profile terms ignore Acme           # a common word left out on purpose (it is not removed from the data)
 profile terms rm acme.ai           # remove a stored term, or an ignore
 profile terms import terms.txt       # one term per line, a line with pattern characters is a pattern
@@ -104,12 +105,12 @@ Run them as `uv run profile terms ...`. A hit prints `path:line: kind term 'text
 
 ### Common words
 
-A name that is also an ordinary word (an employer called Acme) would flag many harmless lines, so the normal check and the hook skip it. Mark it with `profile terms ignore Acme`. A company folder name is already in the list (derived), so it only needs marking; it stays in the list, labelled as a common word. Before publishing, run `profile terms check --all --exhaustive`: it checks the ignored words too and prints one line for each word, with the files that contain it separated by commas. Read the hits and judge each one; many will be harmless. The command is never part of the hook.
+A name that is also an ordinary word (an employer called Acme) would flag many harmless lines, so the normal check and the hook skip it. Mark it with `profile terms ignore Acme`. A company folder name is already in the list (derived), so it only needs marking; it stays in the list, labeled as a common word. Before publishing, run `profile terms check --all --exhaustive`: it checks the ignored words too and prints one block per word: `Word: NAME`, then one line per file with its line numbers, or `multiple lines: N` when a file has more than two. Read the hits and judge each one; many will be harmless. The command is never part of the hook.
 
 ### When it runs
 
 - `.githooks/pre-commit` runs `profile terms check --staged` before ruff and the tests. Enable the hook once per clone with `git config core.hooksPath .githooks`.
-- `tests/test_no_personal.py` runs the same check on every committable file, using the contributor's real home folder.
+- `tests/meta/test_no_personal.py` runs the same check on every committable file, using the contributor's real home folder.
 - With no database on the machine (a fresh clone, CI) both skip with a message. Only the generic checks (home paths, emails, phone numbers) run.
 
 The term list is personal data: `jobkit export --only terms` shows it and `jobkit backup` includes it. Do not paste it into the repository, an issue or a pull request.

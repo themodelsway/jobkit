@@ -20,7 +20,6 @@ from jk.user import tables as user_tables
 
 STAGES: Final[tuple[str, ...]] = ("no-database", "no-resumes", "no-target", "ready")
 FAILURES: Final[tuple[str, ...]] = ("blocked", "busy", "too-new", "failed")
-_BUSY: Final[frozenset[int]] = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
 _BLOCKED: Final[frozenset[int]] = frozenset({sqlite3.SQLITE_READONLY, sqlite3.SQLITE_CANTOPEN, sqlite3.SQLITE_PERM})
 
 
@@ -77,7 +76,7 @@ def classify(exc: BaseException) -> str:
     code = getattr(_sqlite_cause(exc), "sqlite_errorcode", None)
     if isinstance(code, int):
         primary = code & 0xFF                     # extended codes keep the primary code in the low byte
-        if primary in _BUSY:
+        if primary in store.BUSY_CODES:
             return "busy"
         if primary in _BLOCKED:
             return "blocked"

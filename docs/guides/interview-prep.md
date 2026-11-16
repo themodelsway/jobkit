@@ -26,7 +26,7 @@ Requests use plain language and fall into these categories:
 - **Role knowledge.** Cards for the technologies or fields named: topics, comparisons (of alternatives and the conditions for choosing each) and scenarios, for any role. Each card is graded against the rubric of its role family (engineering, product, delivery, people or operations), or a rubric adapted for the role. Facts used for grading come from official sources (the vendor's documentation, a regulator, a standards body), for the track's country where one is set, not from memory.
 - **Cases.** A question developed over several turns, as in product, consulting or operations interviews. The skill tells the agent to reveal information only when asked, to say when a figure is made up for practice, to push back at least once, and to grade the whole exchange.
 - **Role-plays.** The agent plays a part, for example a sales director who wants a feature now or an employee receiving hard news, and the user pursues a goal. The skill tells the agent to stay in the part until the user is done, then step out and grade.
-- **Leadership questions.** Roadmapping, mentoring, conflict, prioritisation and more. Each is tied to examples from the most recent employers. The skill tells the agent to offer them when the role or resumes involve leading people, and otherwise only when asked.
+- **Leadership questions.** Roadmapping, mentoring, conflict, prioritization and more. Each is tied to examples from the most recent employers. The skill tells the agent to offer them when the role or resumes involve leading people, and otherwise only when asked.
 - **Not covered.** Coding exercises, tests with one right answer, and written work samples such as a plan or a document.
 - **Stories.** The skill walks through each story one question at a time (situation, the user's part, the actions, the result with a number, what would change) and saves the answers as it goes. It asks before saving anything that is not already on a resume. Answers can be structured as STAR, SOAR or CARL; see [Answer styles](#answer-styles).
 - **A job posting.** Given a posting, the skill ranks the stories for it, reports which are unfinished and which requirements have no story, then rehearses the questions typically asked.
@@ -41,11 +41,11 @@ Nothing about any company is shipped with jobkit. The facts are looked up when a
 
 - **What the skill tells the agent to do.** Search with only the company name and the role title, never the user's name, employers or resume text. Read pages the company publishes first (careers, culture, engineering, the job posting), then articles other sites publish about its hiring. Leave out anything written by individual users on any site: reviews, interview reports, salary posts, comments, forum threads. For each fact, copy a short quote word for word from the page and state only what it says; confirm the page was read, the quote is on it and it is not user-written content; then save it.
 - **What the commands check.** A fact without a link, a quote, a label, a date or the agent's confirmation is refused, and so is a quote over 40 words or a link on a known user-content site (forums, question-and-answer sites, and the review, interview-report and salary pages of job sites). A save is all or nothing. The commands never read the pages, so they cannot check that a quote is on its page; every fact keeps its link so the user can open it.
-- **Where a fact came from.** Each fact is labelled `company-references` (a site the company publishes) or `othersite-references` (any other site), and the label and the site's name are shown beside it.
+- **Where a fact came from.** Each fact is labeled `company-references` (a site the company publishes) or `othersite-references` (any other site), and the label and the site's name are shown beside it.
 - **Suggested answer style.** A company may get a suggested style: `stated` when a stored fact says it, or `inferred` (the agent's suggestion, shown as such, with the facts it rests on). It never overrides the style in force.
 - **Nothing found, or no web access.** When no page qualifies, the skill tells the agent to record that, say so in plain words and use the default answer style; nothing is invented. When the agent cannot read web pages (Codex in its default sandbox, for example), the skill tells the agent to skip research, say so once and use the default style; nothing is recorded, and there is no paste-the-page fallback. In both cases practice continues without the company: `prep for-target`, `readiness --target` and `sessions new --target` refuse a company recorded as none found or never researched, whether it is named or is the default company.
 - **Aging.** Facts older than the research window (30 days unless `profile set research_days` changes it) make a company stale. The skill tells the agent to read it again when next needed: a quote still on its page gets today's date; a changed page is shown to the user, old and new wording side by side, and the fact is replaced or removed only once the user responds with yes.
-- **Matching.** A company value lists story themes and hint words, which are the mapping to the user's stories and not claims about the company. A value reads `covered` (a story with content matches its theme), `possible` (stories match only by a hint word), `no story`, or `needs your judgment` (no themes or hint words; its typical questions are still practised). Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
+- **Matching.** A company value lists story themes and hint words, which are the mapping to the user's stories and not claims about the company. A value reads `covered` (a story with content matches its theme), `possible` (stories match only by a hint word), `no story`, or `needs your judgment` (no themes or hint words; its typical questions are still practiced). Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
 
 ## Commands it uses
 
@@ -72,7 +72,7 @@ STAR stories and engagements, stored in the database.
 | `prep search` | `TEXT` | Search stories and engagements. |
 | `prep validate` | `[ID] [--style S]` | Check one story or all. Errors block `done` and exit 1; warnings are advice. A story already `done` is valid while it is complete in any style; a part missing in the style in force is a warning. |
 | `prep export` | `[--story S \| --engagement E] [--format json\|md] [--style S] [-o FILE]` | Export to JSON (default) or Markdown. The Markdown cheat sheet uses the headings of the style. |
-| `prep evidence` | `STORY` | Dates the story was practised in sessions (read-only). |
+| `prep evidence` | `STORY` | Dates the story was practiced in sessions (read-only). |
 
 **Engagements** (one real project, reusable by several stories)
 
@@ -102,7 +102,7 @@ STAR stories and engagements, stored in the database.
 
 #### Answer styles
 
-A story is stored once, and a style is a labelled view of it. No story is rewritten per style, and showing a story in any style leaves the stored text unchanged.
+A story is stored once, and a style is a labeled view of it. No story is rewritten per style, and showing a story in any style leaves the stored text unchanged.
 
 | Style | Parts in order | Use |
 |---|---|---|

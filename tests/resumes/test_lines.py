@@ -3,8 +3,10 @@ import unittest
 from unittest import mock
 
 from jk.common import ToolError
-from jk.resumes import build_resume as br, curate, lines, resume_data as rd
-from tests.resumes.test_resume_pipeline import PipelineCase
+from jk.resumes import build_resume as br
+from jk.resumes import curate, lines
+from jk.resumes import resume_data as rd
+from tests.resumes.support import PipelineCase
 
 ORIGINAL = ("Designed request throttling with Redis and Kafka during a platform upgrade; "
             "improved placement by 70 percent by updating the way shifts were assigned, "
@@ -40,7 +42,8 @@ class WordingChecks(unittest.TestCase):
         self.assertTrue(any("limit" in e for e in lines.problems(ORIGINAL, "70% " + "w" * 250)[0]))
         self.assertEqual(lines.problems(ORIGINAL, "  ")[0], ["the wording is empty"])
 
-    def test_dropped_names_are_warnings_not_errors(self):
+    def test_dropped_names_are_warnings_not_errors(self) -> None:
+        """Warn when technologies disappear from a shortened line."""
         errors, warnings = lines.problems(ORIGINAL, "Cut API costs 70% across 12 teams.")
         self.assertEqual(errors, [])
         self.assertIn("redis", warnings[0])

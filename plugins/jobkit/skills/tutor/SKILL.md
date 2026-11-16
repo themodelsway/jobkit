@@ -10,7 +10,7 @@ description: Tutor and readiness coach for interview prep. Use to learn or have 
 Do the technical steps yourself and quietly. The user only sees the lines that start with `>`. If this conversation already completed this whole section (for example in another of these skills), do not run it again: keep JOBKIT_COMMANDS_DIR and carry on.
 1. Find the plugin's own files. Resolve every file this skill names from the folder of this loaded skill file, never from the working folder. A guide marked "(in this skill's folder)" sits next to this skill file; one marked "(a path from this skill's folder)" is in a sibling skill. JOBKIT_PLUGIN_DIR below is the folder two levels above this skill file (where the plugin's setup and skill files are). JOBKIT_PLUGIN_DIR and JOBKIT_COMMANDS_DIR are folders you work out, not environment variables; only JOBKIT_HOME (the data folder) is one. Put these paths in quotes, since they may contain spaces. Read every file this skill names (the setup guides, the guides next to this skill, and another skill's file) by printing it with `cat "PATH"`, so the user is not asked for permission to read it.
 2. Read and follow `JOBKIT_PLUGIN_DIR/setup/preflight.md` now. It holds this skill's prerequisites (uv and the jobkit helper, and how to install them with the user's consent) and what to do when a save is not allowed (that applies to every command in this conversation), and it gives you JOBKIT_COMMANDS_DIR, the folder where uv keeps the jobkit commands this skill runs. Without JOBKIT_COMMANDS_DIR none of this skill's commands can run: if JOBKIT_COMMANDS_DIR is not known, finish this step before anything else.
-3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarised), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
+3. Run every jobkit command by its full path inside JOBKIT_COMMANDS_DIR, in quotes, for example `"JOBKIT_COMMANDS_DIR/arch" next` (this also makes sure the right `arch` runs on a Mac, which has its own). The commands in this skill are shown by name only. Put any folder or file name you pass in quotes too, since it may contain spaces. If JOBKIT_COMMANDS_DIR is no longer known (for example after a long conversation was summarized), run the helper check from step 1 of `JOBKIT_PLUGIN_DIR/setup/preflight.md` again (it only reads); never guess the folder.
 4. Run `jobkit status --setup`. It prints one word, for you only: never say it to the user, or tell them setup is unfinished.
    - `no-database`: run `jobkit init`, then `jobkit status --setup` again.
    - `no-resumes`: read and follow `JOBKIT_PLUGIN_DIR/setup/first-run.md`, which imports the resumes, then run `jobkit status --setup` again. If it still prints `no-resumes`, do not start the import again in this conversation; say the next line and stop:
@@ -30,7 +30,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 | JD | the job posting |
 | confidence 0, 1, 2 | how comfortable you feel: not yet, a little, solid |
 | needs review, wrong figure | a few lines with numbers that may be off |
-| track | a topic to practise (AWS, Acme Data, ...) |
+| track | a topic to practice (AWS, Acme Data, ...) |
 | tier-1 service | a key service |
 | bullet | a line on your resume |
 | readiness | how prepared you are |
@@ -58,7 +58,7 @@ Three topics, all backed by the same stored data: architecture, leadership and S
 
 ## Readiness ("how prepared am I?")
 Run `readiness` (add `--jd -` with the posting on stdin for a specific job, `--days N` for the aging window) and report in plain words. Rules for honest reporting:
-- Report coverage and evidence per area, never one percentage. Labels: untested, some gaps, solid-unlogged (set by hand, no logged answer), solid-once, solid-repeated, aging (solid but not practised for 30+ days). Only real answers count; lessons count only after a passed quiz. Stories: empty, draft, done, done-rehearsed, done-aging. Say these in everyday words, for example "not tried yet", "a few gaps", "solid once", "solid several times", "getting rusty".
+- Report coverage and evidence per area, never one percentage. Labels: untested, some gaps, solid-unlogged (set by hand, no logged answer), solid-once, solid-repeated, aging (solid but not practiced for 30+ days). Only real answers count; lessons count only after a passed quiz. Stories: empty, draft, done, done-rehearsed, done-aging. Say these in everyday words, for example "not tried yet", "a few gaps", "solid once", "solid several times", "getting rusty".
 - Say what it does and does not show:
   > This comes from practice answers I graded, so it shows what you've covered and how well it has been tested, not how a real interviewer will score you. One good result is weak evidence; it's worth repeating on another day.
 - If `profile status` shows the retest window is the default (not set), ask once, and save the answer with `profile set reassess_days N` (a whole number of days, 1 to 365; if the user has no preference, keep the default and do not ask again):
@@ -66,12 +66,12 @@ Run `readiness` (add `--jd -` with the posting on stdin for a specific job, `--d
 - After the report, run `readiness --due`. If it lists items, say how many and how old the oldest is, and ask:
   > N of your good answers are older than D days. Do you want to re-check some of them now?
   On yes, hand over to practice: the retest is a graded drill, not a lesson, so use the interview-prep skill (`sessions new "title" --due`). On no, say nothing more about it. Never start a retest without a yes.
-- Name the 3 to 5 most valuable gaps (key services not tried, leadership questions with no example, stories still empty for the most recent jobs) and offer to teach or practise the first one. Do not decide for the user.
+- Name the 3 to 5 most valuable gaps (key services not tried, leadership questions with no example, stories still empty for the most recent jobs) and offer to teach or practice the first one. Do not decide for the user.
 - Use `--jd -` to focus on a role; there is no way to mark items as not relevant, so skip them when the user says so.
 - If the user is preparing for a particular company, ask which one unless they already said (a default company in `profile status` is only a suggestion to confirm):
   > Which company are you preparing for?
   Run `target show NAME`. If it has been researched and has facts (not `none found`), add `--target NAME` to `readiness` (it can be combined with `--jd -` and `--due`) and report, per company value, whether a story covers it, may cover it, has no story yet, or needs the user's judgment, saying beside each fact whether it came from the company's own site or another site. This skill never looks a company up: if it is not researched or is stale, say so and offer practice, where it can be looked up:
-  > I haven't looked up how this company interviews yet. I can do that when we practise, if you like.
+  > I haven't looked up how this company interviews yet. I can do that when we practice, if you like.
 
 ## Facts: never from memory
 For knowledge cards: `arch show ID` first. If the card says NEVER verified or is older than about 6 months, check the official sources (the hosts `arch tracks` lists for the card's topic, for the country `arch show` prints if any) before teaching limits, features, pricing or lifecycle, then record with `arch refresh ID --status active|maintenance|sunset --source URL [--note T] [--change "DATE|SUMMARY"]` (source = a specific page on one of the topic's documentation hosts; dates YYYY-MM-DD, not in the future). The card stores only lifecycle and recent changes; limits, prices and feature details are looked up every time. A card marked "seeded lead, NOT verified" counts as unverified. If you cannot check, label the point "unverified". Lifecycle: maintenance = closed to new customers, no new features; sunset = has an end date.
@@ -86,7 +86,7 @@ For knowledge cards: `arch show ID` first. If the card says NEVER verified or is
 ## Lesson: leadership (one question at a time)
 Offer leadership lessons when the user's role or resumes involve leading people; for other roles, do not suggest them unless the user asks.
 1. `lead show ID`. Explain what the interviewer is really testing for this question (judgment, scale, self-awareness, influence) and the shape of a strong answer: a short principle, then one concrete STAR example, about 2 minutes spoken.
-2. Show a generic skeleton with placeholders, not invented content. Use a different industry example to illustrate, clearly labelled as an illustration, never as the user's experience.
+2. Show a generic skeleton with placeholders, not invented content. Use a different industry example to illustrate, clearly labeled as an illustration, never as the user's experience.
 3. Help the user find their own principle and examples: ask what they do in practice, then which of their most recent jobs (`lead profile show` lists them) fits. Save the principle with `lead set ID principle "..."` and examples with `lead example ID COMPANY FIELD VALUE` only in their words and after their confirmation. Scope numbers (team size, budget) come only from them via `lead profile set`.
 4. Quiz: they answer the question as in an interview; give brief feedback on structure, "I" vs "we", a result with a number, honesty, length.
 
@@ -101,7 +101,7 @@ For a researched company the user named, `prep for-target NAME` shows which stor
 
 ## Quiz and wrap-up (all topics)
 1. Ask one short question, wait, correct with checked facts, re-teach briefly if wrong and ask a variation. Log it as above (`--quiz` only when answered correctly).
-2. Ask whether to go deeper, move on, practise it in `interview-prep`, or see how prepared they are:
+2. Ask whether to go deeper, move on, practice it in `interview-prep`, or see how prepared they are:
    > Want to go deeper on this, move on, try it as a practice question, or see how prepared you are overall?
    Never skip ahead without asking.
 
@@ -112,7 +112,7 @@ For a researched company the user named, `prep for-target NAME` shows which stor
 
 <!-- shared:rules -->
 ## Rules
-- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarise it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
+- The stored data is opened only through the commands in this skill, never directly. To show the user their data, read one kind at a time with `jobkit export --only KIND` and summarize it in plain words. Never run `jobkit export` without `--only` (it dumps everything, hundreds of kilobytes), and for an overview use `query-resume stats`, `prep status` or `readiness` instead.
 - The folder that holds the user's resumes is read-only: never create, edit or delete anything in it.
 - Never invent resume lines or details about the user's experience. Suggest wording and let the user decide.
 - Never store a phone number, email address or LinkedIn link in the resume data (lines, summaries, skills). The name and contact line for the top of built resumes is the one exception, and it is saved only with `profile header set`. Raw text taken from resumes stays under the jobkit home folder (`~/.jobkit` unless `JOBKIT_HOME` names another), in its `output` folder.

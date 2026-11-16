@@ -1,15 +1,15 @@
-"""Tests for plugins/jobkit/src/jk/interview/arch.py in a temp folder (the real prep/ is never touched).
-Run: uv run python -m unittest discover -s tests -t ."""
-import contextlib
-import io
+"""Tests for plugins/jobkit/src/jk/interview/arch.py and tracks.py: the knowledge catalog, tracks, families and seed."""
 import json
 import unittest
+from collections import Counter
 from datetime import date, timedelta
+from pathlib import Path
 from unittest import mock
 
 from jk.interview import arch, tables
-from tests.interview.test_sessions import SessionCase
-from tests.support import drop_catalog, HomeCase
+from jk.interview.aws import arch_seed
+from tests.interview.support import SessionCase, drop_catalog
+from tests.support import HomeCase, call
 
 COMPANIES = {"acme": {"id": "acme", "name": "Acme", "bullets": [
     {"id": "acme-1", "text": "Built APIs on Lambda and API Gateway.", "ignored": False},
@@ -31,16 +31,17 @@ class ArchTestCase(HomeCase):
         self.addCleanup(patcher.stop)
 
     def cli(self, *argv):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            try:
-                code = arch.main(list(argv))
-            except SystemExit as exc:                      # argparse errors
-                code = exc.code
-        return code, out.getvalue(), err.getvalue()
+        """Run `arch`; (status, stdout, stderr)."""
+        return call(arch.main, *argv)
 
     def cards(self):
         return {c["id"]: c for c in tables.load_catalog()["cards"]}
+
+    def register(self, seed=None, name="acmedata"):
+        """Add a track from a seed file (the Acme Data sample when no seed is given)."""
+        path = self.tmp / "seed.json"
+        path.write_text(json.dumps(ACMEDATA if seed is None else seed), encoding="utf-8")
+        return self.cli("track", "add", name, "--seed", str(path))
 
 
 class InitTests(ArchTestCase):
@@ -164,11 +165,6 @@ ACMEDATA_SOURCE = "https://docs.example.com/en/compute/turbo.html"
 
 
 class TrackTests(ArchTestCase):
-    def register(self, seed=ACMEDATA, name="acmedata"):
-        path = self.tmp / "seed.json"
-        path.write_text(json.dumps(seed), encoding="utf-8")
-        return self.cli("track", "add", name, "--seed", str(path))
-
     def test_add_and_init_two_tracks_keeps_ids_apart(self):
         self.assertEqual(self.register()[0], 0)
         self.assertEqual(self.cli("init", "--track", "aws", "--track", "acmedata")[0], 0)
@@ -310,7 +306,7 @@ class FamilyTests(ArchTestCase):
         self.assertEqual(sorted(p.name for p in self.home.rglob("*")), before)
 
 
-class RoleTrackTests(TrackTests):
+class RoleTrackTests(ArchTestCase):
     def test_a_seed_without_services_holds_cases_and_role_plays(self):
         code, out, err = self.register(PRODUCT, "product")
         self.assertEqual(code, 0, err)
@@ -459,5 +455,19 @@ class RoleTrackTests(TrackTests):
         self.assertEqual(self.cards()["product-role-push-back-on-a-feature"]["goal"], "a new goal")
 
 
-if __name__ == "__main__":
-    unittest.main()
+class SeedTests(unittest.TestCase):
+    def test_service_names_are_unique(self):
+        names = [s[1].lower() for s in arch_seed.SERVICES]
+        self.assertEqual([n for n, c in Counter(names).items() if c > 1], [])
+
+    def test_tiers_are_two_or_three(self):
+        self.assertEqual({s[2] for s in arch_seed.SERVICES} - {2, 3}, set())
+
+    def test_pairs_have_members(self):
+        for pair in arch_seed.PAIRS:
+            self.assertGreaterEqual(len(pair[2]), 2, pair)
+
+    def test_no_urls_or_facts_in_seed(self):
+        text = Path(arch_seed.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("http", text)                    # lifecycle facts come from `arch refresh --source`
+        self.assertFalse(hasattr(arch_seed, "SEED_FACTS"))

@@ -5,7 +5,7 @@ Read this before looking up how a company hires. Nothing about any company ships
 ## When to research
 - Only in this skill, when the user names a company they are preparing for, or a job posting names one. Run `target show NAME` first.
 - `fresh` or `none found`: use what is stored; do not research again.
-- `not researched` or `stale`: research as below, but only if you can read web pages. If you cannot, say this once, use the answer style in force, practise without the company (no `prep for-target`, no `--target`), and record nothing (no `target none-found`, no partial save). Never ask the user to paste pages instead:
+- `not researched` or `stale`: research as below, but only if you can read web pages. If you cannot, say this once, use the answer style in force, practice without the company (no `prep for-target`, no `--target`), and record nothing (no `target none-found`, no partial save). Never ask the user to paste pages instead:
   > I can't look up how this company interviews from here, so I'll use the usual answer structure.
 
 ## Searching
@@ -19,13 +19,13 @@ For each thing a page says that helps the user prepare, write one fact:
 - `quote`: a short passage copied word for word from the page, at most 40 words. `wording`: one sentence saying only what the quote says. Add nothing the page does not say.
 - `link`: the exact page. `label`: `company-references` when the site is one the company publishes, `othersite-references` for any other site. `pulled`: the date you read it (YYYY-MM-DD).
 - `vetted`: `true` only after you have checked that you read this page, the quote is on it word for word, and the page is not written by individual users. Never set it otherwise.
-- For a value, `themes` and `hints` are your mapping to the user's stories, not claims about the company: `themes` are story themes from `prep status` that the value is about; `hints` are a few plain words an answer showing the value would use. Leave both empty when no mapping is clear; the value then reads as needing the user's judgment and is practised from its typical questions.
+- For a value, `themes` and `hints` are your mapping to the user's stories, not claims about the company: `themes` are story themes from `prep status` that the value is about; `hints` are a few plain words an answer showing the value would use. Leave both empty when no mapping is clear; the value then reads as needing the user's judgment and is practiced from its typical questions.
 - A suggested answer style is optional: `stated` only when a stored fact says the company wants that structure (list that fact), otherwise `inferred` with the facts it rests on, and it is shown as your suggestion. It never overrides the user's choice.
 
 Save everything for the company in one call, `target save NAME --seed -`, with the JSON on standard input; the exact format is in `target --help`. One refused fact stores nothing: read the message, fix or drop that fact, and save again. If the command warns that a theme matches nothing yet, keep the value; the warning is for you.
 
 ## Nothing found
-If no page qualifies, run `target none-found NAME`, tell the user, use the answer style in force and practise without the company (no `prep for-target`, no `--target`; they refuse a company recorded as none found). Invent nothing:
+If no page qualifies, run `target none-found NAME`, tell the user, use the answer style in force and practice without the company (no `prep for-target`, no `--target`; they refuse a company recorded as none found). Invent nothing:
 > I couldn't find anything the company has published about how it interviews, so I'll use the usual answer structure.
 
 ## Re-reading a stale company

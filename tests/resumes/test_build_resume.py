@@ -1,4 +1,4 @@
-"""Tests for build-resume."""
+"""Tests for plugins/jobkit/src/jk/resumes/build_resume.py: choosing, ordering and rendering a resume for a job description."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,10 +6,11 @@ from typing import Any
 from unittest import mock
 
 from jk.common import ToolError
-from jk.resumes import build_resume as br, query_resume as qr, resume_data as rd, tables
-from tests.resumes.match_fixtures import jd_from_bullets, line, role
-from tests.resumes.test_integrity import bullet
-from tests.resumes.test_resume_pipeline import PipelineCase
+from jk.resumes import build_resume as br
+from jk.resumes import query_resume as qr
+from jk.resumes import resume_data as rd
+from jk.resumes import tables
+from tests.resumes.support import PipelineCase, bullet, jd_from_bullets, line, role
 from tests.support import HomeCase
 
 
@@ -90,6 +91,7 @@ class BuilderTests(unittest.TestCase):
         ctx = qr.JdContext(qr.Counter({"disaster recovery": 1}), set(), set(), {"full": 0.0, "other": 0.0}, 0.0)
         by_stored = [item.bullet["id"] for item in qr.rank_company(company, ctx, False)[0]]
         self.assertEqual(by_stored, ["full", "other"])
+
         def view(item):
             return br.printed(item, {"full": "Improved production reliability."})
 
@@ -110,7 +112,7 @@ class BuilderTests(unittest.TestCase):
         company = {"id": "a", "name": "A", "roles": [{"end": None}], "bullets": []}
         bullets = [bullet(f"Delivered distinct project number {w} for customers", [], skills=[]) for w in
                    ("alpha", "bravo", "charlie", "delta")]
-        scored = [qr.ScoredBullet(b, 1.0, []) if hasattr(qr, "ScoredBullet") else b for b in bullets]
+        scored = [qr.ScoredBullet(1.0, b, []) for b in bullets]
         result = mock.Mock(ranked=[(company, scored), (company, scored)], need=qr.Counter(), covered=set(), skills={"groups": {}})
         with mock.patch.object(br, "company_bullets", side_effect=lambda c, s, o, used=(): list(bullets)):
             chosen = br.choose_experience(result, br.BuildOptions(max_bullets=3))

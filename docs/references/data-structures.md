@@ -11,7 +11,7 @@ Rules that hold for all data:
 
 | Where | Holds | Written by |
 |---|---|---|
-| the database (`data/jobkit.db`) | settings, resume data, curation, stories, drill cards, leadership answers, sessions | `profile`, `process-resumes`, `prep`, `arch`, `lead`, `sessions` |
+| the database (`data/jobkit.db`) | settings, resume data, curation, stories, drill cards, leadership answers, sessions, researched companies, match results | `profile`, `process-resumes`, `prep`, `arch`, `lead`, `sessions`, `target`, `match-score`, `jobkit` (`init`, `backup --restore`) |
 | `header` setting | your name and contact line for built resumes (saved with `profile header set`) | you |
 | `output/` | raw extracted text and built resumes | `process-resumes`, `build-resume` |
 | `backup/` | database backups | `jobkit backup` |
@@ -27,7 +27,7 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | Table | One row is | Notes |
 |---|---|---|
 | `meta` | a named setting or document header | The catalog's `tracks` (and a `dimensions` list left by older versions, no longer read), the stories and engagements `schema_version`. |
-| `session` | a practice session | Columns: `id`, `title`, `mode`, `status`, `created`, `updated` (the listing reads them). The creation time never changes. `body` holds the rest (`topic`, `jd`). |
+| `session` | a practice session | Columns: `id`, `title`, `mode`, `status`, `created`, `updated` (the listing reads them). The creation time never changes. `body` holds the rest (`topic`, `jd`, `target`, `style`). |
 | `session_item` | one queued item of a session | `session_id`, `position`, `item`, `kind` (`card`, `story`, `leader`); no `body`. A new entry must name an item that exists. If the item is removed later the entry stays and is shown as unavailable. |
 | `match_result` | one finished match score | Added by schema step 10. Columns: `key`, `created`, `last_used`; `body` holds the whole result, including `label`, `band` and the scores, which the listing reads from it (see Match scores). Entries not used for 90 days are removed when `match-score run` finishes. |
 | `session_log` | one logged answer | **Append-only**: the database refuses updates and deletes. `answered` is 1 when the answer is not empty; `tutor` and `quiz` mark lessons and passed quizzes. `readiness` is computed from these rows. Step 13 added the nullable `style` and `company` columns, which are empty for entries logged before it and for card entries. |
@@ -45,7 +45,7 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | `lead_question` | a leadership question | `id`, `position`; `body` has `category`, `question` and `themes`. |
 | `lead_progress` | your answer to one question | `question_id` (must be a question); `body` has `confidence` (0 to 2), `last_drilled`, `principle`, `notes` and one STAR `examples` entry per company. |
 | `lead_company_fact` | factual scope for one employer | `company_id`; `body` has team sizes, budget and similar facts you stated. |
-| `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `tier1_services`, `reassess_days`) and its JSON `value`. |
+| `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `tier1_services`, `reassess_days`, `years_experience`, `answer_style`, `research_days`, `target_company`, `preparing_for`, `header`) and its JSON `value`. |
 | `employer` | an employer found in the resumes | `id`, `position`; `body` has `name`, the match `regex` and, after a merge, `aliases`. Changed with `profile companies rename` and `merge`. |
 | `term` | a personal word that must never be committed | `text` (unique, any letter case), `kind`, `match` (`word`, `phrase`, `regex`), `ignored` (1 hides a derived term of that text). Only what has no other home is stored: products, clients, patterns and ignores. Your name, header contact details, resume folder and employer names are read from the `setting` and `employer` tables when checking. |
 | `open_item` | an open item or data note | `id`; `body` has `status` (`open`, `done`) and `text`. |
@@ -68,7 +68,7 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 ```json
 { "resume_root": "/path/to/resumes", "resume_dirs": ["2026"], "name": "Your Name", "tier1_services": ["Lambda"] }
 ```
-`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `tier1_services` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days` and `target_company` are set with `profile set` (see the manual); `target_company` holds the name of a researched company. Code: `user/profile.py`.
+`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `tier1_services` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days`, `target_company` and `preparing_for` are set with `profile set` (see the manual); `target_company` holds the name of a researched company, and `preparing_for` what the user is preparing for. Code: `user/profile.py`.
 
 ### Employers (`employer`; export kind `employers`)
 `{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found on the first scan. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
@@ -100,7 +100,7 @@ How resume text becomes data: each resume is split by employer, bullets are merg
 }
 ```
 - `roles[].end` is `null` for the current role. When resumes disagree (one says Present, another gives an end date), the latest real end date wins and the role is one role. `titles`, `subtitles` and `clients` collect every spelling seen; `ends` (end date per resume file) and `field_sources` (the files that state each title, subtitle and client) let a deleted resume take only its own out.
-- Bullet `id` is a short hash of the normalised text (prefixed by the company) when the bullet is first stored. A bullet keeps its stored id on every later run, including a full rebuild, while it continues: it shares a wording with the stored bullet, or is at least 92% similar to it with the same numbers. So a resume that sorts earlier, or the deletion of the file that first stated the bullet, does not change the id or lose its themes; a bullet whose claim really changed gets a new id and its old curation is reported as orphaned. The same wording in several resumes keeps one bullet with more `sources`. Wording at least 92% similar becomes a `variants` entry, unless the numbers differ: then it is a separate bullet. `wordings` records, per source file, the wording that file used. When a file is deleted or edited, the bullet is rebuilt from the files that remain: its text and figures follow a remaining file's wording, and a bullet no file supports is dropped. Data from before `wordings` existed is rebuilt once automatically when a bullet merged from several files cannot be traced.
+- Bullet `id` is a short hash of the normalized text (prefixed by the company) when the bullet is first stored. A bullet keeps its stored id on every later run, including a full rebuild, while it continues: it shares a wording with the stored bullet, or is at least 92% similar to it with the same numbers. So a resume that sorts earlier, or the deletion of the file that first stated the bullet, does not change the id or lose its themes; a bullet whose claim really changed gets a new id and its old curation is reported as orphaned. The same wording in several resumes keeps one bullet with more `sources`. Wording at least 92% similar becomes a `variants` entry, unless the numbers differ: then it is a separate bullet. `wordings` records, per source file, the wording that file used. When a file is deleted or edited, the bullet is rebuilt from the files that remain: its text and figures follow a remaining file's wording, and a bullet no file supports is dropped. Data from before `wordings` existed is rebuilt once automatically when a bullet merged from several files cannot be traced.
 - `skills_manual` are skills you added by hand; `metrics` are the figures found in the text. `needs_review` is set when a figure matches `review_if_metric_matches` in the curation; those bullets are hidden from `for-jd` unless `--include-review`. `ignored` removes a bullet from matching and from built resumes.
 - Quality words (Security, Performance, ...) appear in `themes` or `tag_only`, never as skills.
 
@@ -117,7 +117,7 @@ Skills by group (Cloud, Languages, Leadership, ...). `tag_only` lists quality wo
   "headlines": ["placeholder"], "profile_points": ["..."], "education": ["..."],
   "certifications": [ { "name": "...", "issued": "2024-05", "expires": "2027-05" } ], "projects": ["..."] }
 ```
-`angles` say what a summary emphasises, so `for-jd` can pick the best opening.
+`angles` say what a summary emphasizes, so `for-jd` can pick the best opening.
 
 ### Overview (export kind `resume-index`)
 `{ "generated": "<timestamp>", "companies": [ { "id", "name", "bullets", "roles" } ], "skill_groups": { "Cloud": 12 }, "themes": ["devops"], "resumes": 8 }`. A summary used by `stats` and by `lead init`, which keeps only themes present here.
@@ -141,7 +141,7 @@ Skills by group (Cloud, Languages, Leadership, ...). `tag_only` lists quality wo
 Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `skill_drop` removes a skill; `skill_group` assigns a group; `review_if_metric_matches` lists figures you know are wrong so their bullets are flagged. `query-resume review` reports ids here that no longer exist.
 
 ### Bullet themes, ignored fragments and summary angles (export kind `curation-themes`)
-`{ "themes": { "<bullet-id>": ["devops"] }, "ignore": ["<bullet-id>"], "summary_angles": { "<summary-id>": ["leadership"] } }`. Which themes tag which bullet and what each summary emphasises.
+`{ "themes": { "<bullet-id>": ["devops"] }, "ignore": ["<bullet-id>"], "summary_angles": { "<summary-id>": ["leadership"] } }`. Which themes tag which bullet and what each summary emphasizes.
 
 ---
 
@@ -201,7 +201,7 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
 - `tier`: 1 = on your resume or pinned with `profile tier1`; 2 = core; 3 = optional.
 - `id`: AWS cards are unprefixed (`vpc`); other tracks use `<track>-<slug>`, `<track>-pair-...`, `<track>-scn-...`, `<track>-case-...`, `<track>-role-...`. A card without `track` counts as AWS, and a catalog without `tracks` counts as AWS enabled, so older files keep working.
 - `lifecycle.status`: `active`, `maintenance` (closed to new customers, no new features), `sunset` (has an end date), `unverified`. `seeded: true` means an unverified lead, not a checked fact. `verified_on` is set only by `arch refresh`.
-- Facts (`lifecycle`, `recent_changes`) are recorded only with a `source` URL on the card's track hosts. The catalog and progress are separate files, so refreshing facts never touches your progress.
+- Facts (`lifecycle`, `recent_changes`) are recorded only with a `source` URL on the card's track hosts. The catalog and progress are separate tables (`card` and `card_progress`), so refreshing facts never touches your progress.
 
 ### Progress (`card_progress`; export kind `arch-progress`)
 `{ "cards": { "<card-id>": { "confidence": 0, "notes": "", "last_drilled": null, "links": { "<company-id>": ["<bullet-id>"] } } } }`. `confidence`: 0 not drilled, 1 some gaps, 2 solid. `links` are the resume bullets that mention the card.
@@ -286,20 +286,6 @@ Written only by `target save`, `target none-found`, `target recheck` and `target
 
 ---
 
-## Preparation planner (`jk.interview.prep_plan`, not yet used by any command)
-
-A pure function over plain records: `plan(snapshot, today, focus=(), reassess_days=30)` returns ordered, explained actions. It reads no database; the caller builds the `Snapshot`. The date is passed in, so the same input gives the same plan.
-
-- `Competency`: `id`, `name`, `kind` (`technical`, `leadership`, `general`), `aliases`, `requires` (prerequisites), `related`. Aliases resolve to one competency; related competencies (ECS and Kubernetes) are never merged. `check_vocabulary` rejects a prerequisite loop, an alias with two targets and a reference to nothing. `SEED` is a small neutral list.
-- `Fact` (engagement, fact id, competencies, `status` confirmed/proposed/unsure, `ownership` own/team/unclear), `Story` (engagement, competencies, done, ownership, facts), `Attempt` (competency, day, `kind` drill/quiz/lesson, `grade` 0 weak, 1 some gaps, 2 good), `Lead` (competency, `ref` of a stored resume line). A lead is a hint for a question, never evidence: it is not a fact and counts as no experience. The caller leaves out lines that are flagged, ignored or not demonstrated for that skill (`evidence.lead_lines`).
-- Three kinds of evidence stay apart: experience (confirmed, own facts and stories, counted by distinct engagement), knowledge (a passed quiz or a good drill answer) and performance (graded drill answers). A quiz never creates experience, and a self-rating is never turned into a grade.
-- `Action`: `competency`, `type` (`clarify_fact`, `teach_prerequisite`, `practise_concept`, `rehearse_story`, `reassess`), `reason_code`, `reason`, `evidence` and `observations` (`story:ID`, `fact:ENGAGEMENT/ID`, `attempt:ID`), plus `target`, `age_days`, `choices` (other stories on the same engagement), `transferable`, `self_rated` and `leads` (line references, for `profile_gap` only) where they apply. Reason codes: `fact_unconfirmed`, `ownership_unclear` (category 1), `prerequisite_unmet` (2), `profile_gap`, `untested`, `untested_with_story` (3), `weak`, `weak_with_story` (4), `answer_old` (5). `profile_gap` means nothing is recorded yet that shows the person used the competency (no confirmed fact or story, no graded drill, whatever a quiz showed); it asks for an example and never says the person has no experience. `untested` means experience is recorded but no drill is graded yet.
-- Order: factual blocker, unmet prerequisite, untested (`profile_gap` before plain `untested`), observed weakness, due reassessment. Within a group, focused competencies first, then by id.
-- Knowledge never expires: a quiz passed long ago still counts. An old good answer only gives a `reassess` action.
-- `reassess_days` (the window the caller passes as `reassess_days`): a profile setting stored in the `setting` table, a whole number of days from 1 to 365, default 30 when unset. `profile.reassess_days()` returns it; `readiness`, the `sessions` queue and the caller of `plan` all read it, and `--days N` overrides it for one run.
-
----
-
 ## Match scores (`match-score`)
 
 A match score rates how well your stored resume lines cover one job posting. It is **not** any employer's applicant tracking system score and does not predict a hiring decision; every report says so. The agent (Claude Code or Codex, through the model it uses) splits the posting into requirements and rates each against your lines (pass 1); `match-score` checks that input and does only arithmetic. Every number below is a **placeholder default** that will be tuned on real postings; they are versioned (`RUBRIC_VERSION`, `WEIGHTS_VERSION` in `match_engine.py`) and a change retires stored results.
@@ -315,8 +301,8 @@ A match score rates how well your stored resume lines cover one job posting. It 
   "label": "Director of Engineering at Example Co",
   "requirements": [
     {
-      "id": "r4", "label": "Lead a large organisation",
-      "quote": "Lead an organisation of 50+ with managers reporting to you.",
+      "id": "r4", "label": "Lead a large organization",
+      "quote": "Lead an organization of 50+ with managers reporting to you.",
       "section": "Responsibilities",
       "category": "people_leadership", "priority": "required", "importance": 1.0,
       "level": "partial", "confidence": 0.7, "reason": "Leads 12 people, no managers of managers.",
@@ -355,7 +341,7 @@ A weight of 0 means the category does not apply at that level: its requirements 
 
 For each category in use, the category score is the sum of (weight x credit) over its requirements divided by the sum of their weights, where a requirement's weight is its priority multiplier times `importance`. The **lower score** is the sum of the rescaled band weights times the category scores, x 100, using the fallback reading of every flag and 0 for `unknown`. The **upper score** uses 1 for `unknown` and credits each flag that took a fallback at its higher reading (the reading that gives the higher lower score); it is "the result if every close call went your way", never a prediction. **Coverage** is the same sum with the weight of every requirement that is not `unknown` over the weight of all of them. Arithmetic is exact (`Decimal`); display rounds half up (the report shows whole numbers, the JSON one decimal). A **swing** is how far the lower score moves between the two readings of one flag; more than 3 swings of 2 points or more mark the posting as vague.
 
-Worked example (executive band, one required requirement per category): skills, impact, technical leadership, domain and education are full; people leadership is partial (or substantial); strategy is substantial (or full). Lower = 5 + 25 + 5 + 8 + 15 + 20 + 5 = 83; upper = 5 + 25 + 5 + 15 + 20 + 20 + 5 = 95. This is the example in `tests/resumes/test_match_engine.py`.
+Worked example (executive band, one required requirement per category): skills, impact, technical leadership, domain and education are full; people leadership is partial (or substantial); strategy is substantial (or full). Lower = 5 + 25 + 5 + 8 + 15 + 20 + 5 = 83; upper = 5 + 25 + 5 + 15 + 20 + 20 + 5 = 95. This is the example in `tests/resumes/match/test_engine.py`.
 
 ### Code pass
 
@@ -363,7 +349,7 @@ Before pass 1, `match-score extract` rates what stored facts decide: named skill
 
 ### Result (`match_result`; export kind `match-results`)
 
-`{ "key", "label", "band", "band_reason", "rubric_version", "weights_version", "score": { "lower", "upper", "coverage", "categories": { name: { "score", "upper", "coverage", "weight" } }, "left_out", "not_counted", "equal_weights", "gaps": { "critical", "required", "preferred", "unassessed" }, "requirements": [...] }, "requirements": [ { the request fields plus "evidence_text", "source": "agent" | "code" | "fallback", final "category", "priority", "level", "credit", "share", "counted" } ], "assumptions": [...], "vague", "priority_rules_applied", "code_pass_notes", "caveat" }`. The key is made from the normalised posting text (Unicode, line endings and whitespace), the resume lines (their text, whether each is ignored or flagged for review, and its skill tags; not ids, so a rebuild that changes no text keeps it), your skills, roles, education and certifications, the rubric and weights versions (and your bands file) and the assessment date, so years in an ongoing role are re-judged on a later day. A short suffix after it identifies the band and requirements used, so scoring the same posting again with another band or other ratings is stored next to the earlier result instead of over it (`match-score list` shows both; `extract` returns the newest). `jobkit export --only match-results` prints the stored results with their versions.
+`{ "key", "label", "band", "band_reason", "rubric_version", "weights_version", "score": { "lower", "upper", "coverage", "categories": { name: { "score", "upper", "coverage", "weight" } }, "left_out", "not_counted", "equal_weights", "gaps": { "critical", "required", "preferred", "unassessed" }, "requirements": [...] }, "requirements": [ { the request fields plus "evidence_text", "source": "agent" | "code" | "fallback", final "category", "priority", "level", "credit", "share", "counted" } ], "assumptions": [...], "vague", "priority_rules_applied", "code_pass_notes", "caveat" }`. The key is made from the normalized posting text (Unicode, line endings and whitespace), the resume lines (their text, whether each is ignored or flagged for review, and its skill tags; not ids, so a rebuild that changes no text keeps it), your skills, roles, education and certifications, the rubric and weights versions (and your bands file) and the assessment date, so years in an ongoing role are re-judged on a later day. A short suffix after it identifies the band and requirements used, so scoring the same posting again with another band or other ratings is stored next to the earlier result instead of over it (`match-score list` shows both; `extract` returns the newest). `jobkit export --only match-results` prints the stored results with their versions.
 
 `source` says where a requirement's rating came from: `agent` (judged in pass 1 by the model used by the agent), `code` (rated by the code pass; `code, contested` when the agent gave a different level with a reason) or `fallback` (a flagged requirement settled by the fixed cautious rule). It records no specific agent product or model name. Results stored before version 0.2.0 hold `claude` where new ones hold `agent`; that older value means the same thing, is still read, shown and exported, and is never rewritten.
 
