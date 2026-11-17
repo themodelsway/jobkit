@@ -62,14 +62,14 @@ from typing import Any, Final, TypedDict, cast
 
 from jk import common
 from jk.common import ToolError
+from jk.interview import question_tables
 from jk.interview import story_model as sm
 from jk.interview import story_targets, styles, tables
 from jk.interview.story_model import Engagement, Story
 from jk.resumes import query_resume as qr
-from jk.resumes.resume_data import Bullet, Company, newest_start
+from jk.resumes.resume_data import Bullet, Company, newest_start, theme_questions
 
 FIELDS: Final[tuple[str, ...]] = sm.TEXT_FIELDS
-UMBRELLA: Final[frozenset[str]] = frozenset({"topic-12"})     # too broad to be a story on its own
 MIN_BULLETS: Final[int] = 4
 CAP_RECENT: Final[int] = 12
 CAP_OLD: Final[int] = 3
@@ -77,32 +77,17 @@ RECENT_YEARS: Final[int] = 5          # companies with a role starting within th
 THEME_BONUS: Final[int] = 3
 NO_STORIES: Final[str] = "No stories yet: run `prep init` first."
 
-# Typical questions per theme (extend freely; unknown themes simply get none)
+# Typical questions per built-in theme; the user's own themes bring theirs (`curate add theme-question`)
 QUESTIONS: Final[dict[str, list[str]]] = {
-    "topic-19": ["placeholder",
-            "placeholder"],
-    "topic-01": ["Tell me about a goal you helped define.", "How did you assess the result?"],
-    "topic-11": ["How did you choose what to prioritize?", "What would you do differently next time?"],
-    "topic-03": ["Tell me about making a decision with incomplete information.", "How did you check your assumptions?"],
-    "topic-04": ["Describe a change you helped make.", "What feedback did you receive?"],
-    "topic-06": ["placeholder"],
-    "topic-09": ["How did you explain a trade-off to a colleague?", "What changed after the conversation?"],
-    "topic-10": ["placeholder"],
     "strategy-roadmap": ["Tell me about a roadmap you built and how you got buy-in."],
-    "workshops": ["Describe an executive workshop you ran. What changed afterward?"],
+    "workshops": ["Describe a workshop you ran with senior people. What changed afterward?"],
     "executive-advisory": ["Tell me about advising a senior executive who disagreed with you."],
-    "topic-17": ["placeholder"],
-    "mentoring": ["How do you grow engineers and architects? Give an example."],
+    "mentoring": ["How do you grow the people on your team? Give an example."],
     "team-leadership": ["Tell me about leading a team through a difficult delivery."],
     "delivery-leadership": ["Tell me about a delivery that was at risk and how you recovered it."],
     "stakeholder-alignment": ["Tell me about aligning stakeholders who wanted different things."],
     "governance-compliance": ["How did you work with risk, legal and security without slowing delivery?"],
-    "topic-20": ["What did you learn from a challenging assignment?"],
-    "topic-13": ["placeholder"],
-    "topic-05": ["How did you organize a project with competing deadlines?"],
-    "topic-16": ["When did you ask for feedback about your work?"],
     "vendor-management": ["How do you manage vendors and hold them accountable?"],
-    "topic-18": ["Tell me about improving a process with a colleague."],
 }
 
 touch_time = common.now
@@ -237,14 +222,13 @@ def is_recent(company: Company, cutoff: str) -> bool:
 
 
 def bullets_by_theme(company: Company) -> dict[str, list[Bullet]]:
-    """Live bullets (not ignored, not under review) grouped by theme, without umbrella themes."""
+    """Live bullets (not ignored, not under review) grouped by theme."""
     by_theme: dict[str, list[Bullet]] = {}
     for bullet in company["bullets"]:
         if bullet.get("ignored") or bullet.get("needs_review"):
             continue
         for theme in bullet["themes"]:
-            if theme not in UMBRELLA:
-                by_theme.setdefault(theme, []).append(bullet)
+            by_theme.setdefault(theme, []).append(bullet)
     return by_theme
 
 
@@ -450,6 +434,8 @@ def cmd_set(args: argparse.Namespace) -> None:
 
 def cmd_new(args: argparse.Namespace) -> None:
     """Add an extra story beyond the generated ones."""
+    if args.id.startswith(question_tables.ID_PREFIX):
+        raise ToolError(f"Story ids beginning with {question_tables.ID_PREFIX!r} are reserved for role questions.")
     data = load_story_data()
     if any(x["id"] == args.id for x in data["stories"]):
         raise ToolError(f"Story {args.id} already exists")
@@ -805,12 +791,13 @@ def cmd_for_jd(args: argparse.Namespace) -> None:
     """Rank stories for a job description and list the ones to finish."""
     analysis = qr.analyze(common.read_text_arg(args.jd))
     ranked = ranked_scores(analysis)
-    themes = tables.load_themes()
+    themes, own = tables.load_themes(), theme_questions()     # the user's own questions are read now, never copied
     rows = [(score, s) for s in stories() if (score := story_relevance(s, ranked, analysis.themes))]
     top = sorted(rows, key=lambda row: -row[0])[:args.top]
     for score, story in top:
         print(f"{story['id']}  ({story['company_name']}, {story['status']}, score {score:.0f})\n  {story['headline']}")
-        for question in (story["likely_questions"] or themes.get(story["theme"], {}).get("questions", []))[:2]:
+        built_in = themes.get(story["theme"], {}).get("questions", [])
+        for question in (story["likely_questions"] or own.get(story["theme"]) or built_in)[:2]:
             print(f"  Q: {question}")
     unfilled = [s["id"] for _, s in top if s["status"] != "done"]
     print("\nStories to finish before this interview: " + (", ".join(unfilled) or "none"))

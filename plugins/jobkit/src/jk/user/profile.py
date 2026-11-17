@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-user settings, kept in the database under the home folder (nothing personal lives in committed files).
 
-  settings    resume_root, resume_dirs, name (optional), tier1_services (optional)
+  settings    resume_root, resume_dirs, name (optional), key_topics (optional)
   employers   found by the first resume scan: {id: {"name", "regex"}}
   settings    header (name and contact line printed at the top of generated resumes; an older profile/header.md
               file in the home folder is still read when no header is saved)
@@ -12,16 +12,17 @@ Commands:
                                 # --replace: change the resume folder and its parts (otherwise kept)
   profile set KEY VALUE         # name, resume_root, reassess_days, years_experience (shown as "N+ years" in built summaries),
                                 # answer_style (star, soar or carl: the default way a story is shown and judged complete),
-                                # research_days (when a researched company's facts count as stale; default 30),
+                                # research_days (when a research citation counts as stale; default 30),
+                                # question_research (yes, no or unset for role-question web research),
                                 # target_company (a researched company `target show` and `prep for-target` use by
                                 # default; "" clears it), preparing_for (what the user is preparing for, in a few
                                 # words; saved last, it marks that step of setup as done)
   profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
   profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
-  profile tier1 [SERVICE ...]   # pin your own tier-1 services (any track); no args shows the current list
+  profile key-topics [TOPIC ...]   # pin your own key topics (tier 1, any track); no args shows the current list
   profile open [add TEXT | done ID]   # open items and data notes 
   profile terms [list | add TEXT [--kind K] [--match word|phrase|regex] | ignore TEXT | rm TEXT | import FILE
-                 | check [--staged | --all | PATH ...]]   # personal words that must never be committed (contributors)
+                 | check [--staged | --all | --history | PATH ...] [--exhaustive]]   # personal words and stored text that must never be committed (contributors)
 
 Standard library only. Run it as the `profile` command.
 """
@@ -43,7 +44,7 @@ DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
 SEP: Final[str] = r"\s*[–—-]\s*"
 SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style",
-                                         "research_days", "target_company", "preparing_for")
+                                         "research_days", "question_research", "target_company", "preparing_for")
 PREPARING_FOR_MAX: Final[int] = 200
 ANSWER_STYLES: Final[tuple[str, ...]] = ("star", "soar", "carl")
 YEARS_RANGE: Final[tuple[int, int]] = (1, 60)
@@ -62,12 +63,13 @@ class Profile(TypedDict):
     resume_root: str
     resume_dirs: NotRequired[list[str]]
     name: NotRequired[str]
-    tier1_services: NotRequired[list[str]]
+    key_topics: NotRequired[list[str]]
     reassess_days: NotRequired[int]
     header: NotRequired[str]
     years_experience: NotRequired[int]
     answer_style: NotRequired[str]
     research_days: NotRequired[int]
+    question_research: NotRequired[str]
     target_company: NotRequired[str]
     preparing_for: NotRequired[str]
 
@@ -158,6 +160,23 @@ def research_days() -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else DEFAULT_RESEARCH_DAYS
 
 
+def question_research() -> str | None:
+    """Read the saved answer about role-question web research."""
+    value = tables.load_settings().get("question_research")
+    return value if value in ("yes", "no") else None
+
+
+def set_question_research(settings: Profile, text: str) -> None:
+    """Save a yes or no answer, or clear it to ask again."""
+    value = text.strip().lower()
+    if value in ("yes", "no"):
+        settings["question_research"] = value
+    elif value == "unset":
+        settings.pop("question_research", None)
+    else:
+        raise ToolError("question_research must be yes, no or unset.")
+
+
 def parse_target_company(text: str) -> str | None:
     """The stored name of a researched company given in any letter case; None for "" (clears the default).
 
@@ -229,9 +248,9 @@ def resume_dirs() -> list[Path]:
     return [root / sub for sub in profile.get("resume_dirs") or [""]]
 
 
-def tier1_services() -> list[str]:
-    """Services the user pinned as tier 1 (empty: derive them from the resume scan)."""
-    return load().get("tier1_services") or []
+def key_topics() -> list[str]:
+    """Topics the user pinned as key topics, tier 1 (empty: derive them from the resume scan)."""
+    return load().get("key_topics") or []
 
 
 def company_registry() -> dict[str, tuple[str, str]]:
@@ -299,18 +318,19 @@ def cmd_status(args: argparse.Namespace) -> None:
               "(the skills ask for the folder first).")
         return
     profile = load()
-    pinned = profile.get("tier1_services")
+    pinned = profile.get("key_topics")
     print(f"resume_root: {common.hide_home(profile['resume_root'])}")
     print(f"resume_dirs: {', '.join(profile.get('resume_dirs') or ['(whole folder)'])}")
     print(f"name: {profile.get('name') or '(not set)'}")
     print(f"employers: {len(tables.load_employers())} (run process-resumes to scan)"
           if tables.has_employers() else "employers: not scanned yet (run process-resumes)")
-    print(f"tier-1 services: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
+    print(f"key topics: {f'pinned list of {len(pinned)}' if pinned else 'from your resume scan'}")
     stored = profile.get("reassess_days")
     print(f"years of experience: {profile.get('years_experience') or '(not set: summaries show what your resume says)'}")
     print(f"retest window: {reassess_days()} days" + ("" if stored is not None else " (default, not set)"))
     print(f"answer style: {answer_style() or 'star (default, not set)'}")
     print(f"research window: {research_days()} days" + ("" if profile.get("research_days") is not None else " (default, not set)"))
+    print(f"question research: {question_research() or '(not asked yet)'}")
     print(f"default target company: {target_company() or '(not set)'}")
     print(f"preparing for: {preparing_for() or '(not set yet)'}")
     print(f"header: {'present' if header_text() else 'missing (profile header set NAME CONTACT_LINE)'}")
@@ -364,6 +384,8 @@ def cmd_set(args: argparse.Namespace) -> None:
         profile["answer_style"] = parse_answer_style(args.value)
     elif args.key == "research_days":
         profile["research_days"] = parse_research_days(args.value)
+    elif args.key == "question_research":
+        set_question_research(profile, args.value)
     elif args.key == "target_company":
         _set_target_company(profile, args.value)
     elif args.key == "preparing_for":
@@ -422,13 +444,13 @@ def cmd_companies(args: argparse.Namespace) -> None:
             print("No scan yet: run process-resumes")
 
 
-def cmd_tier1(args: argparse.Namespace) -> None:
-    """Pin the tier-1 services, or show the pinned list."""
+def cmd_key_topics(args: argparse.Namespace) -> None:
+    """Pin the key topics (tier 1), or show the pinned list."""
     profile = need()
-    if args.services:
-        profile["tier1_services"] = args.services
+    if args.topics:
+        profile["key_topics"] = args.topics
         save(profile)
-    print("\n".join(profile.get("tier1_services") or ["(none pinned: tier 1 comes from your resume scan)"]))
+    print("\n".join(profile.get("key_topics") or ["(none pinned: key topics come from your resume scan)"]))
 
 
 def _add_open_item(items: list[OpenItem], text: str | None) -> None:
@@ -488,9 +510,9 @@ def build_parser() -> argparse.ArgumentParser:
     term_cmd = sub.add_parser("terms")
     terms.add_arguments(term_cmd)
     term_cmd.set_defaults(fn=cmd_terms)
-    tier1 = sub.add_parser("tier1")
-    tier1.add_argument("services", nargs="*")
-    tier1.set_defaults(fn=cmd_tier1)
+    key_topics_cmd = sub.add_parser("key-topics")
+    key_topics_cmd.add_argument("topics", nargs="*")
+    key_topics_cmd.set_defaults(fn=cmd_key_topics)
     open_items = sub.add_parser("open")
     open_items.add_argument("action", nargs="?", choices=["add", "done"])
     open_items.add_argument("arg", nargs="?")

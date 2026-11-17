@@ -6,7 +6,7 @@ Keep resumable practice and tutor sessions stored in the database, with the user
 ## Requirements
 
 ### Requirement: Session is one file with a queue and a log
-A session SHALL hold a queue of items (architecture cards, stories or leadership questions) and an append-only log that keeps the user's full answers.
+A session SHALL hold a queue of items (role-knowledge cards, stories or leadership questions) and an append-only log that keeps the user's full answers.
 
 #### Scenario: Re-drill a topic
 - **WHEN** a topic is drilled in a later session
@@ -24,7 +24,7 @@ The system SHALL show what was covered, the last answers and the next item to as
 - **THEN** it continues from its next unasked item
 
 ### Requirement: Modes
-A session SHALL have a mode of architecture, stories, jd, leadership or tutor, and SHALL be narrowable by track, area, tier, kind, company, category and count. Without `--mode`, the mode is jd when `--jd` is given and architecture otherwise; `--jd` with any other explicit mode is an error.
+A session SHALL have a mode of knowledge, stories, jd, leadership or tutor, and SHALL be narrowable by track, area, tier, kind, company, category and count. Without `--mode`, the mode is jd when `--jd` is given and knowledge otherwise; `--jd` with any other explicit mode is an error.
 
 #### Scenario: JD mode
 - **WHEN** a session starts with `--jd`
@@ -35,12 +35,12 @@ A session SHALL have a mode of architecture, stories, jd, leadership or tutor, a
 - **THEN** the queue takes a card and a story in turn until one kind runs out, and the start message gives the number of each kind queued and the number of matching items left out
 
 #### Scenario: JD with filters
-- **WHEN** a jd session is started with `--track`, `--area`, `--tier` or `--kind service`
+- **WHEN** a jd session is started with `--track`, `--area`, `--tier` or `--kind topic`
 - **THEN** only the matched cards that pass every filter are queued
 
 #### Scenario: JD with a kind it cannot match
 - **WHEN** a jd session is started with `--kind` pair, scenario, case or role-play
-- **THEN** the command fails and says that a job posting is matched to service cards only
+- **THEN** the command fails and says that a job posting is matched to topic cards only
 
 #### Scenario: JD with another mode
 - **WHEN** `--jd` is given with `--mode stories`
@@ -65,7 +65,7 @@ A tutor lesson that does not raise confidence SHALL NOT change the item's last-d
 - **THEN** its last-drilled date is unchanged
 
 ### Requirement: Confidence is shared
-Confidence per architecture card SHALL be stored once, outside any session, and SHALL be shared across sessions.
+Confidence per role-knowledge card SHALL be stored once, outside any session, and SHALL be shared across sessions.
 
 #### Scenario: Two sessions
 - **WHEN** a card is graded in session B after session A
@@ -83,7 +83,7 @@ The age after which a solid card is queued before recently solid ones SHALL be t
 - **THEN** its queue holds exactly those two items
 
 ### Requirement: A due-only session with no mode covers every kind of item
-`sessions new --due` with no `--mode` and no `--jd` SHALL queue the items `readiness --due` lists, across architecture cards, leadership questions and stories, oldest first. Each kind SHALL apply the filters that belong to it. The session SHALL be stored with the mode `retest`. With a `--mode` or `--jd`, the session SHALL queue only the due items of that mode.
+`sessions new --due` with no `--mode` and no `--jd` SHALL queue the items `readiness --due` lists, across role-knowledge cards, leadership questions and stories, oldest first. Each kind SHALL apply the filters that belong to it. The session SHALL be stored with the mode `retest`. With a `--mode` or `--jd`, the session SHALL queue only the due items of that mode.
 
 #### Scenario: Only a leadership question is due
 - **WHEN** only a leadership question is due and `sessions new "title" --due` is run
@@ -154,8 +154,8 @@ With `--target`, the queue SHALL hold the same items as without it, with stories
 - **WHEN** no story matches any value of the company
 - **THEN** the session is created with the usual queue, and the output says no story matches this company yet
 
-#### Scenario: Architecture cards
-- **WHEN** `--target` is given for a session whose queue holds only architecture cards
+#### Scenario: Role-knowledge cards
+- **WHEN** `--target` is given for a session whose queue holds only role-knowledge cards
 - **THEN** the session is created, the cards keep their usual order, and the output says a company does not change card order
 
 #### Scenario: With a job description
@@ -174,7 +174,7 @@ With `--target`, the queue SHALL hold the same items as without it, with stories
 - **THEN** all of them are listed with their typical questions, so the session can still be run
 
 #### Scenario: Next item is a card
-- **WHEN** the next item of a company session is an architecture card
+- **WHEN** the next item of a company session is a role-knowledge card
 - **THEN** no grading emphasis is shown beside it
 
 ### Requirement: The session's style can be changed
@@ -189,7 +189,7 @@ With `--target`, the queue SHALL hold the same items as without it, with stories
 - **THEN** the story is shown grouped as the session's style, after `new`, `resume` (with or without `--style`) and `reopen`
 
 ### Requirement: Logged answers keep the style and company
-Each entry logged for a story or leadership question SHALL keep the session's current style and company at the time it was logged, and `log` SHALL accept `--style` to record a different style for that one entry. An entry for an architecture card SHALL record no style.
+Each entry logged for a story or leadership question SHALL keep the session's current style and company at the time it was logged, and `log` SHALL accept `--style` to record a different style for that one entry. An entry for a role-knowledge card SHALL record no style.
 
 #### Scenario: After a change of style
 - **WHEN** a carl session is resumed with `--style star` and an answer is then logged
@@ -232,3 +232,18 @@ A session that names a company whose profile no longer exists SHALL still be lis
 #### Scenario: Log after removal
 - **WHEN** an answer is logged in that session
 - **THEN** it is stored, and the entry still records the company's name
+
+### Requirement: Role-question queues
+
+Sessions SHALL accept `--mode questions --role ROLE` for practice and `--mode tutor --topic questions --role ROLE` for lessons. A due-only session without a mode SHALL include aging role questions along with other due items.
+
+#### Scenario: Start a role-question session
+
+- **WHEN** a new questions session names a role with saved questions
+- **THEN** the queue uses that role's questions and stores them with item kind `question`
+- **AND** the session keeps the full answer and any grade
+
+#### Scenario: Role is missing
+
+- **WHEN** the requested mode or tutor topic is questions and no role is supplied
+- **THEN** the command refuses to start a session

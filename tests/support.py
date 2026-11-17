@@ -25,8 +25,9 @@ PLUGIN_ROOT = REPO_ROOT / "plugins" / "jobkit"
 COMMANDS = {"jobkit": "jk.admin", "profile": "jk.user.profile", "process-resumes": "jk.resumes.process_resumes",
             "query-resume": "jk.resumes.query_resume", "build-resume": "jk.resumes.build_resume",
             "resume-lines": "jk.resumes.lines", "match-score": "jk.resumes.match_score",
-            "arch": "jk.interview.arch", "lead": "jk.interview.lead", "prep": "jk.interview.prep",
-            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness", "target": "jk.interview.target"}
+            "cards": "jk.interview.cards", "lead": "jk.interview.lead", "prep": "jk.interview.prep",
+            "sessions": "jk.interview.sessions", "readiness": "jk.interview.readiness", "target": "jk.interview.target",
+            "questions": "jk.interview.questions"}
 TOOLS = list(COMMANDS.values())
 
 
@@ -67,7 +68,7 @@ def has_meta(key: str) -> bool:
 
 
 class HomeCase(unittest.TestCase):
-    """A test case with its own empty home folder and initialised database (`self.home`)."""
+    """A test case with its own empty home folder and initialized database (`self.home`)."""
 
     def setUp(self) -> None:
         super().setUp()

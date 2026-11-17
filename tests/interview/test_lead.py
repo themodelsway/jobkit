@@ -79,7 +79,7 @@ class LeadCommandTests(SessionCase):
         saved = tables.load_lead_progress()[qid]
         self.assertEqual((saved["principle"], saved["confidence"]), ("Ask, then decide", 2))
         self.assertEqual(self.cli(lead.main, "set", qid, "confidence", "9")[0], 1)
-        self.assertEqual(self.cli(lead.main, "set", qid, "colour", "x")[0], 2)      # an argparse usage error
+        self.assertEqual(self.cli(lead.main, "set", qid, "color", "x")[0], 2)      # an argparse usage error
 
     def test_example_and_profile(self):
         qid = self.first_id()
@@ -87,12 +87,34 @@ class LeadCommandTests(SessionCase):
         self.assertEqual(code, 0, err)
         saved = tables.load_lead_progress()[qid]["examples"]
         self.assertEqual(saved["acme"]["situation"], "We had a deadline")
-        self.assertEqual(self.cli(lead.main, "example", qid, "acme", "colour", "x")[0], 1)
+        self.assertEqual(self.cli(lead.main, "example", qid, "acme", "color", "x")[0], 1)
         self.assertEqual(self.cli(lead.main, "profile", "set", "acme", "direct_reports", "4")[0], 0)
         code, out, _ = self.cli(lead.main, "profile", "show")
         self.assertEqual(code, 0)
         self.assertIn("4", out)
-        self.assertEqual(self.cli(lead.main, "profile", "set", "acme", "colour", "x")[0], 1)
+        self.assertEqual(self.cli(lead.main, "profile", "set", "acme", "color", "x")[0], 1)
+
+
+class AudienceTests(SessionCase):
+    def test_everyone_leaves_out_the_people_leader_questions(self):
+        leaders = {q.id for q in lead.SEED if q.audience == "people-leader"}
+        self.assertIn("underperformer", leaders)
+        self.assertNotIn("prioritize-framework", leaders)
+        listed = {line.split()[0] for line in self.cli(lead.main, "list", "--audience", "everyone")[1].splitlines()}
+        self.assertEqual(listed & leaders, set())
+        self.assertIn("prioritize-framework", listed)
+        everything = {line.split()[0] for line in self.cli(lead.main, "list")[1].splitlines()}
+        self.assertLessEqual(leaders, everything)
+
+    def test_show_says_when_a_question_is_for_people_leaders(self):
+        self.assertIn("(asked of people leaders)", self.cli(lead.main, "show", "underperformer")[1])
+        self.assertNotIn("people leaders", self.cli(lead.main, "show", "prioritize-framework")[1])
+
+    def test_a_session_can_leave_out_people_leader_questions(self):
+        sid = self.new_session("--mode", "leadership", "--audience", "everyone", "--count", "50")
+        queued = {item["id"] for item in self.session(sid)["queue"]}
+        self.assertTrue(queued)
+        self.assertEqual(queued & {q.id for q in lead.SEED if q.audience == "people-leader"}, set())
 
 
 class LeadTargetTests(SessionCase):

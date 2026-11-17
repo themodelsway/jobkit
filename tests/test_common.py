@@ -10,7 +10,7 @@ from unittest import mock
 
 from jk import base, common, store
 from jk.common import ToolError
-from jk.interview import arch
+from jk.interview import cards
 from tests.support import PLUGIN_ROOT, HomeCase
 
 
@@ -151,9 +151,9 @@ class HomeFolderTests(unittest.TestCase):
 
     def test_messages_printed_outside_run_hide_the_home_folder(self):
         out = io.StringIO()
-        with mock.patch.object(arch.qr, "load", side_effect=OSError(f"cannot open {Path.home() / 'r.txt'}")), \
+        with mock.patch.object(cards.qr, "load", side_effect=OSError(f"cannot open {Path.home() / 'r.txt'}")), \
                 contextlib.redirect_stdout(out):
-            arch.load_resume_context()
+            cards.load_resume_context()
         self.assertNotIn(str(Path.home()), out.getvalue())
         self.assertIn(str(Path("~") / "r.txt"), out.getvalue())
 

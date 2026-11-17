@@ -414,12 +414,13 @@ def merge_resume(data: ResumeData, source: str, parsed: pr.Resume) -> None:
 # ---------------------------------------------------------------- curation
 
 def retag(data: ResumeData) -> None:
-    """(Re)compute skill tags on every bullet from the skills vocabulary; keep manually added tags."""
+    """(Re)compute skill tags on every bullet from the skills vocabulary and every stored wording of the line; keep
+    manually added tags."""
     terms = pr.skill_terms(data["skills"]["groups"])
     terms.update({t: t for t in data["skills"].get("tag_only", [])})
     for company in data["companies"].values():
         for bullet in company["bullets"]:
-            auto = set(pr.tag_skills(bullet["text"], terms))
+            auto = {s for text in rd.wordings_of(bullet) for s in pr.tag_skills(text, terms)}
             bullet["skills"] = sorted(auto | set(bullet.get("skills_manual", [])))
 
 
@@ -471,7 +472,7 @@ def curate_skills(data: ResumeData) -> None:
 
 
 def apply_themes(data: ResumeData) -> None:
-    """Themes, ignored fragments and summary angles from your curation."""
+    """Themes, ignored fragments and summary positioning from your curation."""
     themes = rd.load_themes_file()
     for company in data["companies"].values():
         for bullet in company["bullets"]:
@@ -481,11 +482,20 @@ def apply_themes(data: ResumeData) -> None:
         summary["angles"] = themes.get("summary_angles", {}).get(summary["id"], summary.get("angles", []))
 
 
-def flag_review(data: ResumeData, patterns: list[str]) -> None:
-    """Mark bullets whose metrics contain a known-wrong figure as needs_review."""
+def number_pattern(number: str) -> re.Pattern[str]:
+    """A flagged number as it appears in a line: never part of a longer number, so `12` matches "team of 12" and
+    "12%" but not "120" or "1.25", and `40%` does not match "140%"."""
+    before = r"(?<![\d.,])" if number[:1].isdigit() else ""
+    after = r"(?![\d]|[.,]\d)" if number[-1:].isdigit() else ""
+    return re.compile(before + re.escape(number) + after, re.I)
+
+
+def flag_review(data: ResumeData, numbers: list[str]) -> None:
+    """Mark the bullets that state a flagged number as needs_review."""
+    found = [number_pattern(n) for n in numbers if n]
     for company in data["companies"].values():
         for bullet in company["bullets"]:
-            if any(p in m for m in bullet["metrics"] for p in patterns):
+            if any(f.search(bullet["text"]) for f in found):
                 bullet["needs_review"] = True
 
 

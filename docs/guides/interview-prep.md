@@ -13,12 +13,12 @@ Requests use plain language and fall into these categories:
 - Preparation for a supplied job posting.
 - Preparation for a named company.
 
-**The first time.** Before the first task, the skill tells the agent to ask what kind of role the preparation is for, then what to focus on: a technology, or a field such as product, project delivery, HR or finance (it can suggest some from the resumes). The skill tells the agent to choose the role family itself from the role and to ask only when the role could fit more than one. For anything other than the bundled AWS example, the agent builds a topic list with a rubric and shows it in plain words; it is saved once the user responds with yes. The skill then sets up drill cards for each topic, leadership questions, and a set of stories drawn from the resumes added with [resume-workflows](resume-workflows.md). Resumes must be added first.
+**The first time.** Before the first task, the skill tells the agent to ask what kind of role the preparation is for, then what to focus on: a field such as HR, product design, strategy, finance or project delivery, or a technology the role uses (it can suggest some from the resumes). The skill tells the agent to choose the role family itself from the role and to ask only when the role could fit more than one. For each field or technology (other than AWS, which is bundled as an example), the agent builds a topic list with a rubric and shows it in plain words; it is saved once the user responds with yes. The skill then sets up drill cards for each topic, leadership questions, and a set of stories drawn from the resumes added with [resume-workflows](resume-workflows.md). Resumes must be added first.
 
 **Every time.** The skill lists earlier sessions and asks whether to start a new one or resume one. It never chooses on the user's behalf.
 
 - **Retests.** When well-answered items are older than the retest window (30 days unless another number is set), the skill says how many and asks whether to re-check those first. A retest never starts without confirmation.
-- **Order.** For technical and leadership questions, the skill asks whether to start with the weakest topics or mix them randomly.
+- **Order.** For knowledge and leadership questions, the skill asks whether to start with the weakest topics or mix them randomly.
 - **One question at a time.** The skill asks, the user answers, and the skill grades. The complete answer is saved, and a session can be stopped and resumed. Later practice adds entries and never edits old ones.
 
 **Practice areas**
@@ -46,6 +46,10 @@ Nothing about any company is shipped with jobkit. The facts are looked up when a
 - **Nothing found, or no web access.** When no page qualifies, the skill tells the agent to record that, say so in plain words and use the default answer style; nothing is invented. When the agent cannot read web pages (Codex in its default sandbox, for example), the skill tells the agent to skip research, say so once and use the default style; nothing is recorded, and there is no paste-the-page fallback. In both cases practice continues without the company: `prep for-target`, `readiness --target` and `sessions new --target` refuse a company recorded as none found or never researched, whether it is named or is the default company.
 - **Aging.** Facts older than the research window (30 days unless `profile set research_days` changes it) make a company stale. The skill tells the agent to read it again when next needed: a quote still on its page gets today's date; a changed page is shown to the user, old and new wording side by side, and the fact is replaced or removed only once the user responds with yes.
 - **Matching.** A company value lists story themes and hint words, which are the mapping to the user's stories and not claims about the company. A value reads `covered` (a story with content matches its theme), `possible` (stories match only by a hint word), `no story`, or `needs your judgment` (no themes or hint words; its typical questions are still practiced). Overall readiness is covered on the [tutor](tutor.md#readiness-report) page.
+
+### Questions for the role
+
+The skill tells the agent to ask about web research once and remember the answer. Before browsing, the agent states the search terms, limited to the posting's title, level and skills, recent role titles, and general skills. The skill excludes the user's name, contact details, employers, clients, employer-specific products, figures, and resume sentences. Published questions carry their source and the date read. General practice questions carry a general-knowledge label. Personal questions are generated locally from resume claims or posting requirements without matching resume evidence.
 
 ## Commands it uses
 
@@ -106,7 +110,7 @@ A story is stored once, and a style is a labeled view of it. No story is rewritt
 
 | Style | Parts in order | Use |
 |---|---|---|
-| `star` | Situation, Task, Action, Result | A clear sequence for most behavioural questions. The style when none is chosen. |
+| `star` | Situation, Task, Action, Result | A clear sequence for most behavioral questions. The style when none is chosen. |
 | `soar` | Situation, Obstacle, Action, Result | When overcoming something is the point of the story. |
 | `carl` | Challenge, Action, Result, Learning | When what was learned matters as much as what happened. |
 
@@ -125,24 +129,24 @@ How the parts map onto the stored story:
 - **Unchanged in every style.** Fact and metric rules, the hedging rule for estimated numbers, the warning when "we" outnumbers "I" in the action, and the word limits of the spoken versions. Spoken versions are shown as written, with a note, and are not rearranged to the style.
 - **Stored field names.** `situation`, `task`, `action` and `result` keep working in `prep set` when no `--style` is given.
 
-### `arch`
+### `cards`
 
-Knowledge drill cards for one or more technologies or fields (tracks), stored in the database. A card is a service (any topic), a decision pair, a scenario, a case or a role-play. Each track belongs to a role family (engineering, product, delivery, people or operations), and each card is graded against its own track's rubric. AWS is bundled; any other technology or field is added from a JSON seed with no code.
+Role-knowledge cards for one or more fields or technologies (tracks), stored in the database. A card is a topic, a decision pair, a scenario, a case or a role-play. Each track belongs to a role family (`cards families` lists them), and each card is graded against its own track's rubric. Any field or technology is added from a JSON seed with no code; AWS is bundled as one example of the engineering family.
 
 | Subcommand | Arguments and options | What it does |
 |---|---|---|
-| `arch families` | none | List the role families, who each fits, and the rubric each uses by default. Read-only; needs no database. |
-| `arch tracks` | none | List the tracks available to drill, which are enabled, and each one's family. |
-| `arch track add` | `NAME --seed FILE\|-` | Validate and register a technology or field from a JSON seed. `NAME` is 2-31 lower-case letters, digits or `-`, and not `aws`. Seed shape: [data-structures.md](../references/data-structures.md#track-seed-track-export-kind-arch-tracks). |
-| `arch init` | `[--track NAME ...]` | Create or extend the catalog and progress. Default: the enabled tracks, else `aws`. Tier 1 is derived from the resumes (or `profile tier1`). |
-| `arch status` | none | Cards by confidence, per area (per track and area when several tracks are enabled). |
-| `arch next` | `[--track T] [--area A] [--tier N] [--kind K] [--order O]` | The next card to drill. `K`: `service pair scenario case role-play`. `O`: `default` or `random`. |
-| `arch list` | `[--track T] [--area A] [--tier N] [--kind K]` | List cards. |
-| `arch show` | `ID` | Print a card with its track and notes, a case's situation or a role-play's part and goal, the track's country, and the rubric to grade against; service, pair and scenario cards also show their lifecycle facts. |
-| `arch set` | `ID confidence\|notes VALUE` | Confidence is `0` none, `1` some gaps, `2` solid. |
-| `arch for-jd` | `JD` | Cards the job description mentions, weakest first (across all tracks). |
-| `arch stale` | `[--months N]` | Cards whose facts are unverified or older than N months (default 6). |
-| `arch refresh` | `ID --status S --source URL [--date D] [--note T] [--change "DATE\|SUMMARY"]...` | Record researched facts. `S`: `active maintenance sunset unverified`. `--source` is required and must be an https page on one of the card's track hosts. |
+| `cards families` | none | List the role families (people, design, strategy, product, delivery, finance, sales and marketing, operations, engineering): who each fits, example focus areas, where its facts come from, and the rubric each uses by default. Read-only; needs no database. |
+| `cards tracks` | none | List the tracks available to drill, which are enabled, and each one's family. |
+| `cards track add` | `NAME --seed FILE\|-` | Validate and register a technology or field from a JSON seed. `NAME` is 2-31 lower-case letters, digits or `-`, and not `aws`. Seed shape: [data-structures.md](../references/data-structures.md#track-seed-track-export-kind-cards-tracks). |
+| `cards init` | `[--track NAME ...]` | Create or extend the catalog and progress. Default: the enabled tracks; with none enabled, the command fails and names how to choose a track (no track is loaded by default). Tier 1 is derived from the resumes (or `profile key-topics`). |
+| `cards status` | none | Cards by confidence, per area (per track and area when several tracks are enabled). |
+| `cards next` | `[--track T] [--area A] [--tier N] [--kind K] [--order O]` | The next card to drill. `K`: `topic pair scenario case role-play`. `O`: `default` or `random`. |
+| `cards list` | `[--track T] [--area A] [--tier N] [--kind K]` | List cards. |
+| `cards show` | `ID` | Print a card with its track and notes, a case's situation or a role-play's part and goal, the track's country, and the rubric to grade against; topic, pair and scenario cards also show their lifecycle facts. |
+| `cards set` | `ID confidence\|notes VALUE` | Confidence is `0` none, `1` some gaps, `2` solid. |
+| `cards for-jd` | `JD` | Cards the job description mentions, weakest first (across all tracks). |
+| `cards stale` | `[--months N]` | Cards whose facts are unverified or older than N months (default 6). |
+| `cards refresh` | `ID --status S --source URL [--date D] [--note T] [--change "DATE\|SUMMARY"]...` | Record researched facts. `S`: `active maintenance sunset unverified`. `--source` is required and must be an https page on one of the card's track hosts. |
 
 `--tier N` keeps cards of tier N or lower (`--tier 2` = tiers 1 and 2). `--area` matches part of the area name.
 
@@ -156,13 +160,28 @@ Leadership questions, stored in the database. Each question holds the user's pri
 |---|---|---|
 | `lead init` | none | Create or extend the questions and progress (never overwrites answers). |
 | `lead status` | none | Confidence per category, and employers whose scope facts (reports, team, budget) are still missing. |
-| `lead next` | `[--category C] [--order default\|random]` | The next question. |
-| `lead list` | `[--category C] [--target COMPANY]` | List questions. With `--target`, each question shows the company values it matches and how; questions that match none are listed separately, and values that need judgment come last with their typical questions. Read-only. |
+| `lead next` | `[--category C] [--audience everyone] [--order default\|random]` | The next question. `--audience everyone` leaves out the questions only people leaders are asked. |
+| `lead list` | `[--category C] [--audience everyone] [--target COMPANY]` | List questions (`--audience` as for `lead next`). With `--target`, each question shows the company values it matches and how; questions that match none are listed separately, and values that need judgment come last with their typical questions. Read-only. |
 | `lead show` | `ID [--target COMPANY]` | The question, profile facts, candidate stories and saved answers; with `--target`, the company values it matches and their typical questions. |
 | `lead set` | `ID principle\|notes\|confidence VALUE` | `principle` is the candidate's approach to the leadership topic, in the user's words. |
 | `lead example` | `ID COMPANY FIELD VALUE` | `FIELD`: `situation task action result metric`. `COMPANY` is any employer in the resume data. Blank values are not counted; the target is up to three examples per question, fewer with fewer employers. |
 | `lead skip` / `lead unskip` | `ID COMPANY [REASON]` | Mark an employer as not applicable for a question (never had that responsibility, no real example yet), in the user's own words; it counts as covered and shows as `N not applicable`. A real example replaces the mark; `skip` is refused when an example exists. |
 | `lead profile` | `show` or `set COMPANY FIELD VALUE` | Factual scope per employer. `FIELD`: `title direct_reports indirect_team team_composition budget stakeholders reporting_to cadence notes`. Values come from the user, never guessed. |
+
+### `questions`
+
+| Command | Arguments | Purpose |
+| --- | --- | --- |
+| `questions list` | `[ROLE]` | List saved questions with their labels and each role's research status. |
+| `questions show` | `ID` | Show the wording, source, evidence and confidence. |
+| `questions save` | `ROLE --seed FILE` | Read a JSON object with a `questions` list from a file or standard input (`-`). Each entry needs `question` and `source`. An optional local `id` can identify an entry for updates. The command saves the whole batch together. |
+| `questions none-found` | `ROLE` | Date a completed search that found no qualifying sources. |
+| `questions stale` | `[ROLE]` | List citations and unsuccessful searches older than the research window. |
+| `questions remove` | `ID` | Remove a question and its current progress. Existing sessions retain their logs. |
+| `questions personal` | `ROLE [--jd FILE] [--requirement NAME] [--count N]` | Save up to 10 prompts by default, based on resume claims and gaps. With a posting file or standard input, repeat `--requirement` for requirements to check beyond stored skills. |
+| `questions set` | `ID --confidence 0\|1\|2` | Record practice confidence and the date. |
+
+Cited entries use `research` or `company` and require `link`, `quote`, `pulled` and `vetted: true`. Local entries use `general` or `personal`. A personal entry references one resume `bullet` ID or posting `requirement`. The `rq:` prefix is reserved for role-question IDs.
 
 ### `sessions`
 
@@ -170,7 +189,7 @@ Resumable practice sessions, stored in the database. A session keeps the complet
 
 | Subcommand | Arguments and options | What it does |
 |---|---|---|
-| `sessions new` | `TITLE [--mode M] [--topic T] [--order O] [--category C] [--jd FILE] [--track T] [--area A] [--tier N] [--kind K] [--company C] [--count N] [--only-open] [--due]` | Start a session with a queue of items. Unfinished stories and cards, leadership questions and cards that are not solid come first; finished stories and solid items follow (solid items not drilled for 30 days before recently solid ones), so strong material is still rehearsed and nothing saved changes. `--only-open` queues only the unfinished and weak ones. `--mode`: `architecture`, `stories`, `jd`, `leadership`, `tutor` (default: `jd` when `--jd` is given, else `architecture`; `--jd` with another mode is an error). `--topic` (tutor mode only): `architecture`, `leadership` or `stories`. `--count` is the queue length (default 10). A jd session takes a card and a story in turn, so the count cannot leave one kind out; when one kind runs out the other fills the rest. The start message gives the number of each kind queued and how many matching items the count left out. The filters apply to the matching mode, jd mode included; a job posting matches service cards only, so `--jd` accepts no `--kind` other than `service`. `--tier N` means tier N or lower. `--due` queues only the items due for a retest (the same set as `readiness --due`; with no `--mode` and no `--jd` it covers cards, leadership questions and stories, oldest first, stored with the mode `retest`, and a filter such as `--tier` limits only the kind it belongs to; with a `--mode` it queues only that mode's due items; says so and creates nothing when none is due; cannot be combined with `--only-open`). The solid-card aging in the default queue follows the stored retest window. `--target COMPANY` names a researched company (`--company` is one of the user's own employers): the queue holds the same items, with stories and leadership questions that match a company value by theme first, then by hint word, then the rest (more matching values first; with `--order random`, shuffled inside each group); architecture cards keep their places; `--count` cuts after this ordering, and with `--due` the item due longest comes first inside a group. An unknown company creates no session. `--style S` records the session's answer style (default: the profile's `answer_style`, then `star`); a saved default company is never applied here. |
+| `sessions new` | `TITLE [--mode M] [--topic T] [--role ROLE] [--order O] [--category C] [--audience everyone] [--jd FILE] [--track T] [--area A] [--tier N] [--kind K] [--company C] [--count N] [--only-open] [--due]` | Start a session with a queue of items. Unfinished stories and cards, leadership questions and cards that are not solid come first; finished stories and solid items follow (solid items not drilled for 30 days before recently solid ones), so strong material is still rehearsed and nothing saved changes. `--only-open` queues only the unfinished and weak ones. `--mode`: `knowledge`, `stories`, `jd`, `leadership`, `questions`, `tutor` (default: `jd` when `--jd` is given, else `knowledge`; `--jd` with another mode is an error). `--topic` (tutor mode only): `knowledge`, `leadership`, `stories` or `questions`. Both question modes require `--role ROLE`. `--count` is the queue length (default 10). A jd session takes a card and a story in turn, so the count cannot leave one kind out; when one kind runs out the other fills the rest. The start message gives the number of each kind queued and how many matching items the count left out. The filters apply to the matching mode, jd mode included; a job posting matches topic cards only, so `--jd` accepts no `--kind` other than `topic`. `--tier N` means tier N or lower. `--due` queues only the items due for a retest (the same set as `readiness --due`; with no `--mode` and no `--jd` it covers cards, leadership questions, role questions and stories, oldest first, stored with the mode `retest`, and a filter such as `--tier` limits only the kind it belongs to; with a `--mode` it queues only that mode's due items; says so and creates nothing when none is due; cannot be combined with `--only-open`). The solid-card aging in the default queue follows the stored retest window. `--target COMPANY` names a researched company (`--company` is one of the user's own employers): the queue holds the same items, with stories and leadership questions that match a company value by theme first, then by hint word, then the rest (more matching values first; with `--order random`, shuffled inside each group); role-knowledge cards keep their places; `--count` cuts after this ordering, and with `--due` the item due longest comes first inside a group. An unknown company creates no session. `--style S` records the session's answer style (default: the profile's `answer_style`, then `star`); a saved default company is never applied here. |
 | `sessions list` | none | List sessions, with each one's style and company. |
 | `sessions resume` | `ID [--style S]` | What was covered, the last answers and the next item. A queued item whose card, question or story was removed is reported as unavailable and skipped. For a company session it also shows the style in force, what the company's graders look for beside the next story or question, and the values still to cover with their typical questions; when the company's profile was removed it says so. `--style` changes the session's style from then on. |
 | `sessions log` | `ID ITEM --question Q --answer A\|- [--grade G] [--confidence 0\|1\|2] [--quiz] [--style S]` | Record one answered item. `--answer -` reads the full answer from stdin. `--quiz` (tutor mode) says a quiz was answered correctly and needs `--grade` and `--confidence 2`. An item that does not exist, including a queued item that was removed, is refused until it exists again. A story or leadership answer records the session's style (or `--style` for this one answer) and its company; a card answer records neither. |

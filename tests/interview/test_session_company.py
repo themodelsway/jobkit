@@ -56,13 +56,13 @@ class CompanySessionTests(TargetCase):
         self.assertEqual(len(self.queue(sid)), 5)
         self.assertIn("No story or leadership question in this queue matches Other Co yet.", out)
 
-    def test_architecture_cards_keep_their_order(self):
+    def test_role_knowledge_cards_keep_their_order(self):
         plain = self.new_session()
         code, out, err = self.cli(sessions.main, "new", "Cards", "--count", "3", "--target", "Company X")
         self.assertEqual(code, 0, err)
         sid = out.split("Started session ")[1].split(" ")[0]
         self.assertEqual(self.session(sid)["queue"], self.session(plain)["queue"])
-        self.assertIn("does not change the order of architecture cards", out)
+        self.assertIn("does not change the order of role-knowledge cards", out)
 
     def test_with_a_job_description_cards_keep_their_places_and_stories_are_ordered(self):
         mixed = [{"id": "c1", "kind": "card"}, {"id": "s1", "kind": "story"}, {"id": "c2", "kind": "card"},

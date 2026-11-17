@@ -17,7 +17,7 @@ def python_item(*bullets: dict[str, Any]) -> dict[str, Any]:
     """The code-pass item for Python when one company holds the given bullets."""
     fixture = facts()
     fixture.companies["acme"]["bullets"] = list(bullets)
-    fixture.companies["globex"]["bullets"] = []
+    fixture.companies["acme-2"]["bullets"] = []
     return {i["id"]: i for i in cp.code_pass("Python is required.", fixture)}["code:skill:python"]
 
 
@@ -123,22 +123,11 @@ class BuildListingTests(unittest.TestCase):
         self.assertEqual(br.set_aside_lines([company], ["Python"]), [])
 
 
-class LeadFilterTests(unittest.TestCase):
-    def test_flagged_ignored_and_denied_lines_are_not_leads(self):
-        ok = line("Used Python for reports", id="ok", skills=["Python"])
-        flagged = line("Python ETL jobs", id="fl", skills=["Python"], needs_review=True)
-        ignored = line("Python scripts", id="ig", skills=["Python"], ignored=True)
-        denied = line("No production use of Python", id="dn", skills=["Python"])
-        training = line("Completed a Python bootcamp", id="tr", skills=["Python"])
-        got = [b["id"] for b in evidence.lead_lines([ok, flagged, ignored, denied, training], "Python")]
-        self.assertEqual(got, ["ok", "tr"])
-
-
 class ReportTests(MatchCase):
     def edit(self, text: str):
         def change(companies):
             companies["acme"]["bullets"][0]["text"] = text
-            companies["globex"]["bullets"] = []
+            companies["acme-2"]["bullets"] = []
         return change
 
     def run_with(self, text: str):
@@ -165,7 +154,7 @@ def python_facts(*bullets: dict[str, Any]):
     """Facts where one company holds the given bullets, all tagged Python."""
     fixture = facts()
     fixture.companies["acme"]["bullets"] = [{**b, "skills": ["Python"]} for b in bullets]
-    fixture.companies["globex"]["bullets"] = []
+    fixture.companies["acme-2"]["bullets"] = []
     return fixture
 
 

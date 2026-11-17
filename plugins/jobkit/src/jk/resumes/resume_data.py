@@ -16,17 +16,12 @@ TEXT_DIR: Final[Path] = common.output_dir()
 MISSING_DATA: Final[str] = "No resume data yet: run `process-resumes` first."
 
 
-# Themes the tools act on (lead questions, typical questions, JD matching) and the summary angles `for-jd` ranks by.
+# Built-in themes: role-neutral leadership and delivery themes only. Every other theme and every summary
+# positioning word is the user's own vocabulary, kept in the curation (`curate add theme-word|positioning-word`).
 # `tests/resumes/test_curate.py` keeps these equal to the tables that use them.
-KNOWN_THEMES: Final[tuple[str, ...]] = (
-    "topic-01", "topic-02", "topic-03", "topic-04", "topic-05", "budget-financial",
-    "topic-06", "topic-07", "delivery-leadership", "topic-08", "executive-advisory", "topic-09",
-    "topic-10", "topic-12", "topic-11", "governance-compliance", "topic-13", "mentoring",
-    "topic-14", "topic-15", "topic-16", "topic-17", "topic-18", "topic-19", "topic-20",
+BUILTIN_THEMES: Final[tuple[str, ...]] = (
+    "budget-financial", "delivery-leadership", "executive-advisory", "governance-compliance", "mentoring",
     "stakeholder-alignment", "strategy-roadmap", "team-leadership", "vendor-management", "workshops",
-)
-SUMMARY_ANGLES: Final[tuple[str, ...]] = (
-    "focus-1", "focus-2", "focus-3", "focus-4", "topic-17",
 )
 LINE_LIMIT: Final[int] = 200        # most characters in one resume line (an experience line)
 LINE_WARN: Final[int] = 250         # beyond this a line is far over the limit and is flagged as such
@@ -125,6 +120,13 @@ class ResumeData(TypedDict):
     profile: ResumeProfile
 
 
+def wordings_of(bullet: Mapping[str, Any]) -> list[str]:
+    """Every stored wording of one line, each once: its text first, then its variants, then the wording each resume
+    file uses. A requirement that any of them shows is shown by the line."""
+    per_file = [w for found in (bullet.get("wordings") or {}).values() for w in found]
+    return list(dict.fromkeys(w for w in [bullet["text"], *bullet.get("variants", []), *per_file] if w))
+
+
 def empty_profile() -> ResumeProfile:
     """A profile with every list present and empty."""
     return {"summaries": [], "profile_points": [], "education": [], "certifications": [], "projects": [],
@@ -157,8 +159,34 @@ def load_curated() -> dict[str, Any]:
 
 
 def load_themes_file() -> dict[str, Any]:
-    """The user's bullet themes, ignored fragments and summary angles, or empty ones."""
+    """The user's bullet themes, ignored fragments, summary positioning and own vocabulary, or empty ones."""
     return tables.load_curation("themes") or {"themes": {}, "ignore": [], "summary_angles": {}}
+
+
+def word_hints(word: str, hints: Iterable[str]) -> list[str]:
+    """The lowercase phrases that show a vocabulary word in a job description: its hints, or the word itself
+    (hyphens read as spaces) when it has none."""
+    return [h.lower() for h in hints] or [word.replace("-", " ")]
+
+
+def user_theme_words() -> dict[str, list[str]]:
+    """The user's own themes, each with the phrases that show it in a job description."""
+    return {w: word_hints(w, h) for w, h in load_themes_file().get("theme_words", {}).items()}
+
+
+def positioning_words() -> dict[str, list[str]]:
+    """The user's summary positioning words, each with the phrases that show it in a job description."""
+    return {w: word_hints(w, h) for w, h in load_themes_file().get("positioning_words", {}).items()}
+
+
+def known_themes() -> tuple[str, ...]:
+    """The themes the tools act on: the built-in ones, then the user's own."""
+    return BUILTIN_THEMES + tuple(sorted(set(user_theme_words()) - set(BUILTIN_THEMES)))
+
+
+def theme_questions() -> dict[str, list[str]]:
+    """The user's own typical questions per theme."""
+    return dict(load_themes_file().get("theme_questions", {}))
 
 
 def orphan_curation(companies: Mapping[str, Company], profile: ResumeProfile, themes: Mapping[str, Any],
@@ -170,7 +198,7 @@ def orphan_curation(companies: Mapping[str, Company], profile: ResumeProfile, th
     summaries = {s["id"] for s in profile.get("summaries", [])}
     orphans = [f"theme {i}" for i in themes.get("themes", {}) if i not in bullets]
     orphans += [f"ignore {i}" for i in themes.get("ignore", []) if i not in bullets]
-    orphans += [f"summary angle {i}" for i in themes.get("summary_angles", {}) if i not in summaries]
+    orphans += [f"summary positioning {i}" for i in themes.get("summary_angles", {}) if i not in summaries]
     orphans += [f"short wording {i}" for i in (curated or {}).get("short_wording", {}) if i not in bullets]
     return sorted(orphans)
 

@@ -15,7 +15,7 @@ Requests use plain language and fall into these categories:
 
 For a PDF with a text layer, the parser output can be compared with a reading of the page images; the skill tells the agent to do this only when the user asks. The agent goes through the differences one at a time. Confirmed corrections are stored in the data folder and used until the PDF changes; the jobkit commands do not write to the original resume file.
 
-**Checking the result.** The skill reports what it found: employers, lines and skills, and anything that needs a human look, such as conflicting figures. A figure known to be wrong can be flagged, so lines that use it are marked and left out of matching.
+**Checking the result.** The skill reports what it found: employers, lines and skills, and anything that needs a human look. The skill tells the agent to review the data for any potential inconsistency between what the resumes say about the same facts, such as contact details, employer names, titles, dates, locations and numbers, and to ask the user about each one. Differences explained by when a resume was written or by tailoring for one posting are not raised. Both versions can be reviewed and reconciled or kept as a variant. A reconciled value is saved with the jobkit command that stores that kind of data; when no command can correct a value, such as a date, a title or a location, the user corrects it in the resume file, and the skill tells the agent to offer to note it as an open item.
 
 ## Tailoring a resume (early preview)
 
@@ -53,7 +53,7 @@ Builds the resume data from every `.pdf`, `.docx`, `.md` and `.txt` resume under
 | (none) | Parse new or changed resumes and merge them in. |
 | `--survey` | Show what each resume parses into; write nothing. |
 | `--force` | Ignore the ledger and rebuild everything; also accepts a folder emptied on purpose. |
-| `process-resumes curate themes` | List the themes and summary angles the tools act on. `curate add theme` warns about any other theme; `curate add summary-angle` refuses it. |
+| `process-resumes curate themes` | List the themes and summary positioning words the tools act on: the built-in themes (role-neutral leadership and delivery themes) and the user's own words. `curate add theme` warns about any other theme; `curate add summary-positioning` refuses any word that is not one of the user's positioning words. |
 | `process-resumes curate list` `[KIND]` | List the curation entries (all kinds, or one). |
 | `process-resumes curate add` `KIND VALUE...` | Add or replace one curation entry. With `-` as the only value, adds one entry per line of standard input (quotes group words, `#` starts a comment) in one save: a bad line saves nothing. `--issued YYYY-MM` and `--expires YYYY-MM` apply to `certification`. |
 | `process-resumes curate rm` `KIND VALUE...` | Remove one entry. For `extra-skill`, a second value removes one skill instead of the whole group. |
@@ -70,7 +70,7 @@ Curation (`process-resumes curate`) records the user's decisions about the data;
 |---|---|---|
 | `certification` | `NAME [--issued] [--expires]` | Certifications shown on built resumes. Once there is any entry, the curated list replaces the certifications parsed from the resumes (`add` says so); with no entries the parsed ones are used. |
 | `education` | `TEXT` | Education lines shown on built resumes. Replaces the parsed education once there is any entry, and the parsed education is back when the last entry is removed. |
-| `wrong-metric` | `FIGURE` | Bullets containing this figure are flagged `needs_review` and hidden from `for-jd` by default. |
+| `flagged-number` | `NUMBER` | Lines that state this number are flagged `needs_review` and hidden from `for-jd` by default. The number is matched whole: `12` matches "a team of 12" and "12%" but not "120" or "1.25", and `40%` does not match "140%". |
 | `skill-merge` | `FROM TO` | Spell the skill `FROM` as `TO`. |
 | `skill-drop` | `NAME` | Not a skill; left out. |
 | `tag-only` | `NAME` | A quality word kept as a bullet tag, never a skill. |
@@ -78,7 +78,10 @@ Curation (`process-resumes curate`) records the user's decisions about the data;
 | `extra-skill` | `GROUP NAME [ALIAS ...]` | A skill no resume mentions, added to a group. |
 | `theme` | `BULLET_ID THEME...` | Themes of one bullet (replaces the inferred ones). |
 | `ignore` | `BULLET_ID` | A fragment, not a bullet; left out. |
-| `summary-angle` | `SUMMARY_ID ANGLE...` | The angles one opening summary suits. |
+| `summary-positioning` | `SUMMARY_ID POSITIONING...` | The positioning of one opening summary: one or more of the user's positioning words. |
+| `theme-word` | `WORD [HINT...]` | A theme of the user's own, in lowercase words joined by hyphens. Each `HINT` is job description wording that shows the theme; without hints, the word itself is looked for, with hyphens read as spaces (`topic-a` matches "topic a"). |
+| `positioning-word` | `WORD [HINT...]` | A summary positioning of the user's own, with hints as for `theme-word`. `for-jd` ranks the opening summaries by how often the job description uses their positioning words' hints, with a small penalty for each positioning word it does not mention. No positioning words ship with jobkit. |
+| `theme-question` | `THEME QUESTION...` | Typical interview questions for a theme, used by `prep` in place of the built-in ones. |
 | `short-wording` | `BULLET_ID TEXT` | The approved shorter wording of one line, used instead of the stored line in built resumes (the stored line is never changed). Refused when it is over 200 characters, drops or adds a figure, or the id is unknown. |
 
 A bullet keeps its id through rebuilds while its claim continues, so only a real change (different numbers, or a bullet no longer similar) can leave a `theme` or `ignore` entry pointing at nothing; `query-resume review` and the end of a rebuild list such entries and never remove them.
@@ -105,7 +108,7 @@ Writes a draft Markdown resume from stored resume evidence. The draft contains a
 
 An employer with no usable bullet (for example, every bullet is flagged) still appears with its latest role's title and dates, and the build report names it. No employer is printed with nothing under it. Every bullet comes from the resume data. No claim is repeated across employers or within one: "70 percent" and "70%" are the same figure, two lines on the same topic with the same figure count as one claim, and two different results that share a figure are both kept.
 
-The build report lists the posting's skills with no supporting bullet and, separately, skills with evidence that the draft does not show. It also lists, with the line text, every line that is not demonstrated for a requested skill (the line says the skill was not used at work) or that reads like training (the line still counts and may appear in the draft, but whether the skill was also used at work needs confirmation). These lines require review before the draft is approved.
+Every stored wording of a line counts as evidence: its text, its variants and the wording each resume file uses. A requirement that only an older or tailored resume states is therefore not a gap, and the build prints that wording of the line (when it fits 200 characters and no approved wording applies) and lists the line in its report. The build report lists the posting's skills with no supporting bullet and, separately, skills with evidence that the draft does not show. It also lists, with the line text, every line that is not demonstrated for a requested skill (the line says the skill was not used at work) or that reads like training (the line still counts and may appear in the draft, but whether the skill was also used at work needs confirmation). These lines require review before the draft is approved.
 
 The saved header (`profile header set`) supplies the name and contact lines; the build is repeated after saving it. Each build is a draft and ends with a review checklist. Next to the resume, `<name>.build.json` records the job description fingerprint, settings, chosen bullet ids and gaps.
 

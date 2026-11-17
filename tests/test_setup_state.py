@@ -35,7 +35,7 @@ class SetupStageTests(HomeCase):
 
     def test_saving_what_they_prepare_for_makes_it_ready(self):
         add_resumes()
-        self.assertEqual(profile.main(["set", "preparing_for", "Backend engineer, Python"]), 0)
+        self.assertEqual(profile.main(["set", "preparing_for", "HR business partner, people analytics"]), 0)
         self.assertEqual(setup_state.setup_stage(), "ready")
         self.assertEqual(jobkit("status", "--setup"), (0, "ready\n", ""))
 
@@ -43,9 +43,9 @@ class SetupStageTests(HomeCase):
         add_resumes()
         practice_tables.replace_questions([{"id": "q1", "text": "Tell me about a conflict."}])   # as after `lead init`
         self.assertEqual(setup_state.setup_stage(), "no-target")
-        with store.transaction() as conn:                                                     # and `prep init`, `arch init`
+        with store.transaction() as conn:                                                     # and `prep init`, `cards init`
             store.meta_put(conn, "prep.stories", {"schema_version": 1})
-            store.meta_put(conn, "arch.catalog", {"tracks": []})
+            store.meta_put(conn, "cards.catalog", {"tracks": []})
         self.assertEqual(setup_state.setup_stage(), "no-target", "only the step's last save marks it done")
 
     def test_every_answer_is_one_of_the_four_words(self):

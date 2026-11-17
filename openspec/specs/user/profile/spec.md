@@ -6,7 +6,7 @@ Hold per-user settings in the database under the home folder so committed files 
 ## Requirements
 
 ### Requirement: Profile files
-The system SHALL keep the settings (resume root, resume folders, optional name and tier-1 services) and the employers found by the first scan (name and regex) in the database, and the header (name and contact line for generated resumes, saved with `profile header set NAME CONTACT_LINE`) in the database; an older `profile/header.md` file is still read when no header is saved.
+The system SHALL keep the settings (resume root, resume folders, optional name and key topics) and the employers found by the first scan (name and regex) in the database, and the header (name and contact line for generated resumes, saved with `profile header set NAME CONTACT_LINE`) in the database; an older `profile/header.md` file is still read when no header is saved.
 
 #### Scenario: Init
 - **WHEN** `init --resume-root PATH` is run
@@ -68,15 +68,15 @@ The system SHALL keep the words that must never be committed (products, clients,
 - **WHEN** `profile terms check` is run on a machine with no database
 - **THEN** it prints a message that the check was skipped and exits 0
 
-### Requirement: Tier-1 services
-The user SHALL be able to pin their own tier-1 services, for any track and matched by name, with `tier1`, and running it with no arguments SHALL show the current list.
+### Requirement: Key topics
+The user SHALL be able to pin their own key topics (tier 1), for any track and matched by name, with `key-topics`, and running it with no arguments SHALL show the current list.
 
-#### Scenario: Pin services
-- **WHEN** `tier1 SERVICE ...` is run
-- **THEN** those services replace the pinned list and are used instead of the ones derived from the resume scan
+#### Scenario: Pin topics
+- **WHEN** `key-topics TOPIC ...` is run
+- **THEN** those topics replace the pinned list and are used instead of the ones derived from the resume scan
 
 #### Scenario: Show list
-- **WHEN** `tier1` is run with no arguments
+- **WHEN** `key-topics` is run with no arguments
 - **THEN** the current list is printed
 
 ### Requirement: Retest window
@@ -154,3 +154,12 @@ The profile SHALL hold an optional default target company, set with `set` and sh
 #### Scenario: Clear the default
 - **WHEN** `set target_company ""` is run
 - **THEN** `status` shows no default company
+
+### Requirement: Role-question research preference
+
+The profile SHALL accept `question_research` as `yes`, `no` or `unset` and show the saved choice or that the user has not been asked.
+
+#### Scenario: Changing the answer
+
+- **WHEN** the user sets the choice to `no` and later clears it with `unset`
+- **THEN** the saved preference first reads `no` and then reads as unanswered

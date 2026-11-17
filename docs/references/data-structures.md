@@ -11,7 +11,7 @@ Rules that hold for all data:
 
 | Where | Holds | Written by |
 |---|---|---|
-| the database (`data/jobkit.db`) | settings, resume data, curation, stories, drill cards, leadership answers, sessions, researched companies, match results | `profile`, `process-resumes`, `prep`, `arch`, `lead`, `sessions`, `target`, `match-score`, `jobkit` (`init`, `backup --restore`) |
+| the database (`data/jobkit.db`) | settings, resume data, curation, stories, role-knowledge cards, leadership answers, sessions, researched companies, match results | `profile`, `process-resumes`, `prep`, `cards`, `lead`, `sessions`, `target`, `match-score`, `jobkit` (`init`, `backup --restore`) |
 | `header` setting | your name and contact line for built resumes (saved with `profile header set`) | you |
 | `output/` | raw extracted text and built resumes | `process-resumes`, `build-resume` |
 | `backup/` | database backups | `jobkit backup` |
@@ -22,7 +22,7 @@ Rules that hold for all data:
 
 All data lives in one SQLite database under the home folder (`~/.jobkit`, or `.jobkit` in your user folder on Windows, or `JOBKIT_HOME`). It is changed only by the commands, and you look at it with `jobkit export`. Each command's changes are stored together or not at all.
 
-A record table keeps the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a link, a sort or filter, a listing); every other field is in `body` only, and a field that is a column is not repeated in `body`. So each field has one stored value, and every command that shows it shows the same value. The one exception is `session_log`, whose entries can never be changed, so its copies cannot disagree. The shapes below are what `jobkit export` shows, with the column fields and `body` joined. Confidence is checked when written: only 0, 1 or 2 is stored. The schema version is in `PRAGMA user_version`; `jobkit status` shows it. Step 13 added the `target_company` and `target_fact` tables and two log columns. Step 12 added the `term` table. Step 11 moved every field to one place and removed the `bullet_source` table; an upgrade checks that the copies agree first, and stops without changing anything if they do not.
+A record table keeps the record as JSON in `body`. A field is a real column only when SQL needs it (a key, a link, a sort or filter, a listing); every other field is in `body` only, and a field that is a column is not repeated in `body`. So each field has one stored value, and every command that shows it shows the same value. The one exception is `session_log`, whose entries can never be changed, so its copies cannot disagree. The shapes below are what `jobkit export` shows, with the column fields and `body` joined. Confidence is checked when written: only 0, 1 or 2 is stored. The schema version is in `PRAGMA user_version`; `jobkit status` shows it. Step 15 added the three tables for role questions. Step 14 renamed the stored knowledge-card values. Step 13 added the `target_company` and `target_fact` tables and two log columns. Step 12 added the `term` table. Step 11 moved every field to one place and removed the `bullet_source` table; an upgrade checks that the copies agree first, and stops without changing anything if they do not.
 
 | Table | One row is | Notes |
 |---|---|---|
@@ -33,9 +33,9 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | `session_log` | one logged answer | **Append-only**: the database refuses updates and deletes. `answered` is 1 when the answer is not empty; `tutor` and `quiz` mark lessons and passed quizzes. `readiness` is computed from these rows. Step 13 added the nullable `style` and `company` columns, which are empty for entries logged before it and for card entries. |
 | `target_company` | a researched company | Added by schema step 13. Columns: `key` (the name in lower case, so names compare without regard to letter case), `name`, `outcome` (`found` or `none found`), `researched` (the date), `style` and `style_basis` (the suggested answer style and whether it is `stated` or `inferred`); `body` has `style_facts`, the ids of the facts the suggestion rests on. Removing a company removes its facts. |
 | `target_fact` | one researched fact about a company | `company_key`, `id`, `position`, `kind` (`value`, `round`, `grading`, `question`, `questioning`), `link`, `label` (`company-references` or `othersite-references`), `pulled` (the date the page was read), `vetted` (1 once the agent confirmed it); `body` has `wording`, `quote` and, for a value, `name`, `themes` and `hints`; a typical question may name its value in `value`. |
-| `card` | an architecture card (service, decision pair or scenario) | Columns: `id`, `position`; `body` has `track`, `kind`, `area`, `name`, `tier`, `aliases`, `members`, `lifecycle`, `recent_changes`, `verified_on`. |
+| `card` | a role-knowledge card (topic, decision pair, scenario, case or role-play) | Columns: `id`, `position`; `body` has `track`, `kind`, `area`, `name`, `tier`, `aliases`, `members`, `lifecycle`, `recent_changes`, `verified_on`. |
 | `card_progress` | your progress on one card | `card_id` (must be a card); `body` has `confidence` (0 to 2), `last_drilled`, `notes` and `links` to resume bullets. Removing a card removes its progress. |
-| `track` | a custom technology track | `name`; `body` is the seed (services, pairs, scenarios, documentation hosts). |
+| `track` | a custom track for a field or technology | `name`; `body` is the seed (topics, pairs, scenarios, cases, role-plays, source hosts). |
 | `engagement` | a real project | Columns: `id`, `position`; `body` has `company`, `title`, `updated`, `my_role`, `period`, `summary`, `notes`, `counters`. |
 | `fact` | a fact about an engagement | `engagement_id`, `id` (`f1`, `f2`, ...; an id is never reused), `position`; `body` has `basis`, `text`, `source`, `note`, `added`. |
 | `decision` | a decision on an engagement | `engagement_id`, `id` (`d1`, ...), `position`; `body` has `ownership`, `what`, `why`, `alternatives`, `tradeoffs`. |
@@ -45,7 +45,10 @@ A record table keeps the record as JSON in `body`. A field is a real column only
 | `lead_question` | a leadership question | `id`, `position`; `body` has `category`, `question` and `themes`. |
 | `lead_progress` | your answer to one question | `question_id` (must be a question); `body` has `confidence` (0 to 2), `last_drilled`, `principle`, `notes` and one STAR `examples` entry per company. |
 | `lead_company_fact` | factual scope for one employer | `company_id`; `body` has team sizes, budget and similar facts you stated. |
-| `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `tier1_services`, `reassess_days`, `years_experience`, `answer_style`, `research_days`, `target_company`, `preparing_for`, `header`) and its JSON `value`. |
+| `role_research` | one role and its research outcome | `role_key` (normalized), `role`, `outcome` and optional research date. |
+| `role_question` | one question for a role | `id`, `role_key`, `position`, `source`, optional `link` and `pulled`, `label` and `body`. |
+| `question_progress` | one question's practice progress | `question_id` and `body` with `confidence` and `last_drilled`. |
+| `setting` | one profile setting | `key` (`resume_root`, `resume_dirs`, `name`, `key_topics`, `reassess_days`, `years_experience`, `answer_style`, `research_days`, `question_research`, `target_company`, `preparing_for`, `header`) and its JSON `value`. |
 | `employer` | an employer found in the resumes | `id`, `position`; `body` has `name`, the match `regex` and, after a merge, `aliases`. Changed with `profile companies rename` and `merge`. |
 | `term` | a personal word that must never be committed | `text` (unique, any letter case), `kind`, `match` (`word`, `phrase`, `regex`), `ignored` (1 hides a derived term of that text). Only what has no other home is stored: products, clients, patterns and ignores. Your name, header contact details, resume folder and employer names are read from the `setting` and `employer` tables when checking. |
 | `open_item` | an open item or data note | `id`; `body` has `status` (`open`, `done`) and `text`. |
@@ -66,9 +69,9 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 
 ### Settings (`setting`; export kind `settings`)
 ```json
-{ "resume_root": "/path/to/resumes", "resume_dirs": ["2026"], "name": "Your Name", "tier1_services": ["Lambda"] }
+{ "resume_root": "/path/to/resumes", "resume_dirs": ["2026"], "name": "Your Name", "key_topics": ["Lambda"] }
 ```
-`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `tier1_services` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days`, `target_company` and `preparing_for` are set with `profile set` (see the manual); `target_company` holds the name of a researched company, and `preparing_for` what the user is preparing for. Code: `user/profile.py`.
+`resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `key_topics` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days`, `question_research`, `target_company` and `preparing_for` are set with `profile set` (see the manual); `target_company` holds the name of a researched company, and `preparing_for` what the user is preparing for. Code: `user/profile.py`.
 
 ### Employers (`employer`; export kind `employers`)
 `{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found on the first scan. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
@@ -77,7 +80,7 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 Name and contact line printed at the top of built resumes, saved with `profile header set NAME CONTACT_LINE` and shown with `profile header`. Contact details live only here, never in the resume data. An older `profile/header.md` file is still read when no header is saved.
 
 ### Personal terms (`term`; export kind `terms`)
-`[ { "text": "acme.ai", "kind": "product", "match": "phrase", "ignored": 0 } ]`. Managed with `profile terms`; see the [manual](../manual.md#for-contributors-keeping-personal-data-out-of-commits).
+`[ { "text": "acme.ai", "kind": "product", "match": "phrase", "ignored": 0 } ]`. Managed with `profile terms`; see [Keeping personal data out of commits](../contributing.md#keeping-personal-data-out-of-commits) in the contributor guide.
 
 ### Open items (`open_item`; export kind `open-items`)
 `[ { "id": 1, "text": "Confirm team size", "status": "open" } ]`. Status is `open` or `done`.
@@ -92,10 +95,10 @@ How resume text becomes data: each resume is split by employer, bullets are merg
 ```json
 {
   "id": "acme", "name": "Acme Corp", "aliases": [],
-  "roles": [ { "start": "2021-03", "end": null, "titles": ["Architect"], "subtitles": [], "clients": [], "sources": ["2026/a.docx"] } ],
+  "roles": [ { "start": "2021-03", "end": null, "titles": ["Lead Designer"], "subtitles": [], "clients": [], "sources": ["2026/a.docx"] } ],
   "bullets": [ {
-      "id": "acme-1a2b3c", "text": "Cut deploy time ...", "role_start": "2021-03",
-      "skills": ["Terraform"], "skills_manual": [], "themes": ["devops"], "metrics": ["40%"],
+      "id": "acme-1a2b3c", "text": "Cut checkout drop-off ...", "role_start": "2021-03",
+      "skills": ["Prototyping"], "skills_manual": [], "themes": ["mentoring"], "metrics": ["40%"],
       "sources": ["2026/a.docx"], "variants": ["near-identical wording"], "needs_review": false, "ignored": false } ]
 }
 ```
@@ -106,21 +109,21 @@ How resume text becomes data: each resume is split by employer, bullets are merg
 
 ### Skills (`skill`; export kind `resume-skills`)
 ```json
-{ "groups": { "Cloud": [ { "name": "Terraform", "aliases": ["TF"], "sources": ["2026/a.docx"] } ] },
+{ "groups": { "Design": [ { "name": "Prototyping", "aliases": ["Prototypes"], "sources": ["2026/a.docx"] } ] },
   "tag_only": ["Security", "Performance"] }
 ```
-Skills by group (Cloud, Languages, Leadership, ...). `tag_only` lists quality words kept as bullet tags.
+Skills by group (Design, People, Languages, Leadership, ...). `tag_only` lists quality words kept as bullet tags.
 
 ### The resume's own sections, no contact details (`resume_item`; export kind `resume-profile`)
 ```json
-{ "summaries": [ { "id": "sum-ab12cd", "text": "...", "angles": ["leadership"], "sources": ["..."] } ],
-  "headlines": ["placeholder"], "profile_points": ["..."], "education": ["..."],
+{ "summaries": [ { "id": "sum-ab12cd", "text": "...", "angles": ["<positioning-word>"], "sources": ["..."] } ],
+  "headlines": ["Product Manager"], "profile_points": ["..."], "education": ["..."],
   "certifications": [ { "name": "...", "issued": "2024-05", "expires": "2027-05" } ], "projects": ["..."] }
 ```
-`angles` say what a summary emphasizes, so `for-jd` can pick the best opening.
+`angles` hold a summary's positioning (what it emphasizes), so `for-jd` can pick the best opening.
 
 ### Overview (export kind `resume-index`)
-`{ "generated": "<timestamp>", "companies": [ { "id", "name", "bullets", "roles" } ], "skill_groups": { "Cloud": 12 }, "themes": ["devops"], "resumes": 8 }`. A summary used by `stats` and by `lead init`, which keeps only themes present here.
+`{ "generated": "<timestamp>", "companies": [ { "id", "name", "bullets", "roles" } ], "skill_groups": { "Design": 12 }, "themes": ["mentoring"], "resumes": 8 }`. A summary used by `stats` and by `lead init`, which keeps only themes present here.
 
 ### Scan ledger (`ledger`; export kind `resume-ledger`)
 `{ "<path relative to resume_root>": { "mtime": 1.7e9, "size": 40213, "sha256": "...", "processed_at": "<timestamp>", "kind": "resume" } }`. `kind` is `resume` or `other` (not a resume). Unchanged files (same size, mtime, hash) are skipped; entries for deleted or renamed files are pruned together with their bullets and sources.
@@ -135,13 +138,13 @@ Skills by group (Cloud, Languages, Leadership, ...). `tag_only` lists quality wo
 ### Certifications, skill rules and known-wrong figures (export kind `curated`)
 ```json
 { "certifications": [ { "name": "...", "issued": "2024-05", "expires": "2027-05" } ],
-  "review_if_metric_matches": ["40%"], "skill_merge": { "placeholder": "placeholder" },
-  "skill_drop": ["Misc"], "tag_only": ["Security"], "skill_group": { "ECS": "Cloud" } }
+  "review_if_metric_matches": ["40%"], "skill_merge": { "user interviews": "User Research" },
+  "skill_drop": ["Misc"], "tag_only": ["Security"], "skill_group": { "Prototyping": "Design" } }
 ```
 Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `skill_drop` removes a skill; `skill_group` assigns a group; `review_if_metric_matches` lists figures you know are wrong so their bullets are flagged. `query-resume review` reports ids here that no longer exist.
 
-### Bullet themes, ignored fragments and summary angles (export kind `curation-themes`)
-`{ "themes": { "<bullet-id>": ["devops"] }, "ignore": ["<bullet-id>"], "summary_angles": { "<summary-id>": ["leadership"] } }`. Which themes tag which bullet and what each summary emphasizes.
+### Bullet themes, ignored fragments and summary positioning (export kind `curation-themes`)
+`{ "themes": { "<bullet-id>": ["mentoring"] }, "ignore": ["<bullet-id>"], "summary_angles": { "<summary-id>": ["<positioning-word>"] }, "theme_words": { "<word>": ["<hint>"] }, "positioning_words": { "<word>": ["<hint>"] }, "theme_questions": { "<theme>": ["<question>"] } }`. Which themes tag which bullet, what each summary emphasizes, and the user's own vocabulary: theme and positioning words with the job description wording that shows them, and typical questions per theme.
 
 ---
 
@@ -171,8 +174,8 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
 ```json
 { "id": "acme-platform", "company": "acme", "title": "Platform migration", "my_role": "Lead", "period": "2022",
   "summary": "...", "notes": null,
-  "facts": [ { "id": "f1", "text": "12 engineers", "basis": "stated", "source": "https://...", "note": "...", "added": "<date>" } ],
-  "decisions": [ { "id": "d1", "what": "placeholder", "why": "...", "alternatives": ["EKS"], "tradeoffs": "...", "ownership": "mine" } ],
+  "facts": [ { "id": "f1", "text": "12 people", "basis": "stated", "source": "https://...", "note": "...", "added": "<date>" } ],
+  "decisions": [ { "id": "d1", "what": "Chose a queue", "why": "...", "alternatives": ["polling"], "tradeoffs": "...", "ownership": "mine" } ],
   "people": [ { "role": "Product owner", "note": "..." } ],
   "counters": { "f": 1, "d": 1 }, "updated": "<timestamp>" }
 ```
@@ -185,38 +188,38 @@ Survives every rebuild. `skill_merge` maps a spelling to its canonical name; `sk
 
 ---
 
-## Knowledge drill cards
+## Role-knowledge cards
 
-### Catalog (`card`; export kind `arch-catalog`)
+### Catalog (`card`; export kind `cards-catalog`)
 ```json
-{ "scenarios_note": "...", "tracks": ["aws", "acmedata"],
+{ "scenarios_note": "...", "tracks": ["people-ops"],
   "cards": [ {
-      "id": "acmedata-table-store", "track": "acmedata", "kind": "service", "area": "Storage",
-      "name": "Table Store", "tier": 2, "aliases": [], "members": [],
-      "lifecycle": { "status": "active", "date": "2026-01-15", "note": "...", "source": "https://docs.example.com/...", "seeded": false },
+      "id": "people-ops-leave-policy", "track": "people-ops", "kind": "topic", "area": "Policy",
+      "name": "Leave policy", "tier": 2, "aliases": ["PTO"], "members": [],
+      "lifecycle": { "status": "active", "date": "2026-01-15", "note": "...", "source": "https://handbook.example.org/...", "seeded": false },
       "recent_changes": [ { "date": "2026-02-01", "summary": "...", "source": "https://..." } ],
       "verified_on": "2026-11-05" } ] }
 ```
-- `kind`: `service` (any topic: a product, feature, concept or method), `pair` (a "which one and why" comparison; `members` lists the compared names), `scenario` (a design or situational question), `case` (a question developed over several turns; `situation` holds the opening), `role-play` (the agent plays `part` while the user pursues `goal`).
-- `tier`: 1 = on your resume or pinned with `profile tier1`; 2 = core; 3 = optional.
-- `id`: AWS cards are unprefixed (`vpc`); other tracks use `<track>-<slug>`, `<track>-pair-...`, `<track>-scn-...`, `<track>-case-...`, `<track>-role-...`. A card without `track` counts as AWS, and a catalog without `tracks` counts as AWS enabled, so older files keep working.
-- `lifecycle.status`: `active`, `maintenance` (closed to new customers, no new features), `sunset` (has an end date), `unverified`. `seeded: true` means an unverified lead, not a checked fact. `verified_on` is set only by `arch refresh`.
+- `kind`: `topic` (a method, concept, regulation, product or service), `pair` (a "which one and why" comparison; `members` lists the compared names), `scenario` (a design or situational question), `case` (a question developed over several turns; `situation` holds the opening), `role-play` (the agent plays `part` while the user pursues `goal`).
+- `tier`: 1 = on your resume or pinned with `profile key-topics`; 2 = core; 3 = optional.
+- `id`: AWS cards are unprefixed (`vpc`); other tracks use `<track>-<slug>`, `<track>-pair-...`, `<track>-scn-...`, `<track>-case-...`, `<track>-role-...`. A card without `track` counts as AWS.
+- `lifecycle.status`: `active`, `maintenance` (closed to new customers, no new features), `sunset` (has an end date), `unverified`. `seeded: true` means an unverified lead, not a checked fact. `verified_on` is set only by `cards refresh`.
 - Facts (`lifecycle`, `recent_changes`) are recorded only with a `source` URL on the card's track hosts. The catalog and progress are separate tables (`card` and `card_progress`), so refreshing facts never touches your progress.
 
-### Progress (`card_progress`; export kind `arch-progress`)
+### Progress (`card_progress`; export kind `cards-progress`)
 `{ "cards": { "<card-id>": { "confidence": 0, "notes": "", "last_drilled": null, "links": { "<company-id>": ["<bullet-id>"] } } } }`. `confidence`: 0 not drilled, 1 some gaps, 2 solid. `links` are the resume bullets that mention the card.
 
-### Track seed (`track`; export kind `arch-tracks`)
+### Track seed (`track`; export kind `cards-tracks`)
 ```json
-{ "name": "acmedata", "label": "Acme Data", "source_hosts": ["docs.example.com"],
-  "services": [ { "area": "Storage", "name": "Table Store", "tier": 2, "aliases": ["Store"] } ],
-  "pairs": [ { "topic": "Table format", "name": "Format A vs Format B", "members": ["Format A", "Format B"] } ],
-  "scenarios": ["Design a lakehouse for 50 TB/day of events"],
-  "family": "engineering", "dimensions": ["scale", "cost"], "country": "United Kingdom",
-  "cases": [ { "title": "Pipeline is late", "situation": "The nightly load now finishes at 9am. Find out why.", "area": "Operations" } ],
-  "role_plays": [ { "title": "Explain a cost overrun", "part": "a finance lead who wants the bill cut", "goal": "agree what to change first" } ] }
+{ "name": "people-ops", "label": "People operations", "source_hosts": ["www.gov.uk"],
+  "topics": [ { "area": "Policy", "name": "Leave policy", "tier": 2, "aliases": ["PTO"] } ],
+  "pairs": [ { "topic": "Hiring", "name": "Panel vs one-to-one interviews", "members": ["Panel", "One-to-one"] } ],
+  "scenarios": ["Design an onboarding plan for a remote team"],
+  "family": "people", "dimensions": ["fairness", "compliance"], "country": "United Kingdom",
+  "cases": [ { "title": "Attrition rose", "situation": "Leavers doubled in one team this quarter. Find out why.", "area": "Retention" } ],
+  "role_plays": [ { "title": "Decline a raise", "part": "a manager who wants a raise for one report now", "goal": "agree a fair next step" } ] }
 ```
-Added with `arch track add NAME --seed FILE|-`, which validates it. The seed holds topic names and the source hosts only, never facts. `source_hosts` are bare host names, not URLs. `tier` is 2 or 3. `name` is 2-31 lower-case letters, digits or `-`, and not `aws`. Every list is optional, but the seed needs at least one card of some kind. `family` is one of the role families `arch families` lists (`engineering` when missing). `dimensions` is the rubric, at most 12 lines (a track stored by an earlier version keeps a longer rubric); without it the family's default rubric is used. Two cards may not get the same id: an id is the track, a kind marker (none for services, `pair-`, `scn-`, `case-`, `role-`) and the slug of the name, so a service "Role conflict" and a role-play "Conflict" clash and the seed is refused. `country` (at most 60 characters) is for knowledge that differs by country. Each case needs `title` and `situation`, each role-play `title`, `part` and `goal`; `area` defaults to `Cases` or `Role-plays`. The AWS seed is built in (`interview/aws/arch_seed.py`), has no file, and keeps its own rubric.
+Added with `cards track add NAME --seed FILE|-`, which validates it. The seed holds topic names and the source hosts only, never facts. `source_hosts` are bare host names, not URLs. `tier` is 2 or 3. `name` is 2-31 lower-case letters, digits or `-`, and not `aws`. Every list is optional, but the seed needs at least one card of some kind. `family` is one of the role families `cards families` lists (`engineering` when missing). `dimensions` is the rubric, at most 12 lines (a track stored by an earlier version keeps a longer rubric); without it the family's default rubric is used. Two cards may not get the same id: an id is the track, a kind marker (none for topics, `pair-`, `scn-`, `case-`, `role-`) and the slug of the name, so a topic "Role conflict" and a role-play "Conflict" clash and the seed is refused. `country` (at most 60 characters) is for knowledge that differs by country. Each case needs `title` and `situation`, each role-play `title`, `part` and `goal`; `area` defaults to `Cases` or `Role-plays`. The AWS example seed is built in (`interview/aws/aws_seed.py`), has no file, and keeps its own rubric; it is loaded only when chosen.
 
 ---
 
@@ -237,22 +240,26 @@ One STAR example per employer, for the three most recent employers.
 
 ---
 
+## Role questions
+
+`role-questions` exports a `roles` list. Each role has `role_key`, `role`, `outcome`, `researched` and an ordered `questions` list. Each question has an ID in the `rq:` namespace, `question`, `source` and `label`. Cited questions have `link`, `pulled`, `quote` and `vetted`. A personal question has a `bullet` ID or posting `requirement`. `question-progress` exports progress keyed by the full question ID.
+
 ## Sessions
 
 `sessions list` is a query over the `session` table, with the number of distinct items logged and queued per session.
 
 ### One session (`session`, `session_item`, `session_log`; export kind `sessions`; id is `<date>-<slug>`)
 ```json
-{ "id": "2026-11-05-lambda-drill", "title": "Lambda drill", "mode": "architecture", "topic": "architecture",
+{ "id": "2026-11-05-leave-policy", "title": "Leave policy", "mode": "tutor", "topic": "knowledge",
   "status": "open", "created": "<timestamp>", "updated": "<timestamp>", "jd": null, "target": null, "style": "star",
-  "queue": [ { "id": "lambda", "kind": "card" } ],
-  "log": [ { "at": "<timestamp>", "item": "lambda", "kind": "card", "question": "...", "answer": "your full answer",
+  "queue": [ { "id": "people-ops-leave-policy", "kind": "card" } ],
+  "log": [ { "at": "<timestamp>", "item": "people-ops-leave-policy", "kind": "card", "question": "...", "answer": "your full answer",
              "grade": "solid", "confidence_after": 2, "tutor": false, "quiz": false } ] }
 ```
 - `target` is the name of the researched company the session was started for (`sessions new --target`), or `null`; it stays when the company's profile is later removed. `style` is the session's current answer style (`sessions resume --style` changes it). Sessions stored before these fields existed have neither.
 - A story or leadership answer also records `style` and `company`: the style in force when it was logged (`sessions log --style` for one answer) and the session's company. Card answers, and entries logged before step 13, have neither.
-- `mode`: `architecture`, `stories`, `jd`, `leadership`, `tutor`, `retest` (`sessions new --due` with no mode: due cards, questions and stories). `status`: `open` or `closed`. `topic` is set for tutor sessions.
-- `kind` is `card` (architecture), `story` or `leader` (leadership question).
+- `mode`: `knowledge`, `stories`, `jd`, `leadership`, `questions`, `tutor`, `retest` (`sessions new --due` with no mode: due cards, questions and stories). `status`: `open` or `closed`. `topic` is set for tutor sessions and `role` for sessions with a role-question queue.
+- `kind` is `card` (role knowledge), `story` or `leader` (leadership question).
 - `queue` is what to ask; `log` is append-only and keeps your complete answers. A later drill adds an entry and never edits an earlier one.
 - The database refuses to change or delete a logged entry. `readiness` counts only entries with a non-empty `answer`. A tutor lesson (`tutor: true`) counts only when `quiz: true`.
 

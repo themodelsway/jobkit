@@ -4,7 +4,7 @@ These commands display profile settings, interview preparation and study progres
 
 The three skills run these commands on request, from plain-word questions (see [manual.md](manual.md)). Running a command directly shows the same information the skill uses.
 
-Commands run from a terminal in the repository root, as `uv run` followed by the command. `--help` on any command or subcommand lists its options. Setup comes first: `uv sync`, `uv run jobkit init`, `uv run profile init --resume-root PATH`, `uv run process-resumes` to import the resumes, then `prep init`, `lead init` and `arch init --track NAME` (the bundled technology is `aws`) to create stories, leadership questions and technical cards. Until then, `readiness` and the status commands report which step is missing.
+Commands run from a terminal in the repository root, as `uv run` followed by the command. `--help` on any command or subcommand lists its options. Setup comes first: `uv sync`, `uv run jobkit init`, `uv run profile init --resume-root PATH`, `uv run process-resumes` to import the resumes, then `prep init`, `lead init` and `cards init --track NAME` (the bundled technology is `aws`) to create stories, leadership questions and technical cards. Until then, `readiness` and the status commands report which step is missing.
 
 ---
 
@@ -27,17 +27,17 @@ Commands run from a terminal in the repository root, as `uv run` followed by the
 |---|---|
 | `readiness` | Preparation by area: technical topics, leadership questions and stories, with the next items to work on |
 
-The report deliberately has no single percentage. Technical cards and leadership questions carry an evidence label: untested, some gaps, solid once, solid on more than one day, or aging (good once, but not practiced lately). A separate label marks confidence recorded by hand with no logged answer. Stories show their status and whether they were rehearsed recently.
+The report deliberately has no single percentage. Role-knowledge cards and leadership questions carry an evidence label: untested, some gaps, solid once, solid on more than one day, or aging (good once, but not practiced lately). A separate label marks confidence recorded by hand with no logged answer. Stories show their status and whether they were rehearsed recently.
 
 ### Technical topics
 
 | Command | What it shows |
 |---|---|
-| `arch status` | Technical cards by area: solid, some gaps, or not yet drilled |
-| `arch stale` | Cards whose facts have never been checked, or were checked long ago |
-| `arch list` | The technical cards in the catalog, with their IDs |
-| `arch show ID` | One card, by its ID from `arch list`: confidence, last drill, lifecycle information, notes and the number of linked resume lines for each employer |
-| `arch for-jd jd.txt` | Service cards mentioned in a job posting, lowest confidence first |
+| `cards status` | Role-knowledge cards by area: solid, some gaps, or not yet drilled |
+| `cards stale` | Cards whose facts have never been checked, or were checked long ago |
+| `cards list` | The role-knowledge cards in the catalog, with their IDs |
+| `cards show ID` | One card, by its ID from `cards list`: confidence, last drill, lifecycle information, notes and the number of linked resume lines for each employer |
+| `cards for-jd jd.txt` | Topic cards mentioned in a job posting, lowest confidence first |
 
 ### Leadership questions
 
@@ -63,11 +63,11 @@ The report deliberately has no single percentage. Technical cards and leadership
 | Command | What it shows |
 |---|---|
 | `readiness --due` | Cards and leadership questions due for reassessment, plus completed stories due for another rehearsal, oldest first |
-| `readiness --jd jd.txt` | Coverage for the service cards and story themes that match a job posting, followed by suggested gaps |
-| `arch stale` | Cards whose facts need checking against the vendor's documentation |
+| `readiness --jd jd.txt` | Coverage for the topic cards and story themes that match a job posting, followed by suggested gaps |
+| `cards stale` | Cards whose facts need checking against the official sources of their track |
 | `sessions list` | All sessions, including lesson sessions, with mode and status |
 
-Teaching alone does not establish a solid result. For technical cards and leadership questions, a passed quiz or a graded practice answer does. A story's rehearsal status records attempts, not answer quality.
+Teaching alone does not establish a solid result. For role-knowledge cards and leadership questions, a passed quiz or a graded practice answer does. A story's rehearsal status records attempts, not answer quality.
 
 ---
 
@@ -77,7 +77,7 @@ Each skill can run these commands from a plain-language request, read the output
 
 | Output | Request type |
 |---|---|
-| Weak topics in `arch for-jd` or `readiness --jd` | Instruction on a named service or practice, or a quiz for a supplied posting |
+| Weak topics in `cards for-jd` or `readiness --jd` | Instruction on a named topic or practice, or a quiz for a supplied posting |
 | Empty stories in `prep status` | Development of a story about a completed project |
 | Items due in `readiness --due` | Readiness assessment and an optional retest |
 

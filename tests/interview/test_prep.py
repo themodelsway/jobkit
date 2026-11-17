@@ -4,6 +4,7 @@ from datetime import date
 from unittest import mock
 
 from jk.interview import prep, tables, target_tables, targets
+from jk.resumes import tables as rd_tables
 from jk.user import profile
 from tests.interview.support import PrepCase, run_prep
 
@@ -102,8 +103,7 @@ class TestFacts(PrepCase):
 
 
 class TestMetricsAndWarnings(PrepCase):
-    def test_metric_replace_and_remove(self) -> None:
-        """Replace a metric by name and remove it by the same name."""
+    def test_metric_replace_and_remove(self):
         run_prep("metric", "add", "acme-topic-a", "--name", "Orders", "--value", "700+", "--basis", "stated")
         run_prep("metric", "add", "acme-topic-a", "--name", "Orders", "--value", "720", "--basis", "stated")
         self.assertEqual([m["value"] for m in self.story()["metrics"]], ["720"])
@@ -262,20 +262,19 @@ class TestCommands(PrepCase):
 
 
 class TestInitFromResumeData(PrepCase):
-    def test_init_builds_stories_per_theme_and_keeps_answers(self) -> None:
-        """Create the Globex theme story and preserve its answer on rebuild."""
+    def test_init_builds_stories_per_theme_and_keeps_answers(self):
         bullets = [{"id": f"b{i}", "text": f"Built thing {i}", "themes": ["topic-b"], "sources": ["a"], "metrics": ["30%"],
                     "ignored": False, "needs_review": False} for i in range(5)]
-        company = {"id": "globex", "name": "Globex", "bullets": bullets,
+        company = {"id": "acme-2", "name": "Acme 2", "bullets": bullets,
                    "roles": [{"start": f"{__import__('datetime').date.today().year - 1}-01", "end": None, "titles": ["T"]}]}
-        prep.qr.load = lambda: ({"globex": company}, None)
+        prep.qr.load = lambda: ({"acme-2": company}, None)
         code, out = run_prep("init")
         self.assertEqual(code, 0)
         self.assertIn("2 stories (1 new)", out)
-        self.assertEqual(self.story("globex-topic-b")["metrics_on_resume"], ["30%"])
-        run_prep("set", "globex-topic-b", "situation", "kept answer")
+        self.assertEqual(self.story("acme-2-topic-b")["metrics_on_resume"], ["30%"])
+        run_prep("set", "acme-2-topic-b", "situation", "kept answer")
         run_prep("init")
-        self.assertEqual(self.story("globex-topic-b")["situation"], "kept answer")
+        self.assertEqual(self.story("acme-2-topic-b")["situation"], "kept answer")
         self.assertEqual(self.story("acme-topic-a")["status"], "empty")        # not produced now, but kept
         self.assertEqual(sorted(tables.load_themes()), ["topic-a", "topic-b"])
 
@@ -297,7 +296,7 @@ class EngagementCommandTests(PrepCase):
         self.assertIn("Office move", run_prep("engagement", "show", "acme-project")[1])
         self.assertEqual(run_prep("engagement", "set", "acme-project", "my_role", "Lead")[0], 0)
         self.assertEqual(self.eng()["my_role"], "Lead")
-        self.assertEqual(run_prep("engagement", "set", "acme-project", "colour", "x")[0], 1)
+        self.assertEqual(run_prep("engagement", "set", "acme-project", "color", "x")[0], 1)
 
     def test_fact_options(self):
         run_prep("fact", "add", "acme-project", "12 engineers", "--basis", "stated", "--note", "from the kickoff deck")
@@ -334,16 +333,27 @@ class StoryOptionTests(PrepCase):
         run_prep("metric", "add", "acme-topic-a", "--name", "cost", "--value", "-20%", "--basis", "stated", "--note", "finance")
         self.assertEqual(self.story()["metrics"][0]["note"], "finance")
 
-    def test_for_jd_top(self) -> None:
-        """Limit the ranking to one of two stories relevant to mentoring."""
+    def test_own_theme_questions_apply_at_once_and_go_when_removed(self):
+        patcher = mock.patch.object(prep.qr, "load_or_fail", return_value=({"acme": {"id": "acme", "name": "Acme Corp", "bullets": [], "roles": [{"start": "2021-01", "end": None, "titles": ["T"]}]}}, {"groups": {}}))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        run_prep("new", "acme-topic", "--company", "acme", "--theme", "topic-a")
+        rd_tables.save_curation("themes", {"theme_words": {"topic-a": []}, "theme_questions": {"topic-a": ["Own question?"]}})
+        jd = self.home / "jd.txt"
+        jd.write_text("topic a", encoding="utf-8")
+        self.assertIn("Q: Own question?", run_prep("for-jd", str(jd))[1])
+        rd_tables.save_curation("themes", {"theme_words": {"topic-a": []}})
+        self.assertNotIn("Own question?", run_prep("for-jd", str(jd))[1])
+
+    def test_for_jd_top(self):
         prep.qr.load = lambda: ({"acme": {"id": "acme", "name": "Acme Corp", "bullets": [], "roles": [{"start": "2021-01", "end": None, "titles": ["T"]}]}}, {"groups": {}})     # restored by tearDown
         patcher = mock.patch.object(prep.qr, "load_or_fail", return_value=({"acme": {"id": "acme", "name": "Acme Corp", "bullets": [], "roles": [{"start": "2021-01", "end": None, "titles": ["T"]}]}}, {"groups": {}}))
         patcher.start()
         self.addCleanup(patcher.stop)
-        for story_id in ("acme-first", "acme-second"):
-            self.assertEqual(run_prep("new", story_id, "--company", "acme", "--theme", "mentoring")[0], 0)
+        run_prep("new", "acme-second", "--company", "acme", "--theme", "topic-a")
+        rd_tables.save_curation("themes", {"theme_words": {"topic-a": []}})     # the user's own theme
         jd = self.home / "jd.txt"
-        jd.write_text("Mentor engineers and review their designs.", encoding="utf-8")
+        jd.write_text("topic a and cost reduction", encoding="utf-8")
         _, both = run_prep("for-jd", str(jd))
         code, one = run_prep("for-jd", str(jd), "--top", "1")
         self.assertEqual(code, 0, one)

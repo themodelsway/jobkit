@@ -6,7 +6,7 @@ Report evidence of readiness per area from the user's logged drills, read-only. 
 ## Requirements
 
 ### Requirement: Evidence labels, no single score
-Each architecture card and leadership question SHALL get one label: untested, some gaps, solid-unlogged, solid-once, solid-repeated or aging. The system SHALL NOT compute a single percentage.
+Each role-knowledge card and leadership question SHALL get one label: untested, some gaps, solid-unlogged, solid-once, solid-repeated or aging. The system SHALL NOT compute a single percentage.
 
 #### Scenario: Two good days
 - **WHEN** a card is graded 2 on two different days
@@ -42,7 +42,7 @@ Stories SHALL be labeled empty, draft, done, done-rehearsed (done, with an answe
 - **THEN** it is labeled done-aging
 
 ### Requirement: Limit to a job description
-With `--jd` the report SHALL cover only architecture cards and stories that the job description touches. A story touches the job description when its theme or one of its other themes is among the job description's themes.
+With `--jd` the report SHALL cover only role-knowledge cards and stories that the job description touches. A story touches the job description when its theme or one of its other themes is among the job description's themes.
 
 #### Scenario: JD filter
 - **WHEN** `--jd jd.txt` is given
@@ -110,3 +110,12 @@ The company report SHALL NOT change any stored data, and `--due` SHALL accept `-
 #### Scenario: Due, nothing matching
 - **WHEN** `--due --target COMPANY` is run and no due item matches
 - **THEN** the command says how many items are due in all and that none match this company
+
+### Requirement: Role-question evidence
+
+Readiness SHALL report evidence for stored role questions. `--role` SHALL select the questions for the named role, and with `--due` SHALL limit the results to its aging questions.
+
+#### Scenario: Role questions without cards
+
+- **WHEN** the user has practiced a saved role question and has no knowledge-card catalog
+- **THEN** readiness reports the question's evidence label without requiring a catalog

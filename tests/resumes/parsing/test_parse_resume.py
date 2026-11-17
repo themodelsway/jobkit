@@ -1,6 +1,6 @@
 """Characterization tests for plugins/jobkit/src/jk/resumes/parse_resume.py. The sample files in `tests/resumes/data/`
-are synthetic (no real names or employers); the golden `.expected.json` files record current behaviour: regenerate them
-only when a behaviour change is intended."""
+are synthetic (no real names or employers); the golden `.expected.json` files record current behavior: regenerate them
+only when a behavior change is intended."""
 import json
 import unittest
 
@@ -28,12 +28,18 @@ class ParserTests(unittest.TestCase):
         want = json.loads((DATA_DIR / "layout_b.expected.json").read_text(encoding="utf-8"))
         self.assertEqual(json.loads(json.dumps(got)), want)
 
-    def test_gen_ai_label_goes_to_ai_ml(self) -> None:
-        """Recognize both spellings of the historical Gen AI heading."""
-        for label in ("Gen AI", "GenAI"):
+    def test_a_label_is_matched_by_its_words(self):
+        for label, group in (("Machine Learning and AI", "AI/ML"), ("Data Platforms", "Data"), ("Leadership Skills", "Leadership")):
             skills, problems = pr.parse_skills({"skills": [f"• {label}: Topic One, Topic Two"]})
             self.assertEqual(problems, [], label)
-            self.assertEqual([i["name"] for i in skills["AI/ML"]], ["Topic One", "Topic Two"], label)
+            self.assertEqual([i["name"] for i in skills[group]], ["Topic One", "Topic Two"], label)
+
+    def test_a_comma_label_needs_a_group_word_and_a_list_word(self):
+        skills, _ = pr.parse_skills({"skills": ["• Web technologies, Topic One, Topic Two", "• Data Modeling, Query Tuning"]})
+        self.assertEqual([i["name"] for i in skills["Web"]], ["Topic One", "Topic Two"])
+        self.assertEqual([i["name"] for i in skills["Unsorted"]], ["Data Modeling", "Query Tuning"])
+        self.assertFalse(pr.is_category_name("AI"))
+        self.assertTrue(pr.is_category_name("Web technologies"))
 
     def test_not_a_resume(self):
         r = pr.parse_resume("just some text\nwith no work heading")
@@ -41,24 +47,24 @@ class ParserTests(unittest.TestCase):
 
     def test_discover_companies(self):
         self.assertEqual(pr.discover_companies((DATA_DIR / "layout_a.layout.txt").read_text(encoding="utf-8")),
-                         {"acme-corp": "Acme Corp", "globex-inc": "Globex Inc"})
+                         {"acme-corp": "Acme Corp", "acme-2": "Acme 2"})
         self.assertEqual(pr.discover_companies((DATA_DIR / "layout_b.txt").read_text(encoding="utf-8")),
-                         {"initech": "Initech", "acme-corp": "Acme Corp"})
+                         {"acme-3": "Acme 3", "acme-corp": "Acme Corp"})
         self.assertEqual(pr.discover_companies("no sections here"), {})
 
     def test_three_line_entry_finds_company_above_title(self):
-        text = "Work History\nAcme Corp\nSenior Engineer\n01/2020 - Present\n• Built things.\n"
+        text = "Work History\nAcme Corp\nSenior Strategist\n01/2020 - Present\n• Built things.\n"
         self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp"})
         entries, _ = pr.parse_work(text.splitlines()[1:])
-        self.assertEqual([(e["company_id"], e["title"]) for e in entries], [("acme-corp", "Senior Engineer")])
+        self.assertEqual([(e["company_id"], e["title"]) for e in entries], [("acme-corp", "Senior Strategist")])
 
     def test_line_above_dates_after_bullet_is_the_employer(self):
         text = ("Work History\nAcme Corp\n01/2020 - Present\n• Led the platform team and shipped\n"
-                "the new billing engine.\nGlobex Inc\n01/2015 - 12/2019\n• Built things.\n")
-        self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp", "globex-inc": "Globex Inc"})
+                "the new billing engine.\nAcme 2\n01/2015 - 12/2019\n• Built things.\n")
+        self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp", "acme-2": "Acme 2"})
 
     def test_company_and_title_on_one_line_ignores_line_above(self):
-        text = "Work History\n• Wrapped bullet end\nAcme Corp – Senior Engineer\n01/2020 - Present\n• x\n"
+        text = "Work History\n• Wrapped bullet end\nAcme Corp – Senior Strategist\n01/2020 - Present\n• x\n"
         self.assertEqual(pr.discover_companies(text), {"acme-corp": "Acme Corp"})
 
     def test_registry_is_replaced_not_merged(self):
@@ -90,7 +96,7 @@ class HelperTests(unittest.TestCase):
                          ["$4M", "15%", "7 million"])
 
     def test_bullet_identity(self):
-        a, b = "Cut page load time by 30%.", "cut page load time by 30"
+        a, b = "Cut checkout drop-off by 30%.", "cut checkout drop-off by 30"
         self.assertEqual(pr.bullet_id("acme-corp", a), pr.bullet_id("acme-corp", b))
         self.assertTrue(pr.bullet_id("acme-corp", a).startswith("acme-"))
         self.assertGreater(pr.similar(a, b), 0.92)
@@ -114,9 +120,9 @@ class HyphenatedEmployerTests(unittest.TestCase):
         self.assertEqual(self.discover("X-Acme"), {"x-acme": "X-Acme"})
 
     def test_a_spaced_hyphen_or_a_dash_still_splits_name_and_title(self):
-        self.assertEqual(self.discover("Acme-Works – Principal Engineer"), {"acme-works": "Acme-Works"})
-        self.assertEqual(self.discover("Acme-Works - Principal Engineer"), {"acme-works": "Acme-Works"})
-        self.assertEqual(self.discover("Acme-Works — Principal Engineer"), {"acme-works": "Acme-Works"})
+        self.assertEqual(self.discover("Acme-Works – Principal Strategist"), {"acme-works": "Acme-Works"})
+        self.assertEqual(self.discover("Acme-Works - Principal Strategist"), {"acme-works": "Acme-Works"})
+        self.assertEqual(self.discover("Acme-Works — Principal Strategist"), {"acme-works": "Acme-Works"})
 
     def test_a_resume_with_no_known_employer_is_reported(self):
         parsed = pr.parse_resume(as_txt(), company_res={})
@@ -131,25 +137,25 @@ class ContactLineTests(EmployersCase):
         for line in (self.MAIL, self.PHONE, f"{self.PHONE} | {self.MAIL}", f"{self.PHONE} · {self.MAIL} • "
                      "linkedin.com/in/jane"):
             self.assertTrue(extract.is_contact_line(line), line)
-        for line in ("Jane | Seattle", f"Reach me at {self.MAIL}", "Cut spend by 30% | saved 12 accounts", "•", ""):
+        for line in ("Jane | Seattle", f"Reach me at {self.MAIL}", "Cut wait time by 18% | served 7 regions", "•", ""):
             self.assertFalse(extract.is_contact_line(line), line)
 
     def test_stray_contact_line_is_not_the_headline(self):
-        text = f"Jane Example\nSenior Software Engineer\n{self.PHONE} | {self.MAIL}\nWeb performance specialist\n"
+        text = f"Jane Example\nSenior Product Designer\n{self.PHONE} | {self.MAIL}\nAccessibility specialist\n"
         parsed = pr.parse_resume(text + as_txt().split("\n", 2)[2])
-        self.assertEqual(parsed["headline"], "Web performance specialist")
+        self.assertEqual(parsed["headline"], "Accessibility specialist")
         self.assertNotIn(self.MAIL, parsed["summary"])
 
     def test_contact_line_in_work_section_is_not_glued_to_a_bullet(self):
-        text = as_txt().replace("• Built a search service on PostgreSQL.\n",
-                                f"• Built a search service on PostgreSQL.\n{self.PHONE} | {self.MAIL}\n")
+        text = as_txt().replace("• Built a design system with shared prototypes.\n",
+                                f"• Built a design system with shared prototypes.\n{self.PHONE} | {self.MAIL}\n")
         bullets = [b for e in pr.parse_resume(text, text)["work"] for b in e["bullets"]]
-        self.assertIn("Built a search service on PostgreSQL.", bullets)
+        self.assertIn("Built a design system with shared prototypes.", bullets)
         self.assertFalse(any(self.MAIL in b or self.PHONE in b for b in bullets))
 
     def test_layout_text_of_a_pdf_is_cleaned_too(self):
-        layout = as_txt().replace("• Built a search service on PostgreSQL.\n",
-                                  f"• Built a search service on PostgreSQL.\n   {self.MAIL}\n")
+        layout = as_txt().replace("• Built a design system with shared prototypes.\n",
+                                  f"• Built a design system with shared prototypes.\n   {self.MAIL}\n")
         bullets = [b for e in pr.parse_resume(as_txt(), layout)["work"] for b in e["bullets"]]
-        self.assertIn("Built a search service on PostgreSQL.", bullets)
+        self.assertIn("Built a design system with shared prototypes.", bullets)
         self.assertFalse(any(self.MAIL in b for b in bullets))

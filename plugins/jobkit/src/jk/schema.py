@@ -260,6 +260,36 @@ ALTER TABLE session_log ADD COLUMN company TEXT;
 """)
 
 
+def step_cards(conn: sqlite3.Connection) -> None:
+    """Version 14: the stored names of role-knowledge cards. Mode and tutor topic `architecture` become `knowledge`,
+    card kind `service` becomes `topic`, a custom track's `services` become its `topics`, the setting
+    `tier1_services` becomes `key_topics`, and the catalog's meta key `arch.catalog` becomes `cards.catalog`.
+    The append-only log is not touched (it records items by id and kind card, story or leader)."""
+    run_script(conn, """
+UPDATE session SET mode = 'knowledge' WHERE mode = 'architecture';
+UPDATE session SET body = json_set(body, '$.topic', 'knowledge') WHERE json_extract(body, '$.topic') = 'architecture';
+UPDATE card SET body = json_set(body, '$.kind', 'topic') WHERE json_extract(body, '$.kind') = 'service';
+UPDATE track SET body = json_set(json_remove(body, '$.services'), '$.topics', json(json_extract(body, '$.services')))
+  WHERE json_type(body, '$.services') IS NOT NULL;
+UPDATE setting SET key = 'key_topics' WHERE key = 'tier1_services';
+UPDATE meta SET key = 'cards.catalog' WHERE key = 'arch.catalog';
+""")
+
+
+def step_role_questions(conn: sqlite3.Connection) -> None:
+    """Version 15: role questions, search outcomes and practice progress."""
+    run_script(conn, """
+CREATE TABLE role_research (
+  role_key TEXT PRIMARY KEY, role TEXT NOT NULL, outcome TEXT NOT NULL, researched TEXT);
+CREATE TABLE role_question (
+  id TEXT PRIMARY KEY, role_key TEXT NOT NULL REFERENCES role_research(role_key), position INTEGER NOT NULL,
+  source TEXT NOT NULL, link TEXT, label TEXT NOT NULL, pulled TEXT, body TEXT NOT NULL);
+CREATE INDEX role_question_order ON role_question(role_key, position);
+CREATE TABLE question_progress (
+  question_id TEXT PRIMARY KEY REFERENCES role_question(id) ON DELETE CASCADE, body TEXT NOT NULL);
+""")
+
+
 STEPS: list = [step_meta_and_docs, step_sessions, step_architecture, step_stories, step_leadership,
                step_profile, step_resume_data, step_curation, step_drop_documents, step_match_results,
-               step_one_home_per_field, step_terms, step_target_research]
+               step_one_home_per_field, step_terms, step_target_research, step_cards, step_role_questions]

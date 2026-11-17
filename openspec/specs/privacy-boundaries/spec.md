@@ -69,6 +69,56 @@ The personal-term check SHALL report a skip with the reason when the profile pro
 - **WHEN** a file is renamed, a personal term is added to it, and it is staged
 - **THEN** the check reports the term, even when the working copy has since been cleaned
 
+### Requirement: Text from stored data is caught
+`profile terms check` SHALL compare every line it reads with the contributor's stored data (resume lines and all their wordings, profile text, titles, certifications, education, stories, practice notes, own vocabulary and extracted resume text), leaving out jobkit's own seeded text, and SHALL report a shared five-word phrase, a near-copy, a stored title, certification or degree, two stored figures, or three distinctive terms in one line as a hit.
+
+#### Scenario: A resume line copied with small edits
+- **WHEN** a staged test file holds a lightly edited copy of one of the contributor's resume lines
+- **THEN** the check reports the line as a phrase or near-copy hit and exits 1
+
+#### Scenario: Seeded text is not a hit
+- **WHEN** a staged file quotes a built-in practice question or card name
+- **THEN** the check does not report it
+
+#### Scenario: A false alarm
+- **WHEN** the contributor ignores the matched text with `profile terms ignore TEXT`
+- **THEN** the next check no longer reports that line
+
+### Requirement: Stored-data hits never show the stored text
+A stored-data hit SHALL print only its location, its kind and the kind and id of the record it matches, never the stored text.
+
+#### Scenario: A phrase hit
+- **WHEN** a line matches a stored story
+- **THEN** the output names the file, the line, `phrase` and the story's id, and no words of the story
+
+### Requirement: The comparison is rebuilt on every run
+The check SHALL build its comparison from the database and the output folder in memory on each run and SHALL NOT write it to disk.
+
+#### Scenario: New data
+- **WHEN** a new resume is processed and the next commit stages one of its lines
+- **THEN** the hook reports the line
+
+### Requirement: Removed lines are warned about
+With `--staged`, the check SHALL warn without failing when the staged changes remove lines that match stored data, saying that removed text stays in earlier commits.
+
+#### Scenario: Cleaning a file
+- **WHEN** the staged changes only remove a line copied from a resume
+- **THEN** the check passes and prints the warning
+
+### Requirement: The history can be checked
+`profile terms check --history` SHALL apply the term and stored-data checks to every version of every file in the history of all branches, naming each hit by path and object id.
+
+#### Scenario: An old version
+- **WHEN** an earlier commit held a resume line that the current files no longer hold
+- **THEN** `--history` reports it while `--all` does not
+
+### Requirement: Fictional employers in test resumes are Acme names
+Every employer in the test resume samples SHALL have a name starting with "Acme".
+
+#### Scenario: A sample with another name
+- **WHEN** a test resume sample names an employer that does not start with "Acme"
+- **THEN** the no-personal test fails
+
 ### Requirement: Tests never change the real database
 A test that checks the real home SHALL run against a consistent copy of the database, never against the original, because every command upgrades the database it opens. The original SHALL keep its schema version and bytes.
 

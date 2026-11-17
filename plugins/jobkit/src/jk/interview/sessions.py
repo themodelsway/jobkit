@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Interview-prep sessions, kept in the database. Standard library only.
 
-  sessions new "AWS fundamentals" [--mode architecture|stories|jd|leadership|tutor] [--topic architecture|leadership|stories] [--order default|random] [--category C] [--jd jd.txt]
-                                   [--track T] [--area A] [--tier N] [--kind service|pair|scenario|case|role-play] [--company C] [--count 10]
+  sessions new "Practice round" [--mode knowledge|stories|jd|leadership|questions|tutor]
+                                   [--topic knowledge|leadership|stories|questions] [--role ROLE]
+                                   [--order default|random] [--category C] [--jd jd.txt]
+                                   [--track T] [--area A] [--tier N] [--kind topic|pair|scenario|case|role-play] [--company C] [--count 10]
                                    [--target COMPANY] [--style star|soar|carl]
   sessions list
   sessions resume ID [--style S]  # what was covered, last answers, and the next item to ask; --style changes the
@@ -17,7 +19,7 @@ profile's answer_style, else star) and each story or question answer records the
   sessions close ID
   sessions reopen ID          # continue a closed session
 
-A session is one file with a queue of items (architecture cards or STAR stories) and an append-only log that
+A session is one file with a queue of items (role-knowledge cards or STAR stories) and an append-only log that
 keeps your FULL answers. Re-drilling a topic in a later session adds a log entry there and never edits an old
 session. Confidence per card is shared across sessions (stored card progress).
 """
@@ -35,16 +37,19 @@ from typing import Any, Final, NotRequired, TypedDict, cast
 
 from jk import common
 from jk.common import ToolError
-from jk.interview import arch
+from jk.interview import cards as deck
 from jk.interview import lead
-from jk.interview import prep, readiness, session_company, styles, tables, targets
+from jk.interview import prep, questions, readiness, session_company, styles, tables, targets
+from jk.interview import question_tables as qt
 from jk.resumes import query_resume as qr
 from jk.user import profile as up
 
 ID_RE: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-MODE_KINDS: Final[dict[str, str]] = {"architecture": "architecture", "stories": "stories", "leadership": "leadership"}
+MODE_KINDS: Final[dict[str, str]] = {"knowledge": "knowledge", "stories": "stories", "leadership": "leadership",
+                                    "questions": "questions"}
 KIND_NAMES: Final[dict[str, tuple[str, str]]] = {"card": ("card", "cards"), "story": ("story", "stories"),
-                                                 "leader": ("leadership question", "leadership questions")}
+                                                 "leader": ("leadership question", "leadership questions"),
+                                                 "question": ("role question", "role questions")}
 SLUG_CHARS: Final[int] = 40
 RESUME_PREVIEW: Final[int] = 300
 now = common.now
@@ -80,6 +85,7 @@ class Session(TypedDict):
     title: str
     mode: str
     topic: NotRequired[str]
+    role: NotRequired[str]
     status: str
     created: str
     updated: str
@@ -107,7 +113,9 @@ def put_session(session: Session) -> None:
 
 
 def known_kind(item: str) -> str | None:
-    """card / leader / story for an id that exists in the data, else None (tolerates missing data files)."""
+    """Find an existing item's kind even when other practice data is missing."""
+    if item.startswith(qt.ID_PREFIX) and qt.find(item) is not None:
+        return "question"
     if any(c["id"] == item for c in (tables.load_catalog() or {"cards": []})["cards"]):
         return "card"
     if tables.has_questions() and any(q["id"] == item for q in lead.cards()):
@@ -133,22 +141,22 @@ def card_group(progress: Mapping[str, Any], window: int) -> int:
     return 1 if not last or (date.today() - date.fromisoformat(last)).days > window else 2
 
 
-def card_queue(args: argparse.Namespace, cards: list[arch.Card] | None = None) -> list[QueueItem]:
+def card_queue(args: argparse.Namespace, cards: list[deck.Card] | None = None) -> list[QueueItem]:
     """Cards not yet solid first (lowest tier and weakest first, or random), then solid cards that have aged, then
     solid cards drilled recently; with `--only-open` only the first group. Nothing is changed by queueing."""
-    cat, prog = arch.catalog(), arch.progress()["cards"]
+    cat, prog = deck.catalog(), deck.progress()["cards"]
     position = {c["id"]: i for i, c in enumerate(cat["cards"])}
-    pool = cards if cards is not None else arch.flt(cat["cards"], args)
+    pool = cards if cards is not None else deck.flt(cat["cards"], args)
     window = up.reassess_days()
-    groups = {c["id"]: card_group(arch.progress_of(prog, c["id"]), window) for c in pool}
+    groups = {c["id"]: card_group(deck.progress_of(prog, c["id"]), window) for c in pool}
     if only_open(args):
         pool = [c for c in pool if groups[c["id"]] == 0]
     if getattr(args, "order", "default") == "random":
         random.shuffle(pool)
         pool.sort(key=lambda c: groups[c["id"]])
         return [{"id": c["id"], "kind": "card"} for c in pool]
-    def order(card: arch.Card) -> tuple[Any, ...]:
-        mine, group = arch.progress_of(prog, card["id"]), groups[card["id"]]
+    def order(card: deck.Card) -> tuple[Any, ...]:
+        mine, group = deck.progress_of(prog, card["id"]), groups[card["id"]]
         last = mine["last_drilled"] or ""
         weak = group == 0
         return (group, card["tier"] if weak else 0, mine["confidence"] if weak else 0, last, position[card["id"]])
@@ -187,12 +195,31 @@ def queue_mix(queue: Sequence[QueueItem], matched: int) -> str:
 
 
 def resolve_mode(args: argparse.Namespace) -> None:
-    """Fill in `args.mode`: jd when only `--jd` is given, retest for `--due` alone, else architecture. `--jd` with
+    """Fill in `args.mode`: jd when only `--jd` is given, retest for `--due` alone, else knowledge. `--jd` with
     another mode is an error."""
     if args.mode is None:
-        args.mode = "jd" if args.jd else "retest" if getattr(args, "due", False) else "architecture"
+        args.mode = "jd" if args.jd else "retest" if getattr(args, "due", False) else "knowledge"
     elif args.jd and args.mode != "jd":
         raise ToolError(f"--jd goes with mode jd, not {args.mode}. Drop --mode, or drop --jd.")
+    role = getattr(args, "role", None)
+    is_questions = args.mode == "questions" or (args.mode == "tutor" and args.topic == "questions")
+    if is_questions:
+        args.role = questions.read_role(role or "")
+    elif role is not None:
+        raise ToolError("--role goes with --mode questions or --mode tutor --topic questions.")
+
+
+def question_queue(args: argparse.Namespace, role: str | None = None) -> list[QueueItem]:
+    """Order weak, aging and recently solid questions, optionally within one role."""
+    progress = qt.load_progress()
+    blank = qt.Progress(confidence=0, last_drilled=None)
+    pool = [q["id"] for entry in qt.load_roles(role) for q in entry["questions"]]
+    if getattr(args, "order", "default") == "random":
+        random.shuffle(pool)
+    window = up.reassess_days()
+    groups = {item: card_group(progress.get(item, blank), window) for item in pool}
+    return [{"id": item, "kind": "question"} for item in sorted(pool, key=groups.__getitem__)
+            if not only_open(args) or groups[item] == 0]
 
 
 def retest_queue(args: argparse.Namespace) -> list[QueueItem]:
@@ -206,6 +233,7 @@ def retest_queue(args: argparse.Namespace) -> list[QueueItem]:
         queue += leaders
     if tables.has_stories():
         queue += story_queue(args)
+    queue += question_queue(args)
     return queue
 
 
@@ -215,25 +243,27 @@ def build_queue(args: argparse.Namespace) -> tuple[list[QueueItem], str | None]:
     if args.mode == "retest":
         return retest_queue(args), None
     kind = args.topic if args.mode == "tutor" else MODE_KINDS.get(args.mode)
-    if kind == "architecture":
+    if kind == "knowledge":
         return card_queue(args), None
     if kind == "stories":
         return story_queue(args), None
     if kind == "leadership":
         return [{"id": q["id"], "kind": "leader"} for q in lead.ordered(args, not only_open(args))], None
+    if kind == "questions":
+        return question_queue(args, args.role), None
     if not args.jd:
         raise ToolError("--jd is required for mode jd")
-    if args.kind and args.kind != "service":
-        raise ToolError(f"A job posting is matched to service cards only, so --kind {args.kind} would find nothing: "
-                        "drop --kind, or drop --jd and use --mode architecture.")
+    if args.kind and args.kind != "topic":
+        raise ToolError(f"A job posting is matched to topic cards only, so --kind {args.kind} would find nothing: "
+                        "drop --kind, or drop --jd and use --mode knowledge.")
     text = common.read_text_arg(args.jd)
-    cards = card_queue(args, arch.flt(arch.matches(text, arch.catalog()), args))
+    cards = card_queue(args, deck.flt(deck.matches(text, deck.catalog()), args))
     return take_turns(cards, story_queue(args, text)), args.jd
 
 
 def unique_session_id(title: str) -> str:
     """Date plus slug of the title, with -2, -3 ... when the id is taken."""
-    base = f"{date.today().isoformat()}-{arch.slug(title)[:SLUG_CHARS]}"
+    base = f"{date.today().isoformat()}-{deck.slug(title)[:SLUG_CHARS]}"
     sid, n = base, 2
     while tables.session_exists(sid):
         sid, n = f"{base}-{n}", n + 1
@@ -270,7 +300,9 @@ def show_next(session: Session) -> None:
         if item["kind"] == "leader":
             lead.show(lead.find(item["id"]))
         elif item["kind"] == "card":
-            arch.show(arch.find(arch.catalog(), item["id"]), arch.progress_of(arch.progress()["cards"], item["id"]))
+            deck.show(deck.find(deck.catalog(), item["id"]), deck.progress_of(deck.progress()["cards"], item["id"]))
+        elif item["kind"] == "question":
+            questions.show_saved(item["id"])
         else:
             story = next((s for s in prep.stories() if s["id"] == item["id"]), None)
             if story:
@@ -309,6 +341,8 @@ def cmd_new(args: argparse.Namespace) -> None:
                         "queue": queue, "log": []}
     if args.mode == "tutor":
         session["topic"] = args.topic
+    if args.role:
+        session["role"] = args.role
     put_session(session)
     print(f"Started session {sid} with {len(queue)} items ({queue_mix(queue, matched)}).")
     print(f"Answer style: {style}" + (f"; company: {company['name']}" if company else ""))
@@ -361,7 +395,7 @@ def resolve_item(session: Session, item: str) -> QueueItem | None:
     queued = next((x for x in session["queue"] if x["id"] == item), None)
     if not known_kind(item):
         hint = " It is queued but unavailable: it was removed." if queued else ""
-        raise ToolError(f"Unknown item {item}.{hint} Use an id from arch list, lead list or prep status.")
+        raise ToolError(f"Unknown item {item}.{hint} Use an id from cards list, lead list, questions list or prep status.")
     return queued
 
 
@@ -378,7 +412,9 @@ def record_confidence(kind: str, item: str, confidence: int, tutor: bool, quiz: 
     """Save the confidence for a card or question; a lesson never lowers what a real drill earned, nor
     refreshes the date of the last real drill. A passed quiz counts as a drill and refreshes the date."""
     if kind == "card":
-        entry: dict[str, Any] = dict(arch.progress()["cards"].get(item) or arch.blank_progress())
+        entry: dict[str, Any] = dict(deck.progress()["cards"].get(item) or deck.blank_progress())
+    elif kind == "question":
+        entry = dict(qt.load_progress().get(item) or qt.Progress(confidence=0, last_drilled=None))
     else:
         entry = dict(lead.prog()["questions"].get(item) or lead.blank())
     if not tutor or quiz or confidence > entry["confidence"]:
@@ -388,6 +424,8 @@ def record_confidence(kind: str, item: str, confidence: int, tutor: bool, quiz: 
         entry["last_drilled"] = date.today().isoformat()   # first contact only; a lesson never refreshes a drill date
     if kind == "card":
         tables.set_card_progress(item, entry)
+    elif kind == "question":
+        qt.set_progress(item, cast(qt.Progress, entry))
     else:
         tables.set_lead_progress(item, entry)
 
@@ -415,7 +453,7 @@ def cmd_log(args: argparse.Namespace) -> None:
         entry["style"] = styles.in_force(args.style, session.get("style"))
         entry["company"] = session.get("target")
     elif args.style:
-        raise ToolError("Architecture cards have no answer style: omit --style for a card.")
+        raise ToolError("Role-knowledge cards have no answer style: omit --style for a card.")
     session["log"].append(entry)
     if confidence is not None:
         record_confidence(kind, args.item, confidence, tutor, bool(args.quiz))
@@ -451,18 +489,20 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
     new = sub.add_parser("new")
     new.add_argument("title")
-    new.add_argument("--mode", choices=["architecture", "stories", "jd", "leadership", "tutor"], default=None,
-                     help="default: jd when --jd is given, else architecture")
+    new.add_argument("--mode", choices=["knowledge", "stories", "jd", "leadership", "questions", "tutor"], default=None,
+                     help="default: jd when --jd is given, else knowledge")
     new.add_argument("--jd")
     new.add_argument("--track")
     new.add_argument("--area")
     new.add_argument("--tier", type=int)
-    new.add_argument("--kind", choices=list(arch.KINDS))
+    new.add_argument("--kind", choices=list(deck.KINDS))
     new.add_argument("--company")
     new.add_argument("--order", choices=["default", "random"], default="default")
-    new.add_argument("--topic", choices=["architecture", "leadership", "stories"], default="architecture",
+    new.add_argument("--topic", choices=["knowledge", "leadership", "stories", "questions"], default="knowledge",
                      help="tutor mode: what to teach")
+    new.add_argument("--role", help="the role to practice or teach questions for")
     new.add_argument("--category")
+    new.add_argument("--audience", choices=lead.AUDIENCES, help=lead.AUDIENCE_HELP)
     new.add_argument("--count", type=common.positive_int, default=10)
     new.add_argument("--only-open", action="store_true",
                      help="queue only unfinished and weak items (default: finished stories and solid cards follow them)")

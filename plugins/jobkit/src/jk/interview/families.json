@@ -1,23 +1,58 @@
 [
   {
-    "name": "engineering",
-    "label": "Engineering",
-    "description": "Software, data, cloud, infrastructure, security and architecture roles: frontend, backend, platform, data engineering, architecture.",
+    "name": "people",
+    "label": "People",
+    "description": "HR, recruiting, people operations, total rewards and learning roles.",
+    "examples": ["HR business partner", "recruiting", "payroll", "employment law", "learning and development"],
+    "sources": "the government, the regulator or the professional body for the country",
     "dimensions": [
-      "What it is and the problem it solves",
-      "When to choose it, and the alternatives (why not those)",
-      "Key limits and gotchas",
-      "Security (identity, encryption, exposure)",
-      "Cost drivers",
-      "Scaling and failure behaviour (regions and zones, limits, quotas)",
-      "Where you have used it",
-      "What changed in the last 3 years, and anything deprecated"
+      "The policy or practice, and why it exists",
+      "Legal and compliance points for the country",
+      "Fairness, consistency and records",
+      "How the people involved are treated and told",
+      "Risks, and when to escalate or take advice",
+      "How success is measured (for example retention, time to hire, engagement)",
+      "Where you have done it"
+    ]
+  },
+  {
+    "name": "design",
+    "label": "Design",
+    "description": "Product, UX, UI, service and content designers, and design researchers.",
+    "examples": ["user research", "interaction design", "design systems", "accessibility", "content design"],
+    "sources": "accessibility standards bodies, government design guidance and the documentation of the tools the role uses",
+    "dimensions": [
+      "Who the users are and what problem they have",
+      "How you learned it (research methods and evidence)",
+      "The options you explored, and why you chose one",
+      "Accessibility and inclusion",
+      "How the design was tested, and what changed because of it",
+      "Working with product, engineering and stakeholders",
+      "Where you have done it"
+    ]
+  },
+  {
+    "name": "strategy",
+    "label": "Strategy",
+    "description": "Strategy, business analysis, consulting and corporate development roles.",
+    "examples": ["market sizing", "competitive analysis", "business cases", "operating models", "mergers and partnerships"],
+    "sources": "official statistics, regulators and the published reports of the companies concerned",
+    "dimensions": [
+      "The question to answer, and how it is structured",
+      "The facts and assumptions, and which ones matter most",
+      "The options, and how they compare (value, cost, risk)",
+      "A clear recommendation and what would change it",
+      "How it gets carried out, and who has to agree",
+      "How success is measured",
+      "Where you have done it"
     ]
   },
   {
     "name": "product",
     "label": "Product",
-    "description": "Product managers and product owners, and product-minded roles in design and analytics.",
+    "description": "Product managers and product owners, and product-minded analytics roles.",
+    "examples": ["discovery", "roadmaps", "metrics", "pricing", "launches"],
+    "sources": "the documentation of the products and tools the role uses, and regulators where the product is regulated",
     "dimensions": [
       "The user problem, and who has it",
       "How success is measured, and why those measures",
@@ -31,7 +66,9 @@
   {
     "name": "delivery",
     "label": "Delivery",
-    "description": "Project, programme and delivery managers, and scrum masters.",
+    "description": "Project, program and delivery managers, and scrum masters.",
+    "examples": ["planning", "risk management", "agile methods", "stakeholder reporting", "budgets"],
+    "sources": "the standards bodies and professional associations for the method",
     "dimensions": [
       "Scope, goals and what done means",
       "The plan: milestones, dependencies and the critical path",
@@ -43,23 +80,43 @@
     ]
   },
   {
-    "name": "people",
-    "label": "People",
-    "description": "HR, recruiting, people operations and learning roles.",
+    "name": "finance",
+    "label": "Finance",
+    "description": "Finance, accounting, audit, tax and financial planning roles.",
+    "examples": ["financial planning", "month-end close", "audit", "tax", "reporting standards"],
+    "sources": "the accounting standards board, the tax authority and the regulator for the country",
     "dimensions": [
-      "The policy or practice, and why it exists",
-      "Legal and compliance points for the country",
-      "Fairness, consistency and records",
-      "How the people involved are treated and told",
-      "Risks, and when to escalate or take advice",
-      "How success is measured (for example retention, time to hire, engagement)",
+      "The rule, standard or process, and why it exists",
+      "How the numbers are produced and checked (controls, reconciliations, approvals)",
+      "Rules and compliance for the country",
+      "Judgment calls and how they are documented",
+      "Risks and how they are reported",
+      "How it is measured and improved (accuracy, timeliness, cost)",
+      "Where you have done it"
+    ]
+  },
+  {
+    "name": "sales-marketing",
+    "label": "Sales and marketing",
+    "description": "Sales, account management, customer success, marketing and communications roles.",
+    "examples": ["pipeline management", "account planning", "campaigns", "brand", "customer retention"],
+    "sources": "advertising and consumer-protection regulators, and the documentation of the tools the role uses",
+    "dimensions": [
+      "The customer or audience, and what they need",
+      "The approach and the message, and why",
+      "How it is measured (pipeline, conversion, retention, reach) and the targets",
+      "What did not work, and what changed because of it",
+      "Working with product, finance and other teams",
+      "Rules that apply (consumer protection, privacy, advertising)",
       "Where you have done it"
     ]
   },
   {
     "name": "operations",
     "label": "Operations",
-    "description": "Back-office, finance, accounting, operations and customer-support roles.",
+    "description": "Operations, supply chain, back-office and customer-support roles.",
+    "examples": ["process improvement", "supply chain", "customer support", "vendor management", "quality"],
+    "sources": "the regulator and the standards bodies for the industry and country",
     "dimensions": [
       "The process: inputs, steps, outputs and owners",
       "Controls and accuracy (checks, reconciliations, approvals)",
@@ -68,6 +125,23 @@
       "How it is measured (for example cycle time, error rate, cost) and improved",
       "Handling exceptions and escalations",
       "Where you have done it"
+    ]
+  },
+  {
+    "name": "engineering",
+    "label": "Engineering",
+    "description": "Software, data, cloud, infrastructure, security and architecture roles: frontend, backend, platform, data engineering, architecture.",
+    "examples": ["a cloud platform", "system design", "data engineering", "security", "language models"],
+    "sources": "the vendor's own documentation and the standards bodies for the technology",
+    "dimensions": [
+      "What it is and the problem it solves",
+      "When to choose it, and the alternatives (why not those)",
+      "Key limits and gotchas",
+      "Security (identity, encryption, exposure)",
+      "Cost drivers",
+      "Scaling and failure behavior (regions and zones, limits, quotas)",
+      "Where you have used it",
+      "What changed in the last 3 years, and anything deprecated"
     ]
   }
 ]

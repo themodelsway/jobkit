@@ -13,14 +13,14 @@ from jk.resumes import resume_data as rd
 from jk.resumes import tables
 from tests.resumes.support import DATA_REGISTRY, RebuildCase, as_txt, line, parse_sample
 
-BULLET = "Reduced page load time by 30 percent across twelve services using caching and query tuning."
-VARIANT = "Reduced page loading time by 30 percent across twelve services using caching and query tuning."
-CHANGED = "Reduced page load time by 45 percent across twelve services using caching and query tuning."
+BULLET = "Reduced time to hire by 30 percent across twelve teams using structured interviews and scorecards."
+VARIANT = "Reduced the time to hire by 30 percent across twelve teams using structured interviews and scorecards."
+CHANGED = "Reduced time to hire by 45 percent across twelve teams using structured interviews and scorecards."
 
 
 def resume(*bullets: str) -> str:
     """A minimal synthetic resume with one employer."""
-    lines = ["WORK EXPERIENCE", "Acme Corp      03/2021 - Present", "Lead Engineer"]
+    lines = ["WORK EXPERIENCE", "Acme Corp      03/2021 - Present", "Lead Designer"]
     return "\n".join(lines + [f"• {b}" for b in bullets]) + "\n"
 
 
@@ -75,8 +75,8 @@ class CarryIdsUnitTests(unittest.TestCase):
 
     def test_curated_stored_bullet_wins_over_lower_id(self):
         stored = self.company(("s1", BULLET), ("s2", VARIANT))
-        data = {"companies": self.company(("n1", "Reduced page load time by 30 percent across twelve services "
-                                                  "using caching and query tuning!")),
+        data = {"companies": self.company(("n1", "Reduced time to hire by 30 percent across twelve teams "
+                                                  "using structured interviews and scorecards!")),
                 "skills": {}, "profile": {}}
         data["companies"]["acme-corp"]["bullets"][0]["wordings"] = {"g": ["unrelated 30"]}
         proc.carry_ids(data, stored, {"s2"})
@@ -120,9 +120,9 @@ class MergeTests(unittest.TestCase):
         acme = data["companies"]["acme-corp"]
         self.assertEqual(len(acme["roles"]), 1)           # same (start, end) -> one role
         self.assertEqual(sorted(acme["roles"][0]["sources"]), ["a.pdf", "b.pdf"])
-        self.assertEqual(sorted(acme["roles"][0]["titles"]), ["Lead Engineer", "Staff Engineer"])
-        self.assertEqual(len(data["companies"]["initech"]["roles"]), 1)
-        self.assertEqual(data["companies"]["initech"]["roles"][0]["clients"], ["Hooli"])
+        self.assertEqual(sorted(acme["roles"][0]["titles"]), ["Lead Designer", "People Director"])
+        self.assertEqual(len(data["companies"]["acme-3"]["roles"]), 1)
+        self.assertEqual(data["companies"]["acme-3"]["roles"][0]["clients"], ["Acme 6"])
 
     def test_near_duplicate_becomes_variant(self):
         data = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
@@ -134,15 +134,14 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(first["variants"], [first["text"].rstrip(".") + " today."])
         self.assertIn("c.pdf", first["sources"])
 
-    def test_skills_and_summary_merge(self) -> None:
-        """Keep the database skill alias and the sample resume headline."""
+    def test_skills_and_summary_merge(self):
         data = self.merged(("a.pdf", "layout_a", "layout_a.layout"))
         names = {g: [s["name"] for s in v] for g, v in data["skills"]["groups"].items()}
-        self.assertIn("SQL", names["Data"])
-        sql = next(s for s in data["skills"]["groups"]["Data"] if s["name"] == "SQL")
-        self.assertEqual(sql["aliases"], ["Structured Query Language"])
+        self.assertIn("UX", names["Design"])
+        ux = next(s for s in data["skills"]["groups"]["Design"] if s["name"] == "UX")
+        self.assertEqual(ux["aliases"], ["User Experience"])
         self.assertEqual(len(data["profile"]["summaries"]), 1)
-        self.assertEqual(data["profile"]["headlines"], ["Senior Software Engineer"])
+        self.assertEqual(data["profile"]["headlines"], ["Senior Product Designer"])
 
 
 class FigureMergeTests(unittest.TestCase):

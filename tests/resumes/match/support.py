@@ -23,8 +23,8 @@ def facts() -> mf.ResumeFacts:
                             "clients": [], "sources": []}],
                  "bullets": [bullet("b1", "Built an AWS data platform for ten teams", ["AWS"]),
                              bullet("b2", "Led a team of 6 engineers", []), bullet("dup", "Wrote runbooks")]},
-        "globex": {"id": "globex", "name": "Globex", "aliases": [],
-                   "roles": [{"start": "2021-01", "end": None, "titles": ["Architect"], "subtitles": [],
+        "acme-2": {"id": "acme-2", "name": "Acme 2", "aliases": [],
+                   "roles": [{"start": "2021-01", "end": None, "titles": ["Lead Designer"], "subtitles": [],
                               "clients": [], "sources": []}],
                    "bullets": [bullet("dup", "Wrote guides"), bullet("b3", "Migrated clusters to Kubernetes on AWS",
                                                                       ["Kubernetes", "AWS"])]}}
@@ -33,7 +33,7 @@ def facts() -> mf.ResumeFacts:
                          "Languages": [{"name": "Python", "aliases": [], "sources": []}]}}
     return mf.ResumeFacts(copy.deepcopy(companies), skills,
                           ["M.S. in Computer Science, Some University", "B.A. in Economics, Other College"],
-                          ["Example Certified Developer - Associate"])
+                          ["Example Certified Coach - Associate"])
 
 
 def request(**changes) -> dict:
@@ -54,7 +54,7 @@ def request(**changes) -> dict:
 
 
 # A posting with a degree, years, a team size and a skill.
-POSTING = """Senior Engineer
+POSTING = """Senior Strategist
 
 Qualifications:
 - Bachelor's degree in Computer Science.

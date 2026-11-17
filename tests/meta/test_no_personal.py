@@ -2,7 +2,9 @@
 
 Checks every file git would commit (tracked + untracked, minus .gitignore) for:
   * generic leaks: home-directory paths, email addresses, phone numbers
-  * anything in your personal terms (`profile terms check --all`, from ~/.jobkit or $JOBKIT_HOME)
+  * anything in your personal terms or taken from your stored data (`profile terms check --all`, from ~/.jobkit or
+    $JOBKIT_HOME)
+  * employers in the test resume samples that are not Acme names
 
 Without a profile only the generic checks run, and the profile check is reported as skipped.
 """
@@ -16,7 +18,9 @@ import unittest
 from pathlib import Path
 
 from jk import store
+from jk.resumes import parse_resume
 from tests import REAL_HOME
+from tests.resumes import support as resume_support
 from tests.support import REPO_ROOT
 
 HOME_PATH = re.compile("/" + "Users/|/" + "home/[a-z]|C:" + r"\\Users", re.I)
@@ -50,6 +54,13 @@ class TestNoPersonalData(unittest.TestCase):
             self.skipTest("no profile in the real home: only the generic checks ran")
         done = terms_check_on_copy(Path(REAL_HOME))
         self.assertEqual(done.returncode, 0, "values from your profile found in committable files:\n" + done.stdout)
+
+    def test_sample_employers_are_acme_names(self):
+        names = {name for name, _ in resume_support.DATA_REGISTRY.values()} | {job[0] for job in resume_support.JOBS}
+        for sample in sorted((REPO_ROOT / "tests" / "resumes" / "data").glob("*.txt")):
+            names |= set(parse_resume.discover_companies(sample.read_text(encoding="utf-8")).values())
+        self.assertTrue(names)
+        self.assertEqual(sorted(n for n in names if not n.startswith("Acme")), [], "test employers must be Acme names")
 
     def test_the_real_database_is_never_upgraded_or_changed(self):
         with tempfile.TemporaryDirectory(prefix="jobkit-old-home-") as folder:

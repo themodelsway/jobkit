@@ -1,4 +1,4 @@
-"""Answer styles: STAR, SOAR and CARL as labelled views of one stored story. Standard library only.
+"""Answer styles: STAR, SOAR and CARL as labeled views of one stored story. Standard library only.
 
 A story is stored once, in the STAR fields plus `lessons`. A style never changes what is stored; it only names
 the parts, groups the stored text, prompts for what is missing and says when a story is complete:
@@ -58,7 +58,7 @@ RESULT = Part("result", "Result", ("result",), "What was the result, in numbers 
 LEARNING = Part("learning", "Learning", ("lessons",), "What did you learn, and what would you do differently?")
 
 STYLES: Final[dict[str, Style]] = {
-    "star": Style("star", "a clear sequence for most behavioural questions",
+    "star": Style("star", "a clear sequence for most behavioral questions",
                   (SITUATION, TASK, ACTION, RESULT)),
     "soar": Style("soar", "when overcoming something is the point of the story",
                   (SITUATION, OBSTACLE, ACTION, RESULT)),

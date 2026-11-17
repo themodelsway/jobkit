@@ -14,7 +14,7 @@ from jk.base import ToolError
 
 Record = dict[str, Any]
 SESSION_FIELDS = ("id", "title", "mode", "status", "created", "updated")
-ITEM_TABLES = {"card": "card", "leader": "lead_question", "story": "story"}   # item kind -> the table holding it
+ITEM_TABLES = {"card": "card", "leader": "lead_question", "story": "story", "question": "role_question"}
 
 
 def session_exists(sid: str) -> bool:
@@ -52,12 +52,12 @@ def _check_items(conn: sqlite3.Connection, pairs: Iterable[tuple[str, str]]) -> 
     """Fail unless every (kind, id) names an item that exists now.
 
     Raises:
-        ToolError: a kind is not card, leader or story, or the item is not in the data.
+        ToolError: the kind is unknown, or the item is not in the data.
     """
     for kind, item in sorted(set(pairs)):
         table = ITEM_TABLES.get(kind)
         if table is None:
-            raise ToolError(f"Item {item}: unknown kind {kind!r}; use card, leader or story.")
+            raise ToolError(f"Item {item}: unknown kind {kind!r}; use {', '.join(ITEM_TABLES)}.")
         if conn.execute(f"SELECT 1 FROM {table} WHERE id=?", (item,)).fetchone() is None:
             raise ToolError(f"Unknown {kind} {item}: it is not in the data, so it cannot be queued or answered.")
 

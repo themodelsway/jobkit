@@ -99,7 +99,7 @@ Posting: "Manage a team of 10 or more engineers." Line: "Led a team of 6 enginee
 
 ### Example 2: impact
 
-Posting: "placeholder" Line: "placeholder" An outcome with scale: `full`. Line: "placeholder" An activity with no stated result: `partial`, reason "Page speed work is shown but no result is stated."
+Posting: "Proven track record of reducing employee turnover." Line: "Cut voluntary turnover by 30% across 12 teams." An outcome with scale: `full`. Line: "Worked on retention programs." An activity with no stated result: `partial`, reason "Retention work is shown but no result is stated."
 
 ### Example 3: domain
 

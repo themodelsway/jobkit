@@ -101,8 +101,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     """Print one line with its length, its other stored wordings and any approved wording."""
     company, bullet = find_bullet(args.id)
     print(f"{bullet['id']}  {len(bullet['text'])} characters  {company['name']}\n    {bullet['text']}")
-    others = {w for ws in bullet.get("wordings", {}).values() for w in ws} | set(bullet.get("variants", []))
-    for wording in sorted(others - {bullet["text"]}):
+    for wording in sorted(set(rd.wordings_of(bullet)) - {bullet["text"]}):
         print(f"  other stored wording ({len(wording)} characters): {wording}")
     approved = rd.load_curated().get("short_wording", {}).get(bullet["id"])
     print(f"  approved wording ({len(approved)} characters): {approved}" if approved else "  no approved wording")

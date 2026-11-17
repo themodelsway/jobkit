@@ -35,6 +35,17 @@ The system SHALL treat bullets with a similarity ratio of at least 0.92 as varia
 - **WHEN** two bullets are identical except for one number (40% and 90%)
 - **THEN** they are two bullets, each with its own sources
 
+### Requirement: Every wording of a line counts as evidence
+A line's text, its variants and the wording each resume file uses SHALL all count when the system decides which skills and posting requirements the line shows and which skills it is tagged with; a wording that denies professional use of a skill SHALL make the line not show that skill.
+
+#### Scenario: Requirement shown only by an older wording
+- **WHEN** a posting asks for structured interviews, the newest wording of a line says "Improved hiring for 12 teams" and an older resume's wording of the same line says "Ran structured interviews for 12 teams"
+- **THEN** the line counts as showing structured interviews, the requirement is not reported as missing, and the line is tagged with that skill
+
+#### Scenario: A denial in one wording
+- **WHEN** one wording of a line names a skill and another says it was not used at work
+- **THEN** the line does not count as showing that skill
+
 ### Requirement: Rebuild keeps only what the remaining files say
 When a resume file is deleted or changed, each bullet it contributed to SHALL be rebuilt from the wording of the files that remain: its text, figures and variants SHALL NOT keep anything only the removed file said, and a bullet no remaining file supports SHALL be removed. Each bullet SHALL record per source file the wording that file used.
 
@@ -72,7 +83,11 @@ The system SHALL show what each resume parses into with `--survey` and SHALL NOT
 - **THEN** the database and `output/` are unchanged
 
 ### Requirement: Dates may be a year
-A role's start and end SHALL be `YYYY-MM`, or `YYYY` when the resume gives only a year; a year SHALL display as a year and count as June in month arithmetic. Several roles of one employer, each with its own dates, SHALL be stored as separate roles of that employer.
+A role's start and end SHALL be stored as `YYYY-MM`, or as `YYYY` when the resume gives only a year. Roles with their own dates SHALL stay separate.
+
+#### Scenario: Year-only dates
+- **WHEN** a resume supplies only the years for a role
+- **THEN** the dates are displayed without months and are treated as June for month arithmetic
 
 ### Requirement: One job is one role
 The system SHALL keep one role per job. Roles of one employer with the same start date and the same end date are one role, and so are two with the same start date where one resume says `Present` and another gives an end date. Roles with the same start date and different real end dates stay separate.
@@ -90,11 +105,15 @@ The system SHALL keep one role per job. Roles of one employer with the same star
 - **THEN** two roles exist
 
 ### Requirement: Hand curation survives rebuilds
-The system SHALL keep curation in the database, apply it after every rebuild, and never overwrite it. Curation (certifications, education, skill merge/drop/group, tag-only skills, extra skills, known-wrong metrics, bullet themes, ignored fragments and summary angles) SHALL be changed only with commands that list, add and remove its entries.
+The system SHALL keep curation in the database, apply it after every rebuild, and never overwrite it. Curation (certifications, education, skill merge/drop/group, tag-only skills, extra skills, flagged numbers, bullet themes, ignored fragments and summary positioning) SHALL be changed only with commands that list, add and remove its entries.
 
-#### Scenario: Known-wrong metric
-- **WHEN** a bullet contains a figure listed as known-wrong
+#### Scenario: Flagged number
+- **WHEN** a bullet contains a number listed with `curate add flagged-number`
 - **THEN** the bullet is flagged `needs_review`
+
+#### Scenario: Flagged plain count
+- **WHEN** `12` is flagged and one line says "a team of 12" and another "a team of 120"
+- **THEN** only the first line is flagged
 
 #### Scenario: Add and remove curation
 - **WHEN** a curation entry is added and then removed with the curation commands
@@ -112,16 +131,29 @@ The system SHALL keep curation in the database, apply it after every rebuild, an
 - **WHEN** the only curated education entry is removed and the data is rebuilt
 - **THEN** the education parsed from the resumes is back
 
-### Requirement: Themes and summary angles come from one list
-The system SHALL keep one list of the themes the tools act on (lead questions, typical questions, JD matching) and one of the summary angles, and SHALL show both with `process-resumes curate themes`. `curate add theme` SHALL store any theme but SHALL warn when one is not on the list, because it drives no questions or matching; `curate add summary-angle` SHALL refuse an angle that is not on the list.
+### Requirement: Themes and summary positioning come from one list
+The commands SHALL share role-neutral leadership and delivery themes and ship no positioning words. Additional vocabulary SHALL come from the user's curation. `process-resumes curate themes` SHALL show both the built-in and curated lists.
+
+#### Scenario: Adding vocabulary
+- **WHEN** a user curates a theme word, positioning word or theme question
+- **THEN** the relevant commands use it without changing the built-in list
+- **AND** a word uses its supplied posting hints or the word itself when no hints are supplied
 
 #### Scenario: Unknown theme
 - **WHEN** a bullet is tagged with a theme that is not on the list
-- **THEN** the tag is stored and the command warns that no tool uses it
+- **THEN** the tag is stored and the command warns that no tool uses it, and names `curate add theme-word`
 
-#### Scenario: Unknown summary angle
-- **WHEN** a summary is given an angle that is not on the list
-- **THEN** the command refuses it and names the angles that exist
+#### Scenario: Own theme in a job description
+- **WHEN** the user's own theme word has hints and a job description contains one of them
+- **THEN** the job description is read as asking for that theme
+
+#### Scenario: No positioning words yet
+- **WHEN** a summary is given a positioning before the user has any positioning words
+- **THEN** the command refuses it and says how to add one
+
+#### Scenario: Unknown summary positioning
+- **WHEN** a summary is given a positioning that is not one of the user's positioning words
+- **THEN** the command refuses it and names the ones that exist
 
 ### Requirement: Quality words are tags, not skills
 The system SHALL treat Security, Performance, Scalability, High Availability and Cost Efficiency as bullet tags only.
@@ -180,7 +212,7 @@ The system SHALL print the files whose contribution was removed and how many bul
 - **THEN** the data is rebuilt from the remaining files
 
 ### Requirement: Orphaned curation is reported
-The system SHALL list curation entries (themes, ignored fragments, summary angles) whose id matches no current bullet or summary, in `review` output and as a warning at the end of a rebuild. Reporting SHALL NOT modify any curation entry.
+The system SHALL list curation entries (themes, ignored fragments, summary positioning) whose id matches no current bullet or summary, in `review` output and as a warning at the end of a rebuild. Reporting SHALL NOT modify any curation entry.
 
 #### Scenario: Bullet text changed
 - **WHEN** a bullet's text changes so that its id changes
@@ -210,3 +242,22 @@ Data stored before sources were tracked SHALL be rebuilt once from the resume fi
 #### Scenario: Old data
 - **WHEN** a command runs on data stored before sources were tracked
 - **THEN** the data is rebuilt from the resume files once and not again on later runs
+
+### Requirement: Inconsistencies between resumes are raised with the user
+After import, the skill SHALL tell the agent to compare what resumes state about the same facts and ask about each real difference one at a time, showing both values. The agent SHALL save answers only through jobkit commands.
+
+#### Scenario: Both versions are intentional
+- **WHEN** the user keeps both as variants or a difference reflects tailoring for a posting
+- **THEN** the agent saves no correction
+
+#### Scenario: A correction needs a resume edit
+- **WHEN** no jobkit command can correct the value
+- **THEN** the skill tells the agent to leave the edit to the user because the resume folder is read-only
+
+#### Scenario: Two resumes give different start dates
+- **WHEN** two resumes give different start dates for the same job
+- **THEN** the agent asks which is right, saves nothing, names the file that holds the wrong date, and offers to note it as an open item
+
+#### Scenario: An older resume shows a job as current
+- **WHEN** an older resume shows a job as current and a newer one gives its end date
+- **THEN** the difference is not raised

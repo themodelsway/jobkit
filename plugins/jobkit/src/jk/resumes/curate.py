@@ -1,12 +1,13 @@
 """The user's curation of the resume data, edited with commands (`process-resumes curate ...`).
 
 Curation survives rebuilds: certifications and education to keep, skill merge/drop/group rules, tag-only
-skills, extra skills, figures known to be wrong, shorter wordings the user approved, bullet themes, ignored fragments
-and summary angles.
+skills, extra skills, numbers known to be wrong, shorter wordings the user approved, bullet themes, ignored fragments,
+summary positioning, and the user's own vocabulary: theme words, positioning words and typical questions per theme.
 """
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 from typing import Any, Final, NamedTuple
 
@@ -22,14 +23,14 @@ class Spec(NamedTuple):
 
     file: str
     key: str
-    shape: str          # list | certification | map | map-list | extra-skill
+    shape: str          # list | certification | map | map-list | extra-skill | word
     usage: str
 
 
 SPECS: Final[dict[str, Spec]] = {
     "certification": Spec("curated", "certifications", "certification", "NAME [--issued YYYY-MM] [--expires YYYY-MM]"),
     "education": Spec("curated", "education", "list", "TEXT"),
-    "wrong-metric": Spec("curated", "review_if_metric_matches", "list", "FIGURE   (bullets with it need review)"),
+    "flagged-number": Spec("curated", "review_if_metric_matches", "list", "NUMBER   (lines with it are flagged for review)"),
     "skill-merge": Spec("curated", "skill_merge", "map", "FROM TO   (spell FROM as TO)"),
     "skill-drop": Spec("curated", "skill_drop", "list", "NAME   (not a skill)"),
     "tag-only": Spec("curated", "tag_only", "list", "NAME   (a tag, not a skill)"),
@@ -38,8 +39,12 @@ SPECS: Final[dict[str, Spec]] = {
     "short-wording": Spec("curated", "short_wording", "map", f"BULLET_ID TEXT   (the user's approved wording, at most {rd.LINE_LIMIT} characters)"),
     "theme": Spec("themes", "themes", "map-list", "BULLET_ID THEME [THEME ...]"),
     "ignore": Spec("themes", "ignore", "list", "BULLET_ID   (a fragment, not a bullet)"),
-    "summary-angle": Spec("themes", "summary_angles", "map-list", "SUMMARY_ID ANGLE [ANGLE ...]"),
+    "summary-positioning": Spec("themes", "summary_angles", "map-list", "SUMMARY_ID POSITIONING [POSITIONING ...]"),
+    "theme-word": Spec("themes", "theme_words", "word", "WORD [HINT ...]   (a theme of your own; HINT: job description wording that shows it)"),
+    "positioning-word": Spec("themes", "positioning_words", "word", "WORD [HINT ...]   (a summary positioning; HINT as for theme-word)"),
+    "theme-question": Spec("themes", "theme_questions", "map-list", "THEME QUESTION [QUESTION ...]   (typical questions for a theme)"),
 }
+WORD_RE: Final = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 KINDS: Final[tuple[str, ...]] = tuple(SPECS)
 
 
@@ -50,7 +55,7 @@ def load(spec: Spec) -> dict[str, Any]:
 
 def container(data: dict[str, Any], spec: Spec) -> Any:
     """The list or dict of this kind inside the file (created empty when missing)."""
-    return data.setdefault(spec.key, {} if spec.shape in ("map", "map-list", "extra-skill") else [])
+    return data.setdefault(spec.key, {} if spec.shape in ("map", "map-list", "extra-skill", "word") else [])
 
 
 def describe(spec: Spec, entry: Any) -> str:
@@ -64,18 +69,28 @@ def lines(kind: str) -> list[str]:
     """Every entry of a kind as text lines."""
     spec = SPECS[kind]
     items = container(load(spec), spec)
-    if spec.shape in ("map", "map-list"):
+    if spec.shape in ("map", "map-list", "word"):
         return [f"{key} -> {', '.join(value) if isinstance(value, list) else value}" for key, value in items.items()]
     if spec.shape == "extra-skill":
         return [f"{group}: " + ", ".join(s["name"] for s in skills) for group, skills in items.items()]
     return [describe(spec, entry) for entry in items]
 
 
+def require_positioning(words: list[str]) -> None:
+    """Fail unless every word is one of the user's positioning words."""
+    known = rd.positioning_words()
+    if not known:
+        raise ToolError("No positioning words yet. Add one first with `curate add positioning-word WORD [HINT ...]`.")
+    bad = [w for w in words if w not in known]
+    if bad:
+        raise ToolError(f"Unknown summary positioning {', '.join(bad)}. Use only: {', '.join(known)}.")
+
+
 def add_entry(spec: Spec, items: Any, values: list[str], options: argparse.Namespace) -> None:
     """Add (or replace) one entry in the container."""
-    need = {"map": 2, "list": 1, "certification": 1}.get(spec.shape, 2)
+    need = {"map": 2, "list": 1, "certification": 1, "word": 1}.get(spec.shape, 2)
     if len(values) < need or (spec.shape in ("map", "list", "certification") and len(values) != need):
-        raise ToolError(f"usage: curate add {spec.key} {spec.usage}")
+        raise ToolError(f"usage: curate add {options.kind} {spec.usage}")
     if spec.shape == "list":
         if values[0] not in items:
             items.append(values[0])
@@ -88,9 +103,11 @@ def add_entry(spec: Spec, items: Any, values: list[str], options: argparse.Names
         items[values[0]] = values[1]
     elif spec.shape == "map-list":
         if spec.key == "summary_angles":
-            bad = [v for v in values[1:] if v not in rd.SUMMARY_ANGLES]
-            if bad:
-                raise ToolError(f"Unknown summary angle {', '.join(bad)}. Use only: {', '.join(rd.SUMMARY_ANGLES)}.")
+            require_positioning(values[1:])
+        items[values[0]] = values[1:]
+    elif spec.shape == "word":
+        if not WORD_RE.fullmatch(values[0]):
+            raise ToolError(f"{values[0]!r} is not a word: use lowercase letters and digits, joined by hyphens.")
         items[values[0]] = values[1:]
     else:
         group = items.setdefault(values[0], [])
@@ -122,18 +139,18 @@ def unknown_theme_note(spec: Spec, rows: list[list[str]]) -> str:
     """A warning for themes no tool acts on (they are kept, but drive no questions and no matching)."""
     if spec.key != "themes":
         return ""
-    other = sorted({v for row in rows for v in row[1:] if v not in rd.KNOWN_THEMES})
+    other = sorted({v for row in rows for v in row[1:] if v not in rd.known_themes()})
     if not other:
         return ""
     which = f"{other[0]} is not a theme" if len(other) == 1 else f"{', '.join(other)} are not themes"
     return (f" Note: {which} the tools use, so they add no lead questions, typical questions "
-            "or matching. Run `curate themes` for the ones that do.")
+            "or matching. Run `curate themes` for the ones that do, or add your own with `curate add theme-word`.")
 
 
 def print_themes() -> None:
-    """The themes and summary angles the tools act on."""
-    print("Themes: " + ", ".join(rd.KNOWN_THEMES))
-    print("Summary angles: " + ", ".join(rd.SUMMARY_ANGLES))
+    """The themes and summary positioning the tools act on."""
+    print("Themes: " + ", ".join(rd.known_themes()))
+    print("Summary positioning: " + (", ".join(rd.positioning_words()) or "none yet (`curate add positioning-word`)"))
 
 
 def batch_entries(values: list[str]) -> list[list[str]]:
@@ -183,14 +200,15 @@ def cmd_curate(args: argparse.Namespace) -> None:
             raise ToolError(f"No {args.kind} entry {' '.join(args.values)}. Run `curate list {args.kind}`.")
         done = f"Removed {args.kind}: {' '.join(args.values)}."
     tables.save_curation(spec.file, data)
-    print(f"{done} Run `process-resumes` to apply it.")
+    vocabulary = spec.key in ("theme_words", "positioning_words", "theme_questions")
+    print(f"{done} " + ("It is used from now on." if vocabulary else "Run `process-resumes` to apply it."))
 
 
 def add_parser(sub: Any) -> None:
     """Register `curate list|add|rm` on a subparsers action."""
     curate = sub.add_parser("curate", help="list, add or remove curation entries")
     actions = curate.add_subparsers(dest="action", required=True)
-    actions.add_parser("themes", help="list the themes and summary angles the tools act on")
+    actions.add_parser("themes", help="list the themes and summary positioning the tools act on")
     listing = actions.add_parser("list")
     listing.add_argument("kind", nargs="?", choices=KINDS)
     for name in ("add", "rm"):

@@ -2,7 +2,7 @@
 
 A company orders a session's queue and never empties it: stories and leadership questions that match a value by
 theme come first, then those that match by word, then the rest; inside a group an item matching more values comes
-first and ties keep the usual order. Architecture cards keep their places. Library module with no command line.
+first and ties keep the usual order. Role-knowledge cards keep their places. Library module with no command line.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def order[Entry: Mapping[str, Any]](queue: Sequence[Entry], company: Mapping[str
     for slot, (_, _, item) in zip(slots, keyed, strict=True):
         out[slot] = item
     if not slots:
-        return out, "A company does not change the order of architecture cards."
+        return out, "A company does not change the order of role-knowledge cards."
     if all(key[0] == 2 for key, _, _ in keyed):
         return out, f"No story or leadership question in this queue matches {company['name']} yet."
     return out, None

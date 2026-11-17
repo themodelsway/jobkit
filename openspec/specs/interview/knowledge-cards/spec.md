@@ -1,7 +1,7 @@
-# aws/architecture-drills Specification
+# interview/knowledge-cards Specification
 
 ## Purpose
-Keep architecture drill cards (services, decision pairs, scenarios) for one or more technologies and the user's confidence, stored in the database. Implemented in `plugins/jobkit/src/jk/interview/arch.py` and `tracks.py`; AWS is the bundled example (`plugins/jobkit/src/jk/interview/aws/arch_seed.py`); other technologies are track seeds stored in the database.
+Keep role-knowledge cards (topics, decision pairs, scenarios, cases, role-plays) for one or more fields or technologies (tracks) and the user's confidence, stored in the database. Implemented in `plugins/jobkit/src/jk/interview/cards.py` and `tracks.py`; AWS is bundled as one example track of the engineering family (`plugins/jobkit/src/jk/interview/aws/aws_seed.py`); every other field is a track seed stored in the database.
 
 ## Requirements
 
@@ -27,11 +27,11 @@ Lifecycle facts SHALL NOT be seeded; they SHALL be recorded only by `refresh` wi
 - **THEN** the system rejects it
 
 #### Scenario: Source from another track
-- **WHEN** a Acme Data card is refreshed with an AWS documentation URL
+- **WHEN** a card of a people-operations track is refreshed with an AWS documentation URL
 - **THEN** the system rejects it and names the hosts that track accepts
 
 ### Requirement: Choosing cards
-The system SHALL pick cards by track, area, tier and kind (service, pair, scenario, case, role-play) in default or random order, list cards that a job description mentions weakest first, and list stale service cards (unverified or older than a number of months). `status` SHALL count the unverified cards among the same service cards that `stale` lists.
+The system SHALL pick cards by track, area, tier and kind (topic, pair, scenario, case, role-play) in default or random order, list cards that a job description mentions weakest first, and list stale topic cards (unverified or older than a number of months). `status` SHALL count the unverified cards among the same topic cards that `stale` lists.
 
 #### Scenario: Stale list
 - **WHEN** `stale --months 6` is run
@@ -42,8 +42,8 @@ The system SHALL pick cards by track, area, tier and kind (service, pair, scenar
 - **THEN** only role-play cards are offered
 
 #### Scenario: Existing tracks keep their order
-- **WHEN** a track holds only service, pair and scenario cards
-- **THEN** `next` and a new architecture session offer the same cards in the same order as before this change
+- **WHEN** a track holds only topic, pair and scenario cards
+- **THEN** `next` and a new knowledge session offer them by tier, confidence, last practice and seed order
 
 ### Requirement: Seed is idempotent
 `init` SHALL create or extend the catalog from the seed and never overwrite existing progress.
@@ -53,14 +53,14 @@ The system SHALL pick cards by track, area, tier and kind (service, pair, scenar
 - **THEN** progress is unchanged
 
 ### Requirement: Several technologies without code
-The system SHALL let the user prepare for several technologies or fields at once. AWS SHALL be bundled; any other track SHALL be added as a validated JSON seed (`arch track add NAME --seed FILE|-`) holding topic names, source hosts and optionally a role family, a rubric and a country, but no facts, stored in the database. Each card SHALL belong to one track; ids of non-AWS tracks SHALL start with the track name, and cards made before tracks existed SHALL count as AWS.
+The system SHALL let the user prepare for several fields or technologies at once. AWS SHALL be bundled as an example; any other track SHALL be added as a validated JSON seed (`cards track add NAME --seed FILE|-`) holding topic names, source hosts and optionally a role family, a rubric and a country, but no facts, stored in the database. Each card SHALL belong to one track; ids of non-AWS tracks SHALL start with the track name, and cards made before tracks existed SHALL count as AWS.
 
 #### Scenario: Two tracks
-- **WHEN** `init --track aws --track acmedata` runs
-- **THEN** both sets of cards exist, a service named alike in both has two cards, and `list --track acmedata` shows only the Acme Data ones
+- **WHEN** `init --track aws --track people-ops` runs
+- **THEN** both sets of cards exist, a topic named alike in both has two cards, and `list --track people-ops` shows only the people-operations ones
 
 #### Scenario: Bad seed
-- **WHEN** a seed has no source hosts, a URL instead of a host, a tier outside 2-3 or not a whole number, a blank service or pair name, the reserved name `aws`, an unknown family, an empty rubric line, a rubric of more than 12 lines, or no cards of any kind
+- **WHEN** a seed has no source hosts, a URL instead of a host, a tier outside 2-3 or not a whole number, a blank topic or pair name, the reserved name `aws`, an unknown family, an empty rubric line, a rubric of more than 12 lines, or no cards of any kind
 - **THEN** `track add` rejects it and says which part is wrong
 
 #### Scenario: Seed stored by an earlier version
@@ -71,23 +71,27 @@ The system SHALL let the user prepare for several technologies or fields at once
 - **WHEN** a stored seed fails a check that every version made, and `show` is run for one of its cards
 - **THEN** the command fails and names the problem, rather than showing another track's rubric
 
-#### Scenario: Seed without services
+#### Scenario: Seed without topics
 - **WHEN** a seed holds only scenario, case and role-play cards
 - **THEN** `track add` accepts it
 
 #### Scenario: Init without a track
 - **WHEN** `init` runs with no `--track`
-- **THEN** it extends the tracks already enabled, or AWS when none is
+- **THEN** it extends the tracks already enabled
+
+#### Scenario: No track enabled
+- **WHEN** `init` runs with no `--track` and no track is enabled
+- **THEN** it fails, stores no cards, and says how to choose or add a track; no track is loaded by default
 
 ### Requirement: Card ids never clash
-A card's id SHALL be made from its track, its kind (none for services, `pair-`, `scn-`, `case-` or `role-`) and the slug of its name. `track add` and `init` SHALL refuse a seed in which two cards get the same id, or in which a card gets the id of a stored card of another kind or another track, and SHALL name both cards, so that no card replaces another or takes over its progress.
+A card's id SHALL be made from its track, its kind (none for topics, `pair-`, `scn-`, `case-` or `role-`) and the slug of its name. `track add` and `init` SHALL refuse a seed in which two cards get the same id, or in which a card gets the id of a stored card of another kind or another track, and SHALL name both cards, so that no card replaces another or takes over its progress.
 
 #### Scenario: Two cards of one seed
-- **WHEN** a seed holds the service "Role conflict" and the role-play "Conflict" (both `<track>-role-conflict`)
+- **WHEN** a seed holds the topic "Role conflict" and the role-play "Conflict" (both `<track>-role-conflict`)
 - **THEN** `track add` rejects it and names both
 
 #### Scenario: A new card and a stored one
-- **WHEN** a track's service card has progress and the seed is changed so that a role-play gets that card's id
+- **WHEN** a track's topic card has progress and the seed is changed so that a role-play gets that card's id
 - **THEN** `track add` and `init` refuse it, and the stored card and its progress are unchanged
 
 ### Requirement: Case and role-play cards
@@ -108,9 +112,9 @@ A seed SHALL be able to hold case cards (a title and the situation the interview
 - **WHEN** AWS and a product track are both enabled and `show` is run for a product card
 - **THEN** it prints the product track's rubric, not AWS's
 
-#### Scenario: AWS unchanged
-- **WHEN** `show` is run for an AWS card
-- **THEN** it prints the same rubric lines AWS used before this change
+#### Scenario: A track's own rubric
+- **WHEN** `show` is run for a card of a track whose seed gives its own rubric
+- **THEN** it prints that rubric
 
 ### Requirement: Country of a track
 A seed SHALL be able to name a country, and `show` SHALL print it for every card of that track.

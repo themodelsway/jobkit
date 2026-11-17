@@ -57,8 +57,8 @@ src/jk/                  the commands (Python package)
   summary.py             the overview in one call (`jobkit status --summary`)
   user/                  settings, employers, open items and personal terms (`profile`)
   resumes/               reading, parsing, querying and building resumes, and the match score (`match_*` files)
-  interview/             stories, leadership questions, drill cards, target companies, practice sessions, readiness
-  interview/aws/         the one bundled example track; others are added with `arch track add`
+  interview/             stories, leadership questions, role-knowledge cards, target companies, practice sessions, readiness
+  interview/aws/         the AWS example track (engineering family); every other field is added with `cards track add`
 setup/                   the helper setup the skills ask for; the skills tell the agent to run it once the user responds with yes
   install                macOS and Linux
   install.ps1            Windows
@@ -123,20 +123,65 @@ git config core.hooksPath .githooks
 
 ## Keeping personal data out of commits
 
-Committed files are meant to hold no names, employers or folders. The pre-commit hook and `tests/meta/test_no_personal.py` check that against the contributor's own list of personal terms; the [manual](manual.md#for-contributors-keeping-personal-data-out-of-commits) describes the list and the checks.
+Committed files must hold nothing personal: the contributor's name, phone, email, LinkedIn, resume folder, employers, clients or products, and nothing taken from the contributor's own data (resume lines, titles, certifications, degrees, figures, story details, years of experience, own vocabulary). The pre-commit hook and `tests/meta/test_no_personal.py` enforce it in two ways, both against the contributor's own database (`~/.jobkit`), never against anything in the repository:
 
-## Modules not yet used by a command
+- **Personal terms**: a list of words and patterns (below).
+- **Stored-data check**: each line is compared with the stored data itself (below).
 
-### Preparation planner (`jk.interview.prep_plan`)
+Examples in tests, docs and specs are made up and span role families (people, design, strategy, product, operations, engineering). Fictional employers are Acme names (Acme Corp, Acme 2, Acme-Labs); docs and specs may use Company X and Company Y. Real companies and brands are not used.
 
-Its contract is the `interview/preparation-planner` spec in `openspec/specs/`.
+### Where the terms come from
 
-A pure function over plain records: `plan(snapshot, today, focus=(), reassess_days=30)` returns ordered, explained actions. It reads no database; the caller builds the `Snapshot`. The date is passed in, so the same input gives the same plan.
+| Source | What | How it is kept |
+| --- | --- | --- |
+| Derived | the contributor's name, the phone, email and LinkedIn in the saved header, the resume folder, the employer names found by `process-resumes`, the company folder of each resume file (the first folder on its path that is not a year, quarter, month or setup folder: `2026/Acme Air/me.docx` and `Acme Air/October/me.pdf` give Acme Air; a file directly in the resume folder gives none) | read from the database each time, so a new resume import or a header change is picked up at once; nothing is copied |
+| Stored | products, extra clients, custom patterns, and the derived terms marked as ignored | the `term` table, changed with `profile terms` |
 
-- `Competency`: `id`, `name`, `kind` (`technical`, `leadership`, `general`), `aliases`, `requires` (prerequisites), `related`. Aliases resolve to one competency; related competencies (ECS and Kubernetes) are never merged. `check_vocabulary` rejects a prerequisite loop, an alias with two targets and a reference to nothing. `SEED` is a small neutral list.
-- `Fact` (engagement, fact id, competencies, `status` confirmed/proposed/unsure, `ownership` own/team/unclear), `Story` (engagement, competencies, done, ownership, facts), `Attempt` (competency, day, `kind` drill/quiz/lesson, `grade` 0 weak, 1 some gaps, 2 good), `Lead` (competency, `ref` of a stored resume line). A lead is a hint for a question, never evidence: it is not a fact and counts as no experience. The caller leaves out lines that are flagged, ignored or not demonstrated for that skill (`evidence.lead_lines`).
-- Three kinds of evidence stay apart: experience (confirmed, own facts and stories, counted by distinct engagement), knowledge (a passed quiz or a good drill answer) and performance (graded drill answers). A quiz never creates experience, and a self-rating is never turned into a grade.
-- `Action`: `competency`, `type` (`clarify_fact`, `teach_prerequisite`, `practise_concept`, `rehearse_story`, `reassess`), `reason_code`, `reason`, `evidence` and `observations` (`story:ID`, `fact:ENGAGEMENT/ID`, `attempt:ID`), plus `target`, `age_days`, `choices` (other stories on the same engagement), `transferable`, `self_rated` and `leads` (line references, for `profile_gap` only) where they apply. Reason codes: `fact_unconfirmed`, `ownership_unclear` (category 1), `prerequisite_unmet` (2), `profile_gap`, `untested`, `untested_with_story` (3), `weak`, `weak_with_story` (4), `answer_old` (5). `profile_gap` means nothing is recorded yet that shows the person used the competency (no confirmed fact or story, no graded drill, whatever a quiz showed); it asks for an example and never says the person has no experience. `untested` means experience is recorded but no drill is graded yet.
-- Order: factual blocker, unmet prerequisite, untested (`profile_gap` before plain `untested`), observed weakness, due reassessment. Within a group, focused competencies first, then by id.
-- Knowledge never expires: a quiz passed long ago still counts. An old good answer only gives a `reassess` action.
-- `reassess_days` (the window the caller passes as `reassess_days`): a profile setting stored in the `setting` table, a whole number of days from 1 to 365, default 30 when unset. `profile.reassess_days()` returns it; `readiness`, the `sessions` queue and the caller of `plan` all read it, and `--days N` overrides it for one run.
+A derived term of four characters or fewer (for example ACME) matches only as a whole word. Other terms match anywhere, ignoring letter case.
+
+### Commands
+
+```
+profile terms                        # list every term with its kind, match mode and source
+profile terms add acme.ai --kind product
+profile terms add "acme[ _.-]?ai" --kind client      # a pattern (regular expression), recognized by its characters
+profile terms ignore WORD           # a personal term that is also an everyday word (it is not removed from the data)
+profile terms rm acme.ai           # remove a stored term, or an ignore
+profile terms import terms.txt       # one term per line, a line with pattern characters is a pattern
+profile terms check --staged         # what the hook runs: the staged files as staged
+profile terms check --all            # every file git would commit
+profile terms check --all --exhaustive   # also the ignored common words, for a manual review
+profile terms check --history       # every version of every file in the history, for a review before publishing
+```
+
+Run them as `uv run profile terms ...`. A hit prints `path:line: kind term 'text'` and the command exits 1. Fix the file, or ignore the term if it is a false alarm.
+
+### Stored-data check
+
+`profile terms check` also compares every line it reads with the contributor's stored data: resume lines with their variants and the wording of each file, summaries, headlines, profile points, titles, clients, education, certifications, stories and engagements, practice and leadership notes, the contributor's own theme and positioning words, what they are preparing for, and the extracted resume text in the output folder. jobkit's own seeded text (the card catalog, built-in questions and themes, the role families) is left out, so lines that quote it are not hits.
+
+| Kind | A line is a hit when it |
+| --- | --- |
+| `phrase` | shares a run of five words with stored text, three of them not common words |
+| `near-copy` | is at least 75% similar to a stored sentence (lines of 25 characters or more) |
+| `value` | names a stored title, certification, degree or headline of two or more words |
+| `figures` | holds two of the contributor's figures: percentages, amounts, or counts of something such as "40 accounts" |
+| `fingerprint` | combines three distinctive terms: titles, certifications, the contributor's own vocabulary, skills of two or more words |
+
+A hit prints `path:line: kind (source)`, where the source names the kind of record and its id, never the stored text. The comparison is rebuilt in memory from the database on every run and nothing is written to disk, so new data is checked from the next commit. A false alarm is cleared with `profile terms ignore TEXT`: ignored text is removed from a line before it is compared.
+
+With `--staged` the check also warns, without failing, when the staged changes remove lines that match stored data: removed text stays in earlier commits. `profile terms check --history` reads every version of every file in the history of all branches, for a review before publishing.
+
+### Common words
+
+Some personal terms are also everyday words, for example an employer whose name is a common English word. Checking for such a term would flag many harmless lines, so mark it as a common word with `profile terms ignore WORD`; the hook and the normal check then skip it.
+
+Before publishing, check the common words too with `profile terms check --all --exhaustive`. It lists each common word with the files and lines where it appears. Review the list by hand: most hits are harmless. The hook never runs this check.
+
+### When it runs
+
+- `.githooks/pre-commit` prints `Running pre-commit hooks ...` and runs `profile terms check --staged` (the step `personal terms and phrases`) before ruff and the tests. Enable the hook once per clone with `git config core.hooksPath .githooks`.
+- `tests/meta/test_no_personal.py` runs the same check on every committable file, using the contributor's real home folder.
+- With no database on the machine (a fresh clone, CI) both skip with a message. Only the generic checks (home paths, emails, phone numbers) run.
+
+The term list is personal data: `jobkit export --only terms` shows it and `jobkit backup` includes it. Do not paste it into the repository, an issue or a pull request.

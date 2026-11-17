@@ -70,7 +70,7 @@ Every inline code span that starts with a tool name, in a skill page, a guide, t
 - **THEN** the test suite fails and names the file and the written command
 
 #### Scenario: Unknown subcommand
-- **WHEN** a doc writes `arch drill ID` and `arch` has no `drill` subcommand
+- **WHEN** a doc writes `cards drill ID` and `cards` has no `drill` subcommand
 - **THEN** the test suite fails and names the file and the written command
 
 #### Scenario: Placeholders are not checked as subcommands

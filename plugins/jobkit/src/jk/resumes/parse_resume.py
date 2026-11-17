@@ -27,7 +27,7 @@ from jk.resumes.work_layout import (BULLETS, HEADER_PREFIX, MAX_HEADLINE_CHARS, 
                                     employer_by_context, is_location, is_title_line, plausible_company, structure_work_lines)
 
 ZERO_WIDTH: Final[dict[int, None]] = dict.fromkeys(map(ord, "\u200b‌‍﻿"))
-PARSER_VERSION: Final[int] = 4           # raise it when reading or parsing changes what a resume file yields: the next
+PARSER_VERSION: Final[int] = 6           # raise it when reading or parsing changes what a resume file yields: the next
                                          # `process-resumes` run then backs up the data and rebuilds it from the files
 SIMILAR_THRESHOLD: Final[float] = 0.92   # used by the merge step: near-identical bullets become variants
 SKILL_SECTIONS: Final[tuple[str, ...]] = ("skills", "skills_leadership", "skills_technical")
@@ -38,17 +38,10 @@ COMPANIES: dict[str, tuple[str, str]] = {}
 COMPANY_RES: dict[str, re.Pattern[str]] = {}
 
 
-GROUPS: Final[dict[str, str]] = {
-    "leadership skills": "Leadership",
+GROUPS: Final[dict[str, str]] = {        # whole labels; any other label is matched by its words (GROUP_WORDS)
     "software engineering": "Software Engineering",
     "sdlc": "Software Engineering",
-    "placeholder": "Cloud",
-    "cloud strategy": "Cloud",
     "ai/ml": "AI/ML",
-    "gen ai": "AI/ML",
-    "genai": "AI/ML",
-    "web technologies": "Web",
-    "observability solutions": "Observability",
     "observability": "Observability",
     "languages": "Languages",
     "programming languages": "Languages",
@@ -62,12 +55,23 @@ GROUPS: Final[dict[str, str]] = {
     "bigdata": "Data",
     "big data": "Data",
 }
+LABEL_WORDS: Final[frozenset[str]] = frozenset({"skills", "solutions", "strategy", "technologies", "tools", "platforms", "stack"})
+GROUP_WORDS: Final[dict[str, str]] = {   # a word in a longer label ("Leadership Skills", "Cloud Strategy") -> its group
+    "leadership": "Leadership", "cloud": "Cloud", "ai": "AI/ML", "ml": "AI/ML", "genai": "AI/ML",
+    "observability": "Observability", "monitoring": "Observability", "web": "Web", "data": "Data",
+    "database": "Data", "databases": "Data", "language": "Languages", "languages": "Languages",
+}
+ROLE_GROUP_WORDS: Final[dict[str, str]] = {   # groups for roles outside engineering; never read as a category name
+    "design": "Design", "product": "Product", "people": "People", "hr": "People", "talent": "People",
+    "business": "Business", "finance": "Finance", "operations": "Operations", "marketing": "Marketing",
+    "research": "Research",
+}
 MAX_LABEL_CHARS: Final[int] = 40
 MAX_LABEL_WORDS: Final[int] = 5
 WIDE_GAP_RE: Final = re.compile(r"\s{3,}")   # the gap between cells of a table row or columns of a list
 GAP_RE: Final = re.compile(r"\s{2,}")        # a narrower gap counts too in a line that has no other separator
 MAX_SKILL_CHARS: Final[int] = 60          # a longer "skill" is a sentence that wandered into the skills section
-STOP_SKILLS: Final[frozenset[str]] = frozenset({"solutions", "solution", "strategy", "cloud strategy", "other"})
+STOP_SKILLS: Final[frozenset[str]] = frozenset({"solutions", "solution", "strategy", "other"})
 
 METRIC_RE: Final = re.compile(
     r"\$\s?\d[\d.,]*\s?(?:[MBK]\b|million|billion|thousand)?\+?|\d+(?:\.\d+)?\s?%|\d+\+?\s?(?:percent|million|years|x)\b",
@@ -132,7 +136,7 @@ def clean(text: str) -> str:
     text = text.translate(ZERO_WIDTH).replace("\xa0", " ")
     text = re.sub(r"(\w)- (\w)", r"\1-\2", text)        # "Cross- functional"
     text = re.sub(r"\(\s+", "(", text)                    # "( AWS"
-    text = re.sub(r"\s+\)", ")", text)                    # "placeholder"
+    text = re.sub(r"\s+\)", ")", text)                    # "Kafka )"
     text = re.sub(r"Next\.\s+js", "Next.js", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
@@ -261,7 +265,7 @@ def _header_line_index(lines: list[str], date_index: int) -> int | None:
 
 def _employer_by_header(lines: list[str], header: int, date_index: int, name: str) -> bool:
     """True when `name`, which holds a title word, is the employer of the header block: a clearer title stands in the
-    header itself ('Principal Labs – Senior Engineer'), between the header and the dates, or just after the dates."""
+    header itself ('Principal Labs – Senior Strategist'), between the header and the dates, or just after the dates."""
     title_part = re.split(SEP, lines[header], maxsplit=1)[1:]
     between = lines[header + 1:date_index]
     after = lines[date_index + 1:date_index + 2]
@@ -480,6 +484,8 @@ def _split_label(text: str, labels: list[str]) -> tuple[str, str] | None:
     if not match:
         low = text.lower()
         label = next((x for x in labels if low.startswith(x) and low[len(x):].lstrip()[:1] == ","), None)
+        if label is None and "," in text and comma_label(text.split(",", 1)[0]):
+            label = text.split(",", 1)[0].strip().lower()
         match = re.match(rf"^(?P<l>.{{{len(label)}}})\s*,\s*(?P<r>.*)$", text) if label else None
     return (match["l"].strip(), match["r"]) if match else None
 
@@ -489,7 +495,7 @@ def _add_skills(groups: dict[str, dict[str, set[str]]], group: str, items: Itera
     for item in items:
         match = re.match(r"^(.*?)\s*\(([^)]+)\)$", item)
         name, alias = (clean(match[1]), [clean(match[2])]) if match else (item, [])
-        if name and name.lower() not in STOP_SKILLS:
+        if name and name.lower() not in STOP_SKILLS and not is_category_name(name):
             groups.setdefault(group, {}).setdefault(name, set()).update(alias)
 
 
@@ -518,6 +524,29 @@ def _skill_entries(lines: Iterable[str]) -> list[str]:
     return [entry for entry in entries + marked if entry]
 
 
+def is_category_name(name: str) -> bool:
+    """Whether a list item only names a category ("Cloud strategy", "Web technologies"): a group word and a list
+    label word, and nothing else."""
+    words = set(re.findall(r"[a-z]+", name.lower())) - {"and"}
+    return bool(words & LABEL_WORDS) and bool(words & set(GROUP_WORDS)) and words <= LABEL_WORDS | set(GROUP_WORDS)
+
+
+def comma_label(head: str) -> bool:
+    """Whether the first part of 'Head, a, b' is a group label ("Cloud strategy") rather than a skill: it names a
+    group and has a word that labels a list."""
+    words = set(re.findall(r"[a-z]+", head.lower()))
+    return bool(group_for(head)) and bool(words & LABEL_WORDS) and len(words) <= MAX_LABEL_WORDS
+
+
+def group_for(label: str) -> str:
+    """The skill group a label names: a whole known label, else the first of its words that names a group, else ""."""
+    exact = GROUPS.get(label.lower())
+    if exact:
+        return exact
+    words = re.findall(r"[a-z]+", label.lower())
+    return next((GROUP_WORDS.get(w) or ROLE_GROUP_WORDS[w] for w in words if w in GROUP_WORDS or w in ROLE_GROUP_WORDS), "")
+
+
 def parse_skills(sections: Mapping[str, list[str]]) -> tuple[dict[str, list[SkillItem]], list[str]]:
     """Return {group: [{'name', 'aliases'}]} and a list of problems (unknown group labels, sentences in skills)."""
     groups: dict[str, dict[str, set[str]]] = {}
@@ -528,7 +557,7 @@ def parse_skills(sections: Mapping[str, list[str]]) -> tuple[dict[str, list[Skil
             group, rest = "Leadership", text
             labelled = None if key == "skills_leadership" else _split_label(text, labels)
             if labelled is not None:
-                group = GROUPS.get(labelled[0].lower(), "")
+                group = group_for(labelled[0])
                 rest = labelled[1]
                 if not group:
                     problems.append(f"unknown skill group label: {labelled[0]}")

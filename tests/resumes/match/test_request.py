@@ -80,8 +80,8 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(mf.bullet_ref(FACTS, "acme", "b1"), "bullet:b1")
 
     def test_other_reference_kinds(self):
-        for ref in ("skill:k8s", "education:2", "certification:example certified developer - associate",
-                    "role:globex"):
+        for ref in ("skill:k8s", "education:2", "certification:example certified coach - associate",
+                    "role:acme-2"):
             with self.subTest(ref=ref):
                 self.assertEqual(problems(edited(0, evidence=[ref])), "")
         for ref in ("education:3", "skill:Cobol", "certification:PMP", "role:nowhere", "thing:1", "plain"):

@@ -8,14 +8,14 @@ from jk.resumes import curate, lines
 from jk.resumes import resume_data as rd
 from tests.resumes.support import PipelineCase
 
-ORIGINAL = ("Designed request throttling with Redis and Kafka during a platform upgrade; "
-            "improved placement by 70 percent by updating the way shifts were assigned, "
-            "and documented the approach for the platform team, which adopted it across 12 teams.")
+ORIGINAL = ("Launched a partner referral program with Acme CRM and Acme BI during a market expansion; "
+            "increased revenue by 40 percent through tiered incentives and quarterly partner reviews, "
+            "and wrote the playbook for the sales team, which rolled it out in 9 regions.")
 
 
 class WordingChecks(unittest.TestCase):
     def test_figures_are_compared_in_one_spelling(self):
-        self.assertEqual(lines.figures("cut cost by 70 percent and $1.5 million in 12 teams"), {"70%", "$1.5m", "12"})
+        self.assertEqual(lines.figures("grew revenue by 40 percent and $1.5 million in 9 regions"), {"40%", "$1.5m", "9"})
         self.assertEqual(lines.figures("Route53 and S3 on EC2"), set())
 
     def test_a_changed_sign_is_a_changed_figure(self):
@@ -24,30 +24,28 @@ class WordingChecks(unittest.TestCase):
         errors, _ = lines.problems("Moved operating margin from -5% to 2%.", "Moved operating margin from 5% to 2%.")
         self.assertTrue(any("dropped" in e and "-5%" in e for e in errors))
         self.assertTrue(any("added" in e and "5%" in e for e in errors))
-        errors, _ = lines.problems("Cut a $-2M loss.", "Cut a $2M loss.")
+        errors, _ = lines.problems("Turned quarterly net income from -$4M to $6M.", "Turned quarterly net income from $4M to $6M.")
         self.assertTrue(errors)
         self.assertEqual(lines.problems("Moved margin from -5% to 2%.", "Moved margin from \u22125% to 2%.")[0], [])
 
     def test_good_wording_is_accepted(self):
-        short = "Built cached vs. uncached API paths with Redis and Kafka, cutting costs 70%; 12 teams adopted it."
+        short = "Launched a partner referral program with Acme CRM and Acme BI, increasing revenue 40% in 9 regions."
         errors, _ = lines.problems(ORIGINAL, short)
         self.assertEqual(errors, [])
 
     def test_dropped_or_changed_figure_is_refused(self):
-        errors, _ = lines.problems(ORIGINAL, "Built cached paths for API calls with Redis and Kafka, cutting costs 80%.")
-        self.assertTrue(any("dropped" in e and "70%" in e for e in errors))
-        self.assertTrue(any("added" in e and "80%" in e for e in errors))
+        errors, _ = lines.problems(ORIGINAL, "Launched a partner referral program with Acme CRM and Acme BI, increasing revenue 60%.")
+        self.assertTrue(any("dropped" in e and "40%" in e for e in errors))
+        self.assertTrue(any("added" in e and "60%" in e for e in errors))
 
     def test_over_the_limit_or_empty_is_refused(self):
-        self.assertTrue(any("limit" in e for e in lines.problems(ORIGINAL, "70% " + "w" * 250)[0]))
+        self.assertTrue(any("limit" in e for e in lines.problems(ORIGINAL, "40% " + "w" * 250)[0]))
         self.assertEqual(lines.problems(ORIGINAL, "  ")[0], ["the wording is empty"])
 
-    def test_dropped_names_are_warnings_not_errors(self) -> None:
-        """Warn when technologies disappear from a shortened line."""
-        errors, warnings = lines.problems(ORIGINAL, "Cut API costs 70% across 12 teams.")
+    def test_dropped_names_are_warnings_not_errors(self):
+        errors, warnings = lines.problems(ORIGINAL, "Increased partner revenue 40% in 9 regions.")
         self.assertEqual(errors, [])
-        self.assertIn("redis", warnings[0])
-        self.assertIn("kafka", warnings[0])
+        self.assertIn("crm", warnings[0])
 
 
 class SavedWording(PipelineCase):
@@ -82,6 +80,6 @@ class StaleApprovals(PipelineCase):
         self.assertEqual(orphans, ["short wording gone-line"])
 
     def test_approved_wording_that_no_longer_matches_its_line_is_not_used(self):
-        bullet = {"id": "b1", "text": "Cut costs by 30% for the platform team.", "variants": []}
-        self.assertEqual(br.fitting_text(bullet, {"b1": "Cut costs for the platform team."}), bullet["text"])
-        self.assertEqual(br.fitting_text(bullet, {"b1": "Cut costs 30% for the platform."}), "Cut costs 30% for the platform.")
+        bullet = {"id": "b1", "text": "Grew revenue by 30% for the partner team.", "variants": []}
+        self.assertEqual(br.fitting_text(bullet, {"b1": "Grew revenue for the partner team."}), bullet["text"])
+        self.assertEqual(br.fitting_text(bullet, {"b1": "Grew revenue 30% for partners."}), "Grew revenue 30% for partners.")

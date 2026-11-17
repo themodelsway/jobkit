@@ -47,14 +47,14 @@ def contact_hits() -> list[str]:
 class PruneTests(RebuildCase):
     def test_deleted_resume_drops_only_its_own_bullets(self):
         self.write("one.txt", as_txt())
-        self.write("two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nInitech      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
+        self.write("two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nAcme 3      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
         self.rebuild()
         self.assertEqual(sorted(self.bullets()[EXTRA_BULLET]), ["two.txt"])
         (self.resumes / "two.txt").unlink()
         out = self.rebuild()
         self.assertNotIn(EXTRA_BULLET, self.bullets())
         self.assertIn("pruned (file gone): two.txt", out)
-        shared = "Built a search service on PostgreSQL."
+        shared = "Built a design system with shared prototypes."
         self.assertEqual(self.bullets()[shared], ["one.txt"])
         self.assertNotIn("two.txt", rd.load_ledger())
 
@@ -62,7 +62,7 @@ class PruneTests(RebuildCase):
         (self.resumes / "keep").mkdir()
         (self.resumes / "skip").mkdir()
         self.write("keep/one.txt", as_txt())
-        self.write("skip/two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nInitech      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
+        self.write("skip/two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nAcme 3      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
 
         def import_as_the_profile_says() -> str:
             out = io.StringIO()
@@ -83,12 +83,12 @@ class PruneTests(RebuildCase):
 
     def test_company_with_no_source_left_loses_its_file(self):
         self.write("one.txt", as_txt())
-        self.write("two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nInitech      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
+        self.write("two.txt", as_txt().replace("WORK EXPERIENCE", f"WORK EXPERIENCE\nAcme 3      01/2010 - 12/2014\nEngineer\n• {EXTRA_BULLET}"))
         self.rebuild()
-        self.assertTrue("initech" in tables.load_companies())
+        self.assertTrue("acme-3" in tables.load_companies())
         (self.resumes / "two.txt").unlink()
         self.rebuild()
-        self.assertFalse("initech" in tables.load_companies())
+        self.assertFalse("acme-3" in tables.load_companies())
 
     def test_renamed_resume_appears_once_under_the_new_name(self):
         path = self.write("old.txt", as_txt())
@@ -101,13 +101,13 @@ class PruneTests(RebuildCase):
     def test_edited_resume_loses_a_removed_bullet(self):
         path = self.write("me.txt", as_txt())
         self.rebuild()
-        self.assertIn("Built a search service on PostgreSQL.", self.bullets())
-        path.write_text(as_txt().replace("• Built a search service on PostgreSQL.\n", ""), encoding="utf-8")
+        self.assertIn("Built a design system with shared prototypes.", self.bullets())
+        path.write_text(as_txt().replace("• Built a design system with shared prototypes.\n", ""), encoding="utf-8")
         stamp = path.stat().st_mtime + 10
         os.utime(path, (stamp, stamp))
         self.rebuild()
-        self.assertNotIn("Built a search service on PostgreSQL.", self.bullets())
-        self.assertIn("Moved 40 services to a shared build system.", self.bullets())
+        self.assertNotIn("Built a design system with shared prototypes.", self.bullets())
+        self.assertIn("Moved 40 screens to a shared component library.", self.bullets())
 
     def test_curated_skill_survives_when_its_file_is_gone(self):
         data = {"companies": {}, "skills": {"groups": {"Cloud": [{"name": "AWS", "aliases": [], "sources": ["a.txt", "curated"]},
@@ -173,7 +173,7 @@ class OrphanTests(RebuildCase):
         tables.save_curation("themes", themes)
         before = tables.load_curation("themes")
         orphans = rd.orphan_curation(rd.load_companies(), rd.load_profile(), themes)
-        self.assertEqual(orphans, ["ignore gone-ignored", "summary angle sum-gone", "theme gone-bullet"])
+        self.assertEqual(orphans, ["ignore gone-ignored", "summary positioning sum-gone", "theme gone-bullet"])
         self.assertIn("WARNING: 3 entr", self.rebuild())
         self.assertEqual(tables.load_curation("themes"), before)
 
@@ -222,7 +222,7 @@ class DeletedResumeTests(RebuildCase):
                 "certifications": profile["certifications"], "projects": profile["projects"]}
 
     def titles(self) -> list[str]:
-        roles = rd.load_companies()["globex"]["roles"]
+        roles = rd.load_companies()["acme-2"]["roles"]
         return sorted(t for r in roles for t in r["titles"])
 
     def test_everything_a_deleted_resume_stated_goes_with_it(self):
@@ -230,13 +230,13 @@ class DeletedResumeTests(RebuildCase):
         self.write("two.txt", second_resume())
         self.rebuild()
         stored = self.stored()
-        self.assertEqual(stored["headlines"], ["Web performance specialist"])
+        self.assertEqual(stored["headlines"], ["Accessibility specialist"])
         self.assertTrue(stored["education"] and stored["certifications"] and stored["projects"])
-        self.assertEqual(self.titles(), ["Senior Engineer", "Staff Engineer"])
+        self.assertEqual(self.titles(), ["People Director", "Senior Strategist"])
         (self.resumes / "two.txt").unlink()
         self.rebuild()
         self.assertEqual(self.stored(), {"headlines": [], "education": [], "certifications": [], "projects": []})
-        self.assertEqual(self.titles(), ["Senior Engineer"])
+        self.assertEqual(self.titles(), ["Senior Strategist"])
 
     def test_an_item_another_resume_states_stays(self):
         self.write("one.txt", second_resume())
@@ -244,7 +244,7 @@ class DeletedResumeTests(RebuildCase):
         self.rebuild()
         (self.resumes / "two.txt").unlink()
         self.rebuild()
-        self.assertEqual(self.stored()["headlines"], ["Web performance specialist"])
+        self.assertEqual(self.stored()["headlines"], ["Accessibility specialist"])
         self.assertEqual(len(self.stored()["education"]), 1)
 
     def test_a_changed_resume_loses_what_it_no_longer_says(self):
@@ -329,7 +329,7 @@ class PipelineTests(ExtractCase):
         ledger, unparsed = {}, {}
         self.assertEqual(self.run_process(path, ledger, unparsed), "parsed")
         self.assertEqual(ledger["me.docx"]["kind"], "resume")
-        self.assertEqual(sorted(self.data["companies"]), ["acme-corp", "globex"])
+        self.assertEqual(sorted(self.data["companies"]), ["acme-2", "acme-corp"])
         self.assertTrue((self.tmp / "text" / "me.docx.txt").is_file())
         self.assertEqual(self.run_process(path, ledger, unparsed), "unchanged")
 

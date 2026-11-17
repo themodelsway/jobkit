@@ -1,6 +1,7 @@
 """Tests for plugins/jobkit/src/jk/store.py and schema.py: transactions, locking, schema upgrades and restore checks."""
 import contextlib
 import io
+import json
 import os
 import sqlite3
 import subprocess
@@ -60,10 +61,10 @@ class TransactionTests(HomeCase):
         self.assertFalse(has_meta("inner"))
 
     def test_handled_session_save_failure_inside_a_larger_change(self):
-        first = {"id": "s1", "title": "old", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
+        first = {"id": "s1", "title": "old", "mode": "knowledge", "status": "open", "created": "2026-11-01T09:00:00",
                  "updated": "2026-11-01T09:00:00", "queue": [], "log": []}
         entry = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "answer": "a"}
-        tables.replace_catalog({"cards": [{"id": "vpc", "kind": "service", "name": "VPC"}]})
+        tables.replace_catalog({"cards": [{"id": "vpc", "kind": "topic", "name": "VPC"}]})
         tables.save_session({**first, "log": [entry]})
         with store.transaction():
             put_meta("outer")
@@ -245,7 +246,7 @@ class SchemaTests(DatabaseFileCase):
         store.connect()
         store.close()
         with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
-            self.assertEqual(self.pragma_version(), old + 1)
+            self.assertEqual(self.pragma_version(), len(schema.STEPS))
             after = self.dump_tables(conn)
         for name, rows in before.items():
             if name == "session_log":
@@ -254,6 +255,51 @@ class SchemaTests(DatabaseFileCase):
                 self.assertEqual(rows, after[name], name)
         self.assertEqual(after["target_company"], [])
         self.assertEqual(after["target_fact"], [])
+
+    def test_the_cards_step_renames_stored_values_and_keeps_everything_else(self):
+        store.db_path().parent.mkdir(parents=True)
+        old = store.MIGRATIONS.index(schema.step_cards)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, old)
+            conn.executescript("""
+INSERT INTO meta(key, value) VALUES('arch.catalog', '{"tracks": ["people"]}');
+INSERT INTO setting(key, value) VALUES('tier1_services', '["Payroll"]');
+INSERT INTO session(id, title, mode, status, created, updated, body)
+  VALUES('s1', 't', 'architecture', 'open', 'c', 'u', '{}'), ('s2', 't', 'tutor', 'open', 'c', 'u', '{"topic": "architecture"}'),
+        ('s3', 't', 'stories', 'open', 'c', 'u', '{}');
+INSERT INTO card(id, position, body) VALUES('people-payroll', 0, '{"kind": "service", "name": "Payroll"}'),
+  ('people-pair-a', 1, '{"kind": "pair", "name": "A"}');
+INSERT INTO track(name, body) VALUES('people', '{"name": "people", "services": [{"area": "Pay", "name": "Payroll", "tier": 2}]}');
+""")
+        store.connect()
+        store.close()
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            self.assertEqual(self.pragma_version(), store.version())
+            rows = {t: conn.execute(q).fetchall() for t, q in (
+                ("meta", "SELECT key FROM meta WHERE key LIKE '%catalog'"), ("setting", "SELECT key, value FROM setting"),
+                ("session", "SELECT id, mode, body FROM session ORDER BY id"), ("card", "SELECT id, body FROM card ORDER BY id"),
+                ("track", "SELECT body FROM track"))}
+        self.assertEqual(rows["meta"], [("cards.catalog",)])
+        self.assertEqual(rows["setting"], [("key_topics", '["Payroll"]')])
+        self.assertEqual([(i, m, json.loads(b)) for i, m, b in rows["session"]],
+                         [("s1", "knowledge", {}), ("s2", "tutor", {"topic": "knowledge"}), ("s3", "stories", {})])
+        self.assertEqual([(i, json.loads(b)["kind"]) for i, b in rows["card"]], [("people-pair-a", "pair"), ("people-payroll", "topic")])
+        self.assertEqual(json.loads(rows["track"][0][0]), {"name": "people", "topics": [{"area": "Pay", "name": "Payroll", "tier": 2}]})
+
+    def test_role_questions_upgrade_keeps_existing_records(self):
+        store.db_path().parent.mkdir(parents=True)
+        old = store.MIGRATIONS.index(schema.step_role_questions)
+        with contextlib.closing(sqlite3.connect(store.db_path(), isolation_level=None)) as conn:
+            store.migrate_to(conn, old)
+            conn.execute("INSERT INTO meta(key, value) VALUES('kept', '1')")
+            before = self.dump_tables(conn)
+        store.connect()
+        store.close()
+        with contextlib.closing(sqlite3.connect(store.db_path())) as conn:
+            after = self.dump_tables(conn)
+        self.assertEqual({name: after.pop(name) for name in ("role_research", "role_question", "question_progress")},
+                         {"role_research": [], "role_question": [], "question_progress": []})
+        self.assertEqual(after, before)
 
     def test_a_new_database_is_created_at_the_new_version_with_the_research_tables(self):
         store.create()

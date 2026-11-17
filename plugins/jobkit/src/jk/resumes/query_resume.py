@@ -2,7 +2,7 @@
 """Query the stored resume data (read-only, standard library only).
 
   query-resume for-jd jd.txt         # rank bullets per company for a job description ("-" = stdin; alias: match)
-  query-resume search --skill Python    # filter bullets (also --company, --text, --theme)
+  query-resume search --skill NAME     # filter bullets (also --company, --text, --theme)
   query-resume review                # bullets flagged needs_review, one-source skills, untagged themes
   query-resume stats                 # counts per company and skill group
 """
@@ -38,33 +38,12 @@ NOT_CHECKED: Final[str] = ("\nNo --requirement was given, so requirements outsid
 MIN_EVIDENCE: Final[int] = 2             # theme hits needed to list a bullet that matches no skill (or OVERLAP_ENOUGH words)
 OVERLAP_ENOUGH: Final[int] = 4
 
-# JD wording that implies a theme (themes are tagged on bullets with `process-resumes curate add theme`)
+# JD wording that implies a built-in theme; the user's own themes bring their own phrases (`curate add theme-word`)
 THEME_HINTS: Final[dict[str, list[str]]] = {
-    "topic-06": ["placeholder", "topic-09", "placeholder", "placeholder", "placeholder"], "topic-09": ["topic-09"],
-    "topic-12": ["topic-12", "placeholder", "placeholder", "placeholder"], "topic-01": ["placeholder"],
-    "topic-19": ["topic-19", "placeholder"], "topic-04": ["placeholder", "placeholder", "placeholder"],
-    "topic-03": ["placeholder", "placeholder"], "topic-16": ["topic-16", "placeholder", "placeholder"],
     "mentoring": ["mentor", "coach"], "executive-advisory": ["executive", "c-suite", "senior leadership"],
-    "workshops": ["workshop"], "topic-18": ["topic-18", "placeholder", "placeholder"],
-    "governance-compliance": ["governance", "compliance", "regulat"], "topic-20": ["placeholder"],
-    "topic-17": ["topic-17", "placeholder", "placeholder"], "topic-13": ["placeholder"],
-    "topic-15": ["topic-15", "placeholder"], "topic-14": ["placeholder", "placeholder"],
-    "topic-07": ["placeholder"], "topic-02": ["placeholder", "placeholder", "placeholder"],
-    "team-leadership": ["manage a team", "lead a team", "people manag", "engineering manager", "build and lead"],
-    "budget-financial": ["budget", "p&l"], "topic-08": ["developer productivity", "placeholder"],
-    "strategy-roadmap": ["roadmap", "strategy"], "topic-05": ["placeholder", "placeholder", "placeholder"],
-}
-
-# JD wording that implies which angle the opening summary should take
-ANGLE_HINTS: Final[dict[str, list[str]]] = {
-    "focus-3": ["placeholder", "placeholder", "placeholder", "placeholder",
-                                "business capabilit"],
-    "focus-1": ["cloud", "aws", "azure", "gcp"],
-    "focus-4": ["topic-12", "placeholder", "placeholder", "placeholder", "placeholder", "placeholder", "placeholder",
-                 " ai "],
-    "focus-2": ["placeholder", "placeholder", "lead a team", "people manag",
-                               "build and lead", "mentor", "direct reports"],
-    "topic-17": ["topic-17", "placeholder", "placeholder", "placeholder", "topic-15"],
+    "workshops": ["workshop"], "governance-compliance": ["governance", "compliance", "regulat"],
+    "team-leadership": ["manage a team", "lead a team", "people manag", "build and lead"],
+    "budget-financial": ["budget", "p&l"], "strategy-roadmap": ["roadmap", "strategy"],
 }
 
 
@@ -155,7 +134,7 @@ def jd_skills(text: str, terms: Mapping[str, str]) -> Counter[str]:
 
 def add_requirements(need: Counter[str], text: str, requirements: Iterable[str], terms: Mapping[str, str]) -> tuple[str, ...]:
     """Add the requirements the assistant took from the posting to `need`. A name that is a stored skill or alias
-    (any capitalisation) counts as that skill; any other name is kept as plain text and returned, to be searched
+    (any capitalization) counts as that skill; any other name is kept as plain text and returned, to be searched
     for in the bullets. Each requirement counts at least once."""
     lower = {t.lower(): n for t, n in terms.items()}
     plain: list[str] = []
@@ -208,30 +187,38 @@ def show(bullet: Bullet, why: Iterable[str] | None = None) -> None:
 # ---------------------------------------------------------------- scoring
 
 def infer_themes(low: str, extra: Iterable[str]) -> set[str]:
-    """Themes the JD implies (from THEME_HINTS) plus any the user asked to favour."""
-    return {t.lower() for t in extra} | {t for t, keys in THEME_HINTS.items() if any(k in low for k in keys)}
+    """Themes the JD implies (from THEME_HINTS and the user's own theme words) plus any the user asked to favor."""
+    hints = {**THEME_HINTS, **rd.user_theme_words()}
+    return {t.lower() for t in extra} | {t for t, keys in hints.items() if any(k in low for k in keys)}
 
 
 def jd_angles(low: str) -> dict[str, int]:
-    """{summary angle: mentions} for the angles the JD talks about."""
-    counts = {g: sum(low.count(k) for k in keys) for g, keys in ANGLE_HINTS.items()}
+    """{summary positioning: mentions} for the positioning the JD talks about."""
+    counts = {g: sum(low.count(k) for k in keys) for g, keys in rd.positioning_words().items()}
     return {g: n for g, n in counts.items() if n}
 
 
 def rank_summaries(summaries: Iterable[Summary], angles: Mapping[str, int]) -> list[Summary]:
-    """Opening summaries, best fit for the JD's angles first."""
+    """Opening summaries, best fit for the JD's positioning first."""
     def fit(summary: Summary) -> float:
         wanted = sum(angles.get(g, 0) for g in summary["angles"])
         return -(wanted - 0.5 * len([g for g in summary["angles"] if g not in angles]))
     return sorted(summaries, key=fit)
 
 
+def shown_terms(bullet: Bullet, ctx: JdContext) -> list[str]:
+    """The posting's skills and requirements that the line shows in any of its stored wordings (text, variants,
+    per-file wordings), unless one of them denies using it at work."""
+    texts = rd.wordings_of(bullet)
+    named = [s for s in bullet["skills"] if s in ctx.need]
+    named += [t for t in ctx.plain if any(pr.term_found(t, text) for text in texts)]
+    return [s for s in named if evidence.wordings_state(bullet, s, ctx.terms) != evidence.NOT_DEMONSTRATED]
+
+
 def score_bullet(bullet: Bullet, ctx: JdContext) -> ScoredBullet | None:
-    """Score a bullet for the JD; None when it is not relevant enough to list."""
-    tagged = bullet["skills"]
-    shared = [s for s in tagged if s in ctx.need and evidence.use_state(bullet["text"], s, tagged, ctx.terms) != evidence.NOT_DEMONSTRATED]
-    shared += [t for t in ctx.plain if pr.term_found(t, bullet["text"])
-               and evidence.use_state(bullet["text"], t, tagged, ctx.terms) != evidence.NOT_DEMONSTRATED]
+    """Score a bullet for the JD; None when it is not relevant enough to list. A skill shown only by another stored
+    wording of the line counts too."""
+    shared = shown_terms(bullet, ctx)
     overlap = len(words(bullet["text"]) & ctx.words)
     theme_hits = [t for t in bullet["themes"] if t.lower() in ctx.themes]
     score = 3 * sum(min(ctx.need[s], MAX_SKILL_MENTIONS) for s in shared) + min(overlap, MAX_OVERLAP)
@@ -295,16 +282,16 @@ def analyze(text: str, extra_themes: Iterable[str] = (), include_review: bool = 
 # ---------------------------------------------------------------- commands
 
 def print_jd_overview(result: Analysis, summaries: int) -> None:
-    """The themes, skills and angles found in the JD, and the suggested opening summaries."""
+    """The themes, skills and summary positioning found in the JD, and the suggested opening summaries."""
     need = result.need
     print("Themes inferred from JD: " + (", ".join(sorted(result.themes)) or "none"))
     print(f"JD skills found ({len(need)}): "
           + ", ".join(f"{k}" + (f" x{v}" if v > 1 else "") for k, v in need.most_common()))
     angles = sorted(result.angles.items(), key=lambda x: -x[1])
-    print("Summary angles in JD: " + (", ".join(f"{g} x{n}" for g, n in angles) or "none"))
+    print("Summary positioning in JD: " + (", ".join(f"{g} x{n}" for g, n in angles) or "none"))
     print("\n== Suggested opening summaries")
     for summary in result.summaries[:summaries]:
-        print(f"  - {summary['text']}\n    id {summary['id']} | angles: {', '.join(summary['angles'])} "
+        print(f"  - {summary['text']}\n    id {summary['id']} | positioning: {', '.join(summary['angles'])} "
               f"| {len(summary['sources'])} resume(s)")
 
 
@@ -365,7 +352,7 @@ def skill_aliases(skills: Skills) -> dict[str, str]:
 def bullet_matches(bullet: Bullet, skill: str | None, text: str | None, theme: str | None) -> bool:
     """Whether the bullet passes the search filters."""
     return ((not skill or skill in bullet["skills"])
-            and (not text or text.lower() in bullet["text"].lower())
+            and (not text or any(text.lower() in w.lower() for w in rd.wordings_of(bullet)))
             and (not theme or theme.lower() in (t.lower() for t in bullet["themes"])))
 
 
@@ -458,7 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="max score bonus for bullets from recent roles (default 2.0; 0 turns it off)")
     match.add_argument("--summaries", type=int, default=2, help="opening summaries to suggest (default 2)")
     match.add_argument("--include-review", action="store_true", help="also show bullets flagged needs_review")
-    match.add_argument("--theme", action="append", default=[], help="extra theme to favour (repeatable)")
+    match.add_argument("--theme", action="append", default=[], help="extra theme to favor (repeatable)")
     match.add_argument("--requirement", action="append", default=[], metavar="NAME",
                        help="a skill or duty the posting asks for, even if it is not a stored skill (repeatable); "
                        "one with no supporting bullet is reported as a gap")

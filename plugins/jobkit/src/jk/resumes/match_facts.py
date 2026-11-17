@@ -135,7 +135,7 @@ def _role(rest: str, facts: ResumeFacts) -> str:
 # ---------------------------------------------------------------- fingerprints
 
 def normalise_posting(text: str) -> str:
-    """The posting text as the cache sees it: Unicode normalised, LF line endings, whitespace runs collapsed."""
+    """The posting text as the cache sees it: Unicode normalized, LF line endings, whitespace runs collapsed."""
     text = unicodedata.normalize("NFC", text).replace("\r\n", "\n").replace("\r", "\n")
     return re.sub(r"\s+", " ", text).strip()
 
@@ -147,16 +147,17 @@ def _digest(value: Any) -> str:
 
 
 def posting_fingerprint(text: str) -> str:
-    """SHA-256 of the normalised posting."""
+    """SHA-256 of the normalized posting."""
     return hashlib.sha256(normalise_posting(text).encode("utf-8")).hexdigest()
 
 
 def resume_fingerprint(facts: ResumeFacts) -> str:
     """SHA-256 of what scoring can cite, by text and not by id (a rebuild that changes no text keeps it): each
-    line's text, whether it is ignored or flagged, and its tags, plus skills, roles, education and certifications."""
+    line's wordings (text, variants, per-file wordings), whether it is ignored or flagged, and its tags, plus skills,
+    roles, education and certifications."""
     skills = sorted((s["name"], sorted(s.get("aliases", []))) for g in facts.skills.get("groups", {}).values()
                     for s in g)
-    bullets = sorted((c["name"], b["text"], bool(b.get("ignored")), bool(b.get("needs_review")),
+    bullets = sorted((c["name"], rd.wordings_of(b), bool(b.get("ignored")), bool(b.get("needs_review")),
                       sorted(b.get("skills", [])), sorted(b.get("skills_manual", [])))
                      for c in facts.companies.values() for b in c["bullets"])
     roles = sorted((c["name"], r.get("start") or "", r.get("end") or "", list(r.get("titles", [])))

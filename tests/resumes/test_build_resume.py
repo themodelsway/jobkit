@@ -21,8 +21,8 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(len(br.pick([a, b], 4)), 2)
 
     def test_paraphrase_of_one_achievement_is_still_one(self):
-        a = bullet("Reduced page load time by 30% through caching database queries", ["30%"])
-        b = bullet("Cut page load time by 30% by caching database queries", ["30%"])
+        a = bullet("Reduced employee turnover by 30% through stay interviews with managers", ["30%"])
+        b = bullet("Cut employee turnover by 30% by running stay interviews with managers", ["30%"])
         self.assertEqual(len(br.pick([a, b], 4)), 1)
 
     def test_reworded_line_without_a_figure_is_one(self):
@@ -31,8 +31,8 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(len(br.pick([a, b], 4)), 1)
 
     def test_claim_not_repeated_across_companies(self):
-        a = bullet("Reduced page load time by 30% through caching database queries", ["30%"])
-        b = bullet("Cut page load time by 30% by caching database queries", ["30%"])
+        a = bullet("Reduced employee turnover by 30% through stay interviews with managers", ["30%"])
+        b = bullet("Cut employee turnover by 30% by running stay interviews with managers", ["30%"])
         self.assertEqual(br.pick([b], 4, already=[a]), [])
 
     def test_revisions_never_overwrite(self):
@@ -44,10 +44,10 @@ class BuilderTests(unittest.TestCase):
 
     def test_summary_has_no_title_in_front_and_fits_the_limit(self):
         long_one = {"id": "s-long", "text": "x" * (br.SUMMARY_LIMIT + 1), "angles": [], "sources": []}
-        short_one = {"id": "s-short", "text": "Leads cloud work.", "angles": [], "sources": []}
+        short_one = {"id": "s-short", "text": "Leads design work.", "angles": [], "sources": []}
         result = qr.Analysis(need=qr.Counter(), themes=set(), angles={}, summaries=[long_one, short_one], ranked=[],
-                             profile={"headlines": ["Senior Software Engineer"]})
-        self.assertEqual(br.render_summary(result), ["## Summary", "", "Leads cloud work.", ""])
+                             profile={"headlines": ["Senior Product Designer"]})
+        self.assertEqual(br.render_summary(result), ["## Summary", "", "Leads design work.", ""])
         result.summaries = [long_one]
         self.assertEqual(br.best_summary(result)["id"], "s-long")      # none fits: the best one is used and reported
 
@@ -58,10 +58,10 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(br.with_years("Leader with 11 years in retail.", None), "Leader with 11 years in retail.")
 
     def test_years_change_only_the_career_length_never_a_skills_own_duration(self):
-        mixed = "Engineer with 5 years of Kubernetes experience and 11 years in software."
-        self.assertEqual(br.with_years(mixed, 12), "Engineer with 5 years of Kubernetes experience and 12+ years in software.")
-        self.assertEqual(br.with_years("Engineer with 5 years of Kubernetes experience.", 12),
-                         "Engineer with 5 years of Kubernetes experience.")
+        mixed = "Designer with 5 years of prototyping experience and 11 years in design."
+        self.assertEqual(br.with_years(mixed, 12), "Designer with 5 years of prototyping experience and 12+ years in design.")
+        self.assertEqual(br.with_years("Designer with 5 years of prototyping experience.", 12),
+                         "Designer with 5 years of prototyping experience.")
         self.assertEqual(br.with_years("Over 10 years of professional experience and 3 years of AWS experience.", 12),
                          "Over 12+ years of professional experience and 3 years of AWS experience.")
         self.assertEqual(br.with_years("Leads teams.", 12), "Leads teams.")
@@ -100,7 +100,7 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(ranked[1].bullet["text"], full["text"])      # the stored line stays the line of record
 
     def test_line_uses_a_wording_within_the_limit_and_the_users_approved_text_first(self):
-        short = "Cut load time 30% by caching."
+        short = "Cut turnover 30% with stay interviews."
         stored = {"id": "b1", "text": "x" * 250, "variants": [], "wordings": {"a.docx": ["y" * 250, short]}}
         self.assertEqual(br.fitting_text(stored, {}), short)
         self.assertEqual(br.fitting_text(stored, {"b1": "My own shorter line."}), "My own shorter line.")
@@ -296,8 +296,8 @@ class BuildOptionTests(PipelineCase):
     def test_top_limits_bullets_and_title_overrides(self):
         many, few = self.build("--top", "4"), self.build("--top", "1")
         self.assertLess(len(few), len(many))
-        text = self.build("--title", "acme-corp=Lead Engineer")
-        self.assertIn("Lead Engineer", text)
+        text = self.build("--title", "acme-corp=Lead Designer")
+        self.assertIn("Lead Designer", text)
 
     def test_recency_and_include_review_are_accepted(self):
         self.assertTrue(self.build("--recency", "0", "--include-review"))

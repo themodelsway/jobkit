@@ -37,13 +37,13 @@ class RoundTripTests(HomeCase):
 
     def test_themes_tracks_questions_and_scope(self):
         tables.replace_themes({"topic-a": {"stories": ["a"], "questions": []}})
-        tables.save_track("acmedata", {"name": "acmedata"})
+        tables.save_track("people-ops", {"name": "people-ops"})
         questions = [{"id": "q1", "category": "Scope", "question": "?", "themes": []}]
         tables.replace_questions(questions)
         tables.replace_lead_progress({"q1": {"confidence": 0, "principle": "", "notes": "", "last_drilled": None, "examples": {}}})
         tables.replace_company_facts({"acme": {"title": "Lead"}})
         self.assertEqual(tables.load_themes(), {"topic-a": {"stories": ["a"], "questions": []}})
-        self.assertEqual(tables.track_names(), ["acmedata"])
+        self.assertEqual(tables.track_names(), ["people-ops"])
         self.assertEqual(tables.load_questions(), questions)
         self.assertEqual(tables.load_company_facts(), {"acme": {"title": "Lead"}})
 

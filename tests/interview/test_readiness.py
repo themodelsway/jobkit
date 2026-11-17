@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from unittest import mock
 
 from jk import store
-from jk.interview import arch, lead, readiness, sessions, tables
+from jk.interview import cards, lead, readiness, sessions, tables
 from jk.interview import target_tables as tt
 from jk.user import profile as up
 from tests.interview.support import SessionCase, TargetCase, drop_catalog, fact, store_company
@@ -35,7 +35,7 @@ class ReadinessTests(SessionCase):
         self.assertEqual(readiness.label(2, today, None, 30), "solid-unlogged")
 
     def test_lessons_do_not_count_but_quizzes_do(self):
-        sid = self.new_session("--mode", "tutor", "--topic", "architecture")
+        sid = self.new_session("--mode", "tutor", "--topic", "knowledge")
         item = self.session(sid)["queue"][0]["id"]
         self.cli(sessions.main, "log", sid, item, "--question", "Q", "--answer", "lesson", "--confidence", "1")
         self.assertNotIn(item, readiness.attempts())
@@ -45,7 +45,7 @@ class ReadinessTests(SessionCase):
     def test_report_sections_and_jd_filter(self):
         code, out, _ = self.cli(readiness.main)
         self.assertEqual(code, 0)
-        for text in ("ARCHITECTURE", "LEADERSHIP", "STAR STORIES: none yet", "WORK ON NEXT", "Note: labels come from"):
+        for text in ("ROLE KNOWLEDGE", "LEADERSHIP", "STAR STORIES: none yet", "WORK ON NEXT", "Note: labels come from"):
             self.assertIn(text, out)
         jd = self.tmp / "jd.txt"
         jd.write_text("We need VPC expertise.", encoding="utf-8")
@@ -57,8 +57,8 @@ class ReadinessTests(SessionCase):
         seed = {"label": "Product", "family": "product", "source_hosts": ["www.gov.uk"],
                 "cases": [{"title": "Sign-ups fell", "situation": "Sign-ups fell. Why?"}],
                 "role_plays": [{"title": "Push back", "part": "a sales director", "goal": "agree a plan"}]}
-        self.assertEqual(self.cli(arch.main, "track", "add", "product", "--seed", "-", stdin=json.dumps(seed))[0], 0)
-        self.cli(arch.main, "init", "--track", "product")
+        self.assertEqual(self.cli(cards.main, "track", "add", "product", "--seed", "-", stdin=json.dumps(seed))[0], 0)
+        self.cli(cards.main, "init", "--track", "product")
         out = self.cli(readiness.main)[1]
         self.assertRegex(out, r"product: Cases\s+1 items")
         self.assertRegex(out, r"product: Role-plays\s+1 items")
@@ -68,7 +68,7 @@ class ReadinessTests(SessionCase):
     def test_requires_catalog(self):
         drop_catalog()
         code, _, err = self.cli(readiness.main)
-        self.assertEqual((code, "run arch init" in err), (1, True))
+        self.assertEqual((code, "cards init --track NAME" in err), (1, True))
 
 
 class RetestTests(SessionCase):
@@ -81,7 +81,7 @@ class RetestTests(SessionCase):
         tables.replace_progress(progress)
 
     def cards(self, n=3):
-        return [c["id"] for c in arch.catalog()["cards"][:n]]
+        return [c["id"] for c in cards.catalog()["cards"][:n]]
 
     def window(self, days):
         up.save({"resume_root": "x", "reassess_days": days})
@@ -256,7 +256,7 @@ class ReadinessLabelTests(unittest.TestCase):
 
 class ReadinessOptionTests(SessionCase):
     def test_days_sets_when_a_solid_answer_ages(self):
-        self.cli(arch.main, "set", "vpc", "confidence", "2")
+        self.cli(cards.main, "set", "vpc", "confidence", "2")
         card = tables.load_progress()["vpc"]
         card["last_drilled"] = "2000-01-01"
         tables.replace_progress({**tables.load_progress(), "vpc": card})

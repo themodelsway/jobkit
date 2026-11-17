@@ -5,6 +5,10 @@ Two kinds of term, one list:
            the employer names found by the resume scan, and the company folders of your resume files (never copied, so they cannot go stale)
   stored   the `term` table: products, extra clients and patterns you add, and the derived terms you ignore
 
+`check` also compares the files with the stored data itself (shared phrases, near-copies, titles and other
+values, figures, fingerprints of distinctive terms; see content_check.py), warns with `--staged` when the staged
+changes remove such lines, and with `--history` reads every version of every file in the history.
+
 Used through `profile terms ...` (see profile.py); the pre-commit hook runs `profile terms check --staged`.
 Import it as `from jk.user import terms`; it does no work at import time.
 """
@@ -16,10 +20,13 @@ import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from jk.common import ToolError
 from jk.user import tables
+
+if TYPE_CHECKING:
+    from jk.user import content_check
 
 MATCHES: Final[tuple[str, ...]] = ("word", "phrase", "regex")
 KINDS: Final[tuple[str, ...]] = ("name", "contact", "path", "employer", "client", "product", "other")
@@ -153,34 +160,115 @@ def files_to_check(args: argparse.Namespace) -> list[tuple[str, str]]:
     return _repository_files(_git("rev-parse", "--show-toplevel").decode().strip(), args)
 
 
-def check(args: argparse.Namespace, terms: Sequence[Term]) -> int:
-    """Print each hit as path:line and the term; status 1 when there is any. Says how many files were read.
+def scope(args: argparse.Namespace) -> str:
+    """What a check reads, in words, for the line printed before it starts."""
+    if args.history:
+        return "every version of every file in the history"
+    if args.values:
+        return "the given files"
+    return "every committable file" if args.all else "the staged files"
 
-    With `--exhaustive` the ignored (common-word) terms are checked too and marked in the output: for a manual
-    review, not for the pre-commit hook.
+
+def content_hits(index: content_check.Index, files: Sequence[tuple[str, str]]) -> list[tuple[str, content_check.Hit]]:
+    """Every (path, hit) where a file matches the contributor's stored data."""
+    return [(path, hit) for path, text in files for hit in index.check(text)]
+
+
+def check(args: argparse.Namespace, terms: Sequence[Term]) -> int:
+    """Print each hit as path:line and what matched; status 1 when there is any. Says how many files were read.
+
+    Personal terms are printed; matches with stored data (shared phrases, near-copies, values, figures,
+    fingerprints) show only their kind and where the stored text comes from, never the text. With `--exhaustive`
+    the ignored (common-word) terms are checked too and marked: for a manual review, not for the pre-commit hook.
     """
+    from jk.user import content_check    # pylint: disable=import-outside-toplevel  # it reads the interview modules, which import this one
+    print(f"Checking {scope(args)} against your stored data ...", flush=True)
     active = [t for t in terms if args.exhaustive or not t.ignored]
-    files = files_to_check(args)
+    index = content_check.build(t.text for t in terms if t.ignored)
+    files = history_files() if args.history else files_to_check(args)
     hits = [(path, n, t) for path, text in files for n, t in scan(text, active)]
     real = [h for h in hits if not h[2].ignored]
+    found = content_hits(index, files)
     for path, n, t in real:
         print(f"{path}:{n}: {t.kind} term {t.text!r}")
+    for path, hit in found:
+        print(f"{path}:{hit.line}: {hit.kind} ({hit.source})")
     for t in active:
         if t.ignored:
             _print_common_word(t, [(path, n) for path, n, hit in hits if hit is t])
-    if hits:
-        print(f"{len(real)} personal term hit(s), {len(hits) - len(real)} common-word hit(s). Remove personal terms, "
+    if args.staged:
+        warn_removed(index, active)
+    return _summary(args, active, files, len(real), len(hits) - len(real), len(found))
+
+
+def _summary(args: argparse.Namespace, active: Sequence[Term], files: Sequence[tuple[str, str]], real: int,
+             common: int, found: int) -> int:
+    """Print the closing line of a check and return its status."""
+    if real or common or found:
+        print(f"{real} personal term hit(s), {found} stored-data match(es), {common} common-word hit(s). Remove them, "
               "or if one is a false alarm: profile terms ignore TEXT", flush=True)
         return 1
     if not files:
-        print("personal terms: no files to check. Nothing is staged; use --all for every file, or give paths.")
+        print("personal terms and phrases: no files to check. Nothing is staged; use --all for every file, "
+              "or give paths.")
         return 0
-    common = sum(t.ignored for t in active)
-    print(f"personal terms: none found ({len(active)} terms, {len(files)} files checked)")
-    if args.exhaustive and not common:
+    print(f"personal terms and phrases: none found ({len(active)} terms, {len(files)} files checked)")
+    if args.exhaustive and not any(t.ignored for t in active):
         print("No common words are recorded, so --exhaustive checked nothing extra. "
               "Record them with: profile terms ignore WORD")
     return 0
+
+
+def removed_lines() -> list[tuple[str, str]]:
+    """(path, removed text) for each staged file: the lines the staged changes take out."""
+    root = _git("rev-parse", "--show-toplevel").decode().strip()
+    diff = _git("-C", root, "diff", "--cached", "--no-color", "--unified=0").decode("utf-8", "ignore")
+    removed: dict[str, list[str]] = {}
+    path = ""
+    for line in diff.splitlines():
+        if line.startswith("--- "):
+            path = line[6:] if line.startswith("--- a/") else ""
+        elif line.startswith("-") and path:
+            removed.setdefault(path, []).append(line[1:])
+    return [(p, "\n".join(text)) for p, text in removed.items()]
+
+
+def warn_removed(index: content_check.Index, active: Sequence[Term]) -> None:
+    """Warn (without failing) when the staged changes remove lines that match stored data: removed text stays in
+    earlier commits."""
+    files = removed_lines()
+    count = len(content_hits(index, files)) + sum(len(scan(text, active)) for _, text in files)
+    if count:
+        print(f"warning: the staged changes remove {count} line(s) that match your stored data. Removed text stays "
+              "in earlier commits; see 'Keeping personal data out of commits' in docs/contributing.md.", flush=True)
+
+
+def history_files() -> list[tuple[str, str]]:
+    """(path@blob, content) for every version of every file in the history of all branches, each version once."""
+    root = _git("rev-parse", "--show-toplevel").decode().strip()
+    listed = _git("-C", root, "rev-list", "--all", "--objects", "--filter=object:type=blob").decode("utf-8", "ignore").splitlines()
+    paths = {sha: path for sha, _, path in (line.partition(" ") for line in listed) if path}
+    wanted = [(sha, path) for sha, path in paths.items() if Path(path).suffix not in SKIP_SUFFIX]
+    batch = subprocess.run(["git", "-C", root, "cat-file", "--batch"], input="\n".join(s for s, _ in wanted).encode(),
+                           capture_output=True, check=True).stdout
+    return [(f"{path}@{sha[:8]}", text) for (sha, path), text in zip(wanted, _blobs(batch), strict=True)]
+
+
+def _blobs(batch: bytes) -> list[str]:
+    """The contents in `git cat-file --batch` output, in order (a missing object gives an empty text)."""
+    out: list[str] = []
+    at = 0
+    while at < len(batch):
+        end = batch.index(b"\n", at)
+        header = batch[at:end].split()
+        at = end + 1
+        if len(header) < 3:
+            out.append("")
+            continue
+        size = int(header[2])
+        out.append(batch[at:at + size].decode("utf-8", "ignore"))
+        at += size + 1
+    return out
 
 
 def _print_common_word(term: Term, found: Sequence[tuple[str, int]]) -> None:
@@ -227,6 +315,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--match", choices=MATCHES, help="default: a pattern if it looks like one, a whole word if short")
     parser.add_argument("--staged", action="store_true", help="check: the staged files as staged (the pre-commit hook)")
     parser.add_argument("--all", action="store_true", help="check: every file git would commit")
+    parser.add_argument("--history", action="store_true",
+                        help="check: every version of every file in the history of all branches (slow; manual review)")
     parser.add_argument("--exhaustive", action="store_true",
                         help="check: also the ignored common words (for a manual review, never the hook)")
 

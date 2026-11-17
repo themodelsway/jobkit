@@ -1,44 +1,44 @@
 {
  "certifications": [
-  "Example Certified Engineer"
+  "Example Certified Designer"
  ],
  "education": [
   "BS Computer Science, Example University"
  ],
- "headline": "Senior Software Engineer",
+ "headline": "Senior Product Designer",
  "is_resume": true,
  "problems": [],
  "profile_points": [],
  "projects": [],
  "skills": {
-  "Data": [
+  "Design": [
    {
     "aliases": [
-     "Structured Query Language"
+     "User Experience"
     ],
-    "name": "SQL"
+    "name": "UX"
    },
    {
     "aliases": [],
-    "name": "PostgreSQL"
+    "name": "Prototyping"
    },
    {
     "aliases": [],
-    "name": "Performance Tuning"
+    "name": "Usability Testing"
    }
   ],
   "Languages": [
    {
     "aliases": [],
-    "name": "Python"
+    "name": "English"
    },
    {
     "aliases": [],
-    "name": "TypeScript"
+    "name": "Spanish"
    },
    {
     "aliases": [],
-    "name": "Go"
+    "name": "French"
    }
   ],
   "Leadership": [
@@ -58,16 +58,24 @@
   "Unsorted": [
    {
     "aliases": [],
-    "name": "Example Certified Designer"
+    "name": "Design sprints"
+   },
+   {
+    "aliases": [],
+    "name": "Journey mapping"
+   },
+   {
+    "aliases": [],
+    "name": "Accessibility"
    }
   ]
  },
- "summary": "Engineer with deep experience in web services and data pipelines. Leads teams and ships on time.",
+ "summary": "Designer with deep experience in mobile apps and design systems. Leads teams and ships on time.",
  "work": [
   {
    "bullets": [
-    "Cut page load time by 30% across 12 services using caching and query tuning.",
-    "Built a search service on PostgreSQL serving 5,000 users. Added monitoring and a test harness."
+    "Cut checkout drop-off by 18% across 7 product flows using usability testing and clearer copy.",
+    "Built a design system with shared prototypes serving 2,400 users. Added accessibility checks and a review guide."
    ],
    "client": "",
    "company_id": "acme-corp",
@@ -75,19 +83,19 @@
    "end": null,
    "start": "2021-03",
    "subtitle": "",
-   "title": "Lead Engineer"
+   "title": "Lead Designer"
   },
   {
    "bullets": [
-    "Moved 40 services to a shared build system."
+    "Moved 40 screens to a shared component library."
    ],
    "client": "",
-   "company_id": "globex",
+   "company_id": "acme-2",
    "dated": true,
    "end": "2021-02",
    "start": "2015-01",
    "subtitle": "",
-   "title": "Senior Engineer"
+   "title": "Senior Strategist"
   }
  ]
 }

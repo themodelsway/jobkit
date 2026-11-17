@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Knowledge drill data for one or more technologies or fields (tracks), kept in the database.
+"""Role-knowledge cards for one or more fields or technologies (tracks), kept in the database.
 Standard library only.
 
-  arch families              # the role families and the rubric each one uses by default
-  arch tracks                # tracks you can drill (aws is bundled; others you add), their family, which are enabled
-  arch track add NAME --seed FILE|-   # register another technology or field from a JSON seed (see the interview-prep skill)
-  arch init [--track NAME ...]   # create/extend catalog + progress for the tracks (default: enabled ones, else aws)
-  arch status                # per area: cards by confidence
-  arch next [--track T] [--area A] [--tier N] [--kind service|pair|scenario|case|role-play] [--order default|random]
-  arch show ID               # one card with the rubric of its track
-  arch set ID confidence|notes VALUE     # confidence: 0 none, 1 some gaps, 2 solid
-  arch list [--track T] [--area A] [--tier N] [--kind K]
-  arch for-jd jd.txt         # cards the JD mentions, weakest first ("-" = stdin)
-  arch stale [--months 6]    # cards whose facts are unverified or old
-  arch refresh ID --status active|maintenance|sunset|unverified [--date D] [--note T] --source URL
+  cards families              # the role families and the rubric each one uses by default
+  cards tracks                # tracks you can drill (aws is bundled; others you add), their family, which are enabled
+  cards track add NAME --seed FILE|-   # register another technology or field from a JSON seed (see the interview-prep skill)
+  cards init [--track NAME ...]   # create/extend catalog + progress for the tracks (default: the enabled ones)
+  cards status                # per area: cards by confidence
+  cards next [--track T] [--area A] [--tier N] [--kind topic|pair|scenario|case|role-play] [--order default|random]
+  cards show ID               # one card with the rubric of its track
+  cards set ID confidence|notes VALUE     # confidence: 0 none, 1 some gaps, 2 solid
+  cards list [--track T] [--area A] [--tier N] [--kind K]
+  cards for-jd jd.txt         # cards the JD mentions, weakest first ("-" = stdin)
+  cards stale [--months 6]    # cards whose facts are unverified or old
+  cards refresh ID --status active|maintenance|sunset|unverified [--date D] [--note T] --source URL
                                       [--change "DATE|SUMMARY"]...       # record researched facts (source required)
 
 Catalog (topics + sourced facts) and progress (your confidence/notes) are separate files, so refreshing facts
@@ -38,8 +38,8 @@ from jk.resumes.resume_data import Company
 from jk.user import profile as up
 
 STATUSES: Final[tuple[str, ...]] = ("active", "maintenance", "sunset", "unverified")
-KINDS: Final[tuple[str, ...]] = ("service", "pair", "scenario", "case", "role-play")
-FACT_KINDS: Final[tuple[str, ...]] = ("service", "pair", "scenario")   # kinds whose cards show lifecycle facts
+KINDS: Final[tuple[str, ...]] = ("topic", "pair", "scenario", "case", "role-play")
+FACT_KINDS: Final[tuple[str, ...]] = ("topic", "pair", "scenario")   # kinds whose cards show lifecycle facts
 DETAIL_FIELDS: Final[tuple[str, ...]] = ("situation", "part", "goal")
 CONF: Final[dict[int, str]] = {0: "not drilled", 1: "some gaps", 2: "solid"}
 MAX_LINKS_PER_COMPANY: Final[int] = 3
@@ -49,7 +49,7 @@ slug = common.slug
 
 
 class Lifecycle(TypedDict):
-    """What the vendor's documentation says about a service's availability."""
+    """What the official documentation says about a topic's availability."""
 
     status: str
     date: NotRequired[str]
@@ -67,7 +67,7 @@ class Change(TypedDict):
 
 
 class Card(TypedDict):
-    """A drill topic: a service, a decision pair, a design scenario, a case or a role-play."""
+    """A practice card: a topic, a decision pair, a scenario, a case or a role-play."""
 
     id: str
     track: NotRequired[str]
@@ -115,7 +115,7 @@ def catalog() -> Catalog:
     """The card catalog; fails when `init` has not run."""
     cat = tables.load_catalog()
     if cat is None:
-        raise ToolError("No architecture catalog yet: run `arch init` first.")
+        raise ToolError("No architecture catalog yet: run `cards init` first.")
     return cast(Catalog, cat)
 
 
@@ -168,7 +168,7 @@ def _mention_patterns(card: Card, with_aliases: bool = True) -> list[re.Pattern[
 
 
 def resume_links(card: Card, companies: Iterable[Company]) -> dict[str, list[str]]:
-    """Resume bullets that mention the service: {company_id: [bullet ids]} (max 3 each)."""
+    """Resume bullets that mention the topic: {company_id: [bullet ids]} (max 3 each)."""
     patterns = _mention_patterns(card)
     out: dict[str, list[str]] = {}
     for company in companies:
@@ -180,9 +180,9 @@ def resume_links(card: Card, companies: Iterable[Company]) -> dict[str, list[str
 
 
 def matches(text: str, cat: Catalog) -> list[Card]:
-    """Service cards whose name or alias appears in the text."""
+    """Topic cards whose name or alias appears in the text."""
     return [c for c in cat["cards"]
-            if c["kind"] == "service" and any(p.search(text) for p in _mention_patterns(c))]
+            if c["kind"] == "topic" and any(p.search(text) for p in _mention_patterns(c))]
 
 
 def flt(cards: Iterable[Card], args: argparse.Namespace) -> list[Card]:
@@ -223,11 +223,11 @@ def load_resume_context() -> tuple[list[Company] | None, set[str]]:
     return list(companies.values()), names
 
 
-def _service_card(row: tracks.ServiceSeed, track: str, pinned: set[str], skill_names: set[str],
+def _topic_card(row: tracks.TopicSeed, track: str, pinned: set[str], skill_names: set[str],
                   companies: list[Company] | None) -> Card:
-    """Card for one seeded service; tier 1 when pinned, or when the resumes mention it by name."""
+    """Card for one seeded topic; tier 1 when pinned, or when the resumes mention it by name."""
     aliases = row.get("aliases", [])
-    card = new_card("service", tracks.card_id("service", track, row["name"]), row["name"], row["area"], row["tier"],
+    card = new_card("topic", tracks.card_id("topic", track, row["name"]), row["name"], row["area"], row["tier"],
                     aliases, track=track)
     if pinned:
         card["tier"] = 1 if row["name"].lower() in pinned else row["tier"]
@@ -263,10 +263,10 @@ def _role_play_card(play: tracks.RolePlaySeed, track: str) -> Card:
 
 
 def build_wanted_cards(seed: tracks.TrackSeed, companies: list[Company] | None, skill_names: set[str]) -> list[Card]:
-    """Every card of one track (services, pairs, scenarios, cases, role-plays), tiers set from the user's profile."""
+    """Every card of one track (topics, pairs, scenarios, cases, role-plays), tiers set from the user's profile."""
     track = seed["name"]
-    pinned = {name.lower() for name in up.tier1_services()}
-    wanted = [_service_card(row, track, pinned, skill_names, companies) for row in seed["services"]]
+    pinned = {name.lower() for name in up.key_topics()}
+    wanted = [_topic_card(row, track, pinned, skill_names, companies) for row in seed["topics"]]
     wanted += [_pair_card(pair, track) for pair in seed["pairs"]]
     wanted += [new_card("scenario", tracks.card_id("scenario", track, text), text, "Scenarios", 1, track=track)
                for text in seed["scenarios"]]
@@ -302,10 +302,10 @@ def merge_cards(existing: list[Card], wanted: list[Card]) -> tuple[list[Card], i
 
 
 def refresh_links(prog: ProgressFile, cards: list[Card], companies: list[Company] | None) -> None:
-    """Make sure every card has progress, and re-link service cards to the resume bullets that mention them."""
+    """Make sure every card has progress, and re-link topic cards to the resume bullets that mention them."""
     for card in cards:
         entry = prog["cards"].setdefault(card["id"], blank_progress())
-        if card["kind"] == "service" and companies is not None:
+        if card["kind"] == "topic" and companies is not None:
             entry["links"] = resume_links(card, companies)
 
 
@@ -313,7 +313,10 @@ def cmd_init(args: argparse.Namespace) -> None:
     """Create or extend the catalog and progress for the chosen tracks and the resume data."""
     companies, skill_names = load_resume_context()
     cat = cast(Catalog, tables.load_catalog() or {"scenarios_note": "", "cards": []})
-    chosen = list(dict.fromkeys(args.track or cat.get("tracks") or [tracks.BUILTIN]))
+    chosen = list(dict.fromkeys(args.track or cat.get("tracks") or []))
+    if not chosen:
+        raise ToolError("No track chosen: run `cards init --track NAME`. `cards tracks` lists the tracks "
+                        "(aws is bundled as an example; add any field with `cards track add`).")
     seeds = [tracks.load_seed(name) for name in chosen]
     cat["tracks"] = list(dict.fromkeys([*cat.get("tracks", []), *chosen]))
     added = 0
@@ -347,9 +350,11 @@ def show_track_context(card: Card) -> None:
     country = seed.get("country") if seed else None
     if country:
         print(f"  country: {country} (check facts for this country)")
-    lines = tracks.rubric(seed) if seed else tracks.families()[tracks.DEFAULT_FAMILY]["dimensions"]
+    if seed is None:
+        print("  rubric: none (this card's track is no longer stored; add it again with `cards track add`)")
+        return
     print("  rubric (grade the answer against these):")
-    for line in lines:
+    for line in tracks.rubric(seed):
         print(f"    - {line}")
 
 
@@ -395,9 +400,9 @@ def cmd_status(args: argparse.Namespace) -> None:
         by_area[area_label(card, several)][progress_of(prog, card["id"])["confidence"]] += 1
     for area, n in by_area.items():
         print(f"  {area:<30} {n[2]} solid, {n[1]} some gaps, {n[0]} not drilled")
-    services = [c for c in cat["cards"] if c["kind"] == "service"]     # the cards `stale` lists
-    unverified = sum(1 for c in services if not c["verified_on"])
-    print(f"\n{unverified} of {len(services)} service cards have unverified facts (see `stale`).")
+    topics = [c for c in cat["cards"] if c["kind"] == "topic"]     # the cards `stale` lists
+    unverified = sum(1 for c in topics if not c["verified_on"])
+    print(f"\n{unverified} of {len(topics)} topic cards have unverified facts (see `stale`).")
 
 
 def cmd_list(args: argparse.Namespace) -> None:
@@ -425,7 +430,7 @@ def cmd_next(args: argparse.Namespace) -> None:
 
 
 def cmd_for_jd(args: argparse.Namespace) -> None:
-    """Service cards the job description mentions, weakest first."""
+    """Topic cards the job description mentions, weakest first."""
     text = common.read_text_arg(args.jd)
     prog = progress()["cards"]
     hits = matches(text, catalog())
@@ -434,17 +439,17 @@ def cmd_for_jd(args: argparse.Namespace) -> None:
         status = card["lifecycle"]["status"]
         flag = "" if status in ("active", "unverified") else f"  [{status}]"
         print(f"  {card['id']:<44} {CONF[progress_of(prog, card['id'])['confidence']]}{flag}")
-    print(f"\n{len(hits)} services from the catalog appear in the JD; weakest first.")
+    print(f"\n{len(hits)} topics from the catalog appear in the JD; weakest first.")
 
 
 def cmd_stale(args: argparse.Namespace) -> None:
-    """Service cards whose facts were never verified or are older than --months."""
+    """Topic cards whose facts were never verified or are older than --months."""
     cutoff = (date.today() - timedelta(days=30 * args.months)).isoformat()
     rows = [c for c in catalog()["cards"]
-            if c["kind"] == "service" and (not c["verified_on"] or c["verified_on"] < cutoff)]
+            if c["kind"] == "topic" and (not c["verified_on"] or c["verified_on"] < cutoff)]
     for card in sorted(rows, key=lambda c: (c["tier"], c["area"])):
         print(f"  t{card['tier']} {card['id']:<44} verified: {card['verified_on'] or 'never'}")
-    print(f"\n{len(rows)} service cards need a refresh.")
+    print(f"\n{len(rows)} topic cards need a refresh.")
 
 
 # ---------------------------------------------------------------- write commands
@@ -526,12 +531,15 @@ def cmd_tracks(args: argparse.Namespace) -> None:
 
 
 def cmd_families(args: argparse.Namespace) -> None:
-    """List the role families with who they fit and their default rubric."""
+    """List the role families: who each fits, example focus areas, where facts come from, and the default rubric."""
     del args
     for family in tracks.families().values():
         print(f"{family['name']}: {family['label']} - {family['description']}")
+        print(f"  for example: {', '.join(family['examples'])}")
+        print(f"  official sources: {family['sources']}")
+        print("  rubric:")
         for line in family["dimensions"]:
-            print(f"  - {line}")
+            print(f"    - {line}")
 
 
 def cmd_track_add(args: argparse.Namespace) -> None:
@@ -542,9 +550,9 @@ def cmd_track_add(args: argparse.Namespace) -> None:
         raise ToolError(f"The seed is not valid JSON: {exc}") from exc
     seed = tracks.validate_new_seed(raw, args.name, stored_ids((tables.load_catalog() or {"cards": []})["cards"]))
     tracks.save_track(seed)
-    print(f"Saved track {args.name} ({tracks.family_of(seed)}): {len(seed['services'])} services, "
+    print(f"Saved track {args.name} ({tracks.family_of(seed)}): {len(seed['topics'])} topics, "
           f"{len(seed['pairs'])} pairs, {len(seed['scenarios'])} scenarios, {len(seed.get('cases', []))} cases, "
-          f"{len(seed.get('role_plays', []))} role-plays. Run `arch init --track {args.name}`.")
+          f"{len(seed.get('role_plays', []))} role-plays. Run `cards init --track {args.name}`.")
 
 
 def _add_filters(parser: argparse.ArgumentParser) -> None:

@@ -30,7 +30,7 @@ FOUND: Final[str] = tt.FOUND
 NONE_FOUND: Final[str] = tt.NONE_FOUND
 VALUE_STATES: Final[tuple[str, ...]] = ("covered", "possible", "no story", "needs your judgment")
 # Sites whose content is written by individual users, and the user-written pages of job sites. A fixed list: the
-# skill tells the agent to leave out any other user-written page, which this code cannot recognise.
+# skill tells the agent to leave out any other user-written page, which this code cannot recognize.
 USER_HOSTS: Final[tuple[str, ...]] = (
     "reddit.com", "quora.com", "stackexchange.com", "stackoverflow.com", "news.ycombinator.com", "teamblind.com",
     "fishbowlapp.com", "levels.fyi", "medium.com", "substack.com", "twitter.com", "x.com", "facebook.com",
@@ -69,7 +69,7 @@ def _day(value: Any) -> date | None:
         return None
 
 
-def _link_problem(link: Any) -> str | None:
+def link_problem(link: Any) -> str | None:
     """Why a reference link is refused, or None."""
     if not isinstance(link, str) or not link.strip():
         return "has no reference link (every fact needs a link to the page it came from)"
@@ -85,20 +85,14 @@ def _link_problem(link: Any) -> str | None:
     return None
 
 
-def fact_problems(fact: Any, today: date) -> list[str]:
-    """Everything wrong with one fact of a save (empty when it can be stored)."""
-    if not isinstance(fact, dict):
-        return ["is not an object"]
-    problems = [p for p in [_link_problem(fact.get("link"))] if p]
+def reference_problems(fact: Mapping[str, Any], today: date) -> list[str]:
+    """Check the link, quote, pull date and vetting shared by cited facts and questions."""
+    problems = [p for p in [link_problem(fact.get("link"))] if p]
     quote = fact.get("quote")
     if not isinstance(quote, str) or not quote.strip():
         problems.append("has no quote (copy a short passage word for word from the page)")
     elif len(quote.split()) > MAX_QUOTE_WORDS:
         problems.append(f"has a quote of {len(quote.split())} words; at most {MAX_QUOTE_WORDS} are allowed")
-    if fact.get("kind") not in KINDS:
-        problems.append(f"has kind {fact.get('kind')!r}; use {', '.join(KINDS)}")
-    if fact.get("label") not in LABELS:
-        problems.append(f"has label {fact.get('label')!r}; use {' or '.join(LABELS)}")
     pulled = _day(fact.get("pulled"))
     if pulled is None or pulled > today:
         problems.append(f"has date of pull {fact.get('pulled')!r}; give the date the page was read (YYYY-MM-DD, "
@@ -106,6 +100,18 @@ def fact_problems(fact: Any, today: date) -> list[str]:
     if fact.get("vetted") is not True:
         problems.append("is not vetted: the save must confirm the page was read, the quote is on it and it is not "
                         "written by individual users (\"vetted\": true)")
+    return problems
+
+
+def fact_problems(fact: Any, today: date) -> list[str]:
+    """Everything wrong with one fact of a save (empty when it can be stored)."""
+    if not isinstance(fact, dict):
+        return ["is not an object"]
+    problems = reference_problems(fact, today)
+    if fact.get("kind") not in KINDS:
+        problems.append(f"has kind {fact.get('kind')!r}; use {', '.join(KINDS)}")
+    if fact.get("label") not in LABELS:
+        problems.append(f"has label {fact.get('label')!r}; use {' or '.join(LABELS)}")
     if not isinstance(fact.get("wording"), str) or not fact["wording"].strip():
         problems.append("has no wording (a short statement of what the quote says)")
     return problems + _value_problems(fact)

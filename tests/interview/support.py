@@ -6,16 +6,16 @@ from datetime import date
 from unittest import mock
 
 from jk import common, store
-from jk.interview import arch, lead, prep, sessions, tables, targets
+from jk.interview import cards, lead, prep, sessions, tables, targets
 from jk.interview import story_model as sm
 from jk.interview import target_tables as tt
 from tests.support import HomeCase, call
 
 
 def drop_catalog() -> None:
-    """Remove the architecture catalog (and with it every card's progress), as before `arch init`."""
+    """Remove the card catalog (and with it every card's progress), as before `cards init`."""
     with store.transaction() as conn:
-        conn.execute("DELETE FROM meta WHERE key='arch.catalog'")
+        conn.execute("DELETE FROM meta WHERE key='cards.catalog'")
         conn.execute("DELETE FROM card")
 
 
@@ -25,19 +25,19 @@ SKILLS = {"groups": {"Cloud": [{"name": "VPC", "aliases": []}]}}
 
 
 class SessionCase(HomeCase):
-    """A home folder with the architecture and leadership catalogs set up, ready for practice sessions."""
+    """A home folder with the card and leadership catalogs set up, ready for practice sessions."""
 
     def setUp(self):
         super().setUp()
         self.tmp = self.home
-        for obj, name, value in ((arch.qr, "load", (COMPANIES, SKILLS)), (lead.qr, "load", (COMPANIES, SKILLS))):
+        for obj, name, value in ((cards.qr, "load", (COMPANIES, SKILLS)), (lead.qr, "load", (COMPANIES, SKILLS))):
             patcher = mock.patch.object(obj, name, return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        patcher = mock.patch.object(arch.up, "tier1_services", return_value=[])
+        patcher = mock.patch.object(cards.up, "key_topics", return_value=[])
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.cli(arch.main, "init")
+        self.cli(cards.main, "init", "--track", "aws")
         self.cli(lead.main, "init")
 
     def cli(self, main, *argv, stdin=None):

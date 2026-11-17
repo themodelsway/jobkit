@@ -8,7 +8,7 @@ from jk.resumes import tables as resume_tables
 from jk.user import tables as user_tables
 
 # One record of each interview kind, also used by the table tests.
-CARD = {"id": "vpc", "track": "aws", "kind": "service", "area": "Network", "name": "VPC", "tier": 1, "aliases": [],
+CARD = {"id": "vpc", "track": "aws", "kind": "topic", "area": "Network", "name": "VPC", "tier": 1, "aliases": [],
         "members": [], "lifecycle": {"status": "active"}, "recent_changes": [], "verified_on": None}
 PROGRESS = {"confidence": 1, "notes": "", "last_drilled": "2026-11-01", "links": {"acme": ["b1"]}}
 ENGAGEMENT = {"id": "acme-platform", "company": "acme", "title": "Platform", "my_role": "Lead", "period": "2022",
@@ -23,7 +23,7 @@ STORY = {"id": "acme-platform-story", "company": "acme", "company_name": "Acme",
          "metrics": [], "resolved": [{"q": "q", "answer": "a", "at": "t"}], "spoken": {"60s": None, "2min": None}}
 ENTRY = {"at": "2026-11-01T10:00:00", "item": "vpc", "kind": "card", "question": "q", "answer": "a full answer",
          "grade": "solid", "confidence_after": 2, "tutor": False, "quiz": False}
-SEED = {"name": "acmedata", "label": "Acme Data", "source_hosts": ["docs.example.com"], "services": [],
+SEED = {"name": "people-ops", "label": "People operations", "source_hosts": ["handbook.example.org"], "topics": [],
         "pairs": [], "scenarios": [], "dimensions": ["scale"]}
 QUESTION = {"id": "team-scope", "category": "Scope and facts", "question": "How big was the team?", "themes": []}
 LEAD_PROGRESS = {"confidence": 1, "principle": "p", "notes": "", "last_drilled": "2026-11-01",
@@ -32,41 +32,41 @@ LEAD_PROGRESS = {"confidence": 1, "principle": "p", "notes": "", "last_drilled":
 
 def session(log=(), sid="s1"):
     """A practice session holding the given answer log."""
-    return {"id": sid, "title": "t", "mode": "architecture", "status": "open", "created": "2026-11-01T09:00:00",
+    return {"id": sid, "title": "t", "mode": "knowledge", "status": "open", "created": "2026-11-01T09:00:00",
             "updated": "2026-11-01T09:00:00", "jd": None, "queue": [{"id": "vpc", "kind": "card"}], "log": list(log)}
 
 
 DATA: dict[str, Any] = {
-    "settings": {"resume_root": "/example", "resume_dirs": [], "tier1_services": ["VPC"]},
+    "settings": {"resume_root": "/example", "resume_dirs": [], "key_topics": ["VPC"]},
     "employers": {"acme": {"name": "Acme Corp", "regex": "Acme"}},
     "open-items": [{"id": 1, "text": "check a figure", "status": "open"}],
     "stories": {"schema_version": 2, "stories": [STORY]},
     "engagements": {"schema_version": 2, "engagements": [ENGAGEMENT]},
     "themes": {"themes": {"platform": {"stories": [STORY["id"]], "questions": []}}},
-    "arch-catalog": {"dimensions": ["scale"], "scenarios_note": "n", "tracks": ["aws"], "cards": [CARD]},
-    "arch-progress": {"cards": {"vpc": PROGRESS}},
-    "arch-tracks": {"acmedata": SEED},
+    "cards-catalog": {"dimensions": ["scale"], "scenarios_note": "n", "tracks": ["aws"], "cards": [CARD]},
+    "cards-progress": {"cards": {"vpc": PROGRESS}},
+    "cards-tracks": {"people-ops": SEED},
     "lead-questions": {"questions": [QUESTION]},
     "lead-progress": {"questions": {"team-scope": LEAD_PROGRESS}},
     "lead-scope": {"companies": {"acme": {"title": "Lead", "direct_reports": "6"},
-                                                    "globex": {"title": None, "direct_reports": None}}},
+                                                    "acme-2": {"title": None, "direct_reports": None}}},
     "sessions": {"s1": session([ENTRY])},
     "curated": {"certifications": [{"name": "X", "issued": "2024-01", "expires": None}], "education": ["BSc"],
                                  "review_if_metric_matches": ["30%"], "skill_merge": {"llms": "LLM"}, "skill_drop": ["teamwork"],
                                  "tag_only": ["Security"], "skill_group": {"VPC": "Cloud"},
                                  "extra_skills": {"Cloud": [{"name": "Terraform", "aliases": ["TF"]}]}},
-    "curation-themes": {"themes": {"acme-1": ["cost"]}, "ignore": ["acme-2"], "summary_angles": {"sum-1": ["focus-a"]}},
+    "curation-themes": {"themes": {"acme-line-1": ["cost"]}, "ignore": ["acme-line-2"], "summary_angles": {"sum-1": ["focus-a"]}},
     "resume-skills": {"groups": {"Cloud": [{"name": "VPC", "aliases": [], "sources": ["a.pdf"]}], "Data": []},
                                      "tag_only": ["Security"]},
     "resume-companies": {"acme": {
         "id": "acme", "name": "Acme Corp", "aliases": ["Acme"],
         "roles": [{"start": "2021-01", "end": None, "titles": ["Lead"], "subtitles": [], "clients": [], "sources": ["a.pdf"]}],
-        "bullets": [{"id": "acme-1", "text": "Cut page load time by 30%.", "role_start": "2021-01", "skills": ["AWS"],
+        "bullets": [{"id": "acme-line-1", "text": "Cut checkout drop-off by 30%.", "role_start": "2021-01", "skills": ["AWS"],
                      "themes": ["cost"], "metrics": ["30%"], "sources": ["a.pdf", "b.pdf"], "variants": ["Cut spend 30%."],
                      "needs_review": True},
-                    {"id": "acme-2", "text": "Ran weekly reviews.", "role_start": "2021-01", "skills": [], "themes": [],
+                    {"id": "acme-line-2", "text": "Ran weekly reviews.", "role_start": "2021-01", "skills": [], "themes": [],
                      "metrics": [], "sources": ["a.pdf"]}]}},
-    "resume-profile": {"summaries": [{"id": "sum-1", "text": "Engineer.", "angles": [], "sources": ["a.pdf"]}],
+    "resume-profile": {"summaries": [{"id": "sum-1", "text": "Designer.", "angles": [], "sources": ["a.pdf"]}],
                                       "profile_points": ["p"], "education": ["BSc"], "certifications": [{"name": "X"}],
                                       "projects": [], "headlines": ["h"]},
     "resume-index": {"generated": "t", "companies": [{"id": "acme", "name": "Acme Corp", "bullets": 2, "roles": []}],
@@ -88,8 +88,8 @@ def _save_sessions(data: dict[str, Any]) -> None:
 
 WRITERS: dict[str, Callable[[Any], None]] = {
     "stories": tables.replace_stories, "engagements": tables.replace_engagements,
-    "themes": lambda d: tables.replace_themes(d["themes"]), "arch-catalog": tables.replace_catalog,
-    "arch-progress": lambda d: tables.replace_progress(d["cards"]), "arch-tracks": _save_tracks,
+    "themes": lambda d: tables.replace_themes(d["themes"]), "cards-catalog": tables.replace_catalog,
+    "cards-progress": lambda d: tables.replace_progress(d["cards"]), "cards-tracks": _save_tracks,
     "lead-questions": lambda d: tables.replace_questions(d["questions"]),
     "lead-progress": lambda d: tables.replace_lead_progress(d["questions"]),
     "lead-scope": lambda d: tables.replace_company_facts(d["companies"]), "sessions": _save_sessions,
@@ -104,7 +104,7 @@ WRITERS: dict[str, Callable[[Any], None]] = {
 
 
 def seed() -> None:
-    """Write DATA into the (initialised) test database, every kind in one transaction."""
+    """Write DATA into the (initialized) test database, every kind in one transaction."""
     with store.transaction():
         for name, data in DATA.items():
             WRITERS[name](data)

@@ -38,7 +38,18 @@ The system SHALL provide `layout_text` in which a date range is separated from i
 - **THEN** the extracted line has a gap of three spaces before the date range
 
 ### Requirement: PDF text is column-safe and normalized
-The system SHALL split a PDF page that has columns (a side bar beside the main column) at the gutter shared by its lines and read the columns one after another, the side bar first and the main column last, so a main column that continues below the columns or on the next page stays in order. The main column is the one with the work-history heading; only when neither or both have it is it the one with more text; full-width text ends a column block. Right-aligned dates, locations and aligned titles without a column SHALL NOT make a gutter; a short block counts as columns when each side has section headings of its own. The system SHALL unfold ligatures (NFKC), turn other list glyphs (dashes, arrows, squares, symbol-font glyphs) into `•`, and remove page numbers, footers repeated on two or more pages and headers repeated from page 1. For such a PDF `text` and `layout_text` SHALL both be the column-by-column text, with list markers normalized again after the columns are split so a right-column dash bullet is a bullet.
+The system SHALL detect a shared gutter in a PDF, read the side bar first and preserve the main column's order. The resulting column text SHALL serve as both `text` and `layout_text`.
+
+#### Scenario: Detecting and ordering columns
+- **WHEN** both sides have section headings, even in a short block
+- **THEN** they can form columns, and full-width text ends the column block
+- **AND** the work-history heading identifies the main column, using the side with more text when both or neither have it
+- **AND** aligned dates, locations and titles alone do not make a gutter
+
+#### Scenario: PDF text clean-up
+- **WHEN** text is extracted
+- **THEN** ligatures are unfolded with NFKC and list glyphs become bullets, including dashes after a column split
+- **AND** page numbers, footers repeated on two or more pages and headers repeated from the first page are removed
 
 #### Scenario: Side bar
 - **WHEN** a PDF has skills in a left or right side bar beside the work history
@@ -120,7 +131,17 @@ When extraction yields no usable text, the system SHALL fail that file with a me
 - **THEN** the file is reported unreadable with a message that it looks scanned and has no text layer
 
 ### Requirement: A visual reading can be compared with the parse
-The system SHALL print the JSON shape of a visual reading (`process-resumes visual schema`) and SHALL compare a reading in that shape (`visual compare FILE --reading JSON`) with a fresh parse of the same PDF, reporting employers, titles, dates, bullets, skills, certifications, education and summary that only one side has or that differ, each with both versions. It SHALL NOT change any stored data or merge wording. Items are paired by likeness (roles by employer and start date) and then compared exactly, job titles included (digits, decimal points, signs and punctuation such as `C++` count; only case, spacing, typographic quotes and dashes and trailing punctuation do not), and a summary present on one side only is a difference. A reading with a wrong shape SHALL be refused naming the field. A transcript confirmed for the PDF SHALL be used in place of the PDF text, whether the parser could read the PDF or not.
+The system SHALL print the visual-reading JSON shape and compare a valid reading to a fresh parse. The comparison SHALL report each side's differences without storing changes or merging wording.
+
+#### Scenario: Comparing a reading
+- **WHEN** a reading supplies employers, titles, dates, bullets, skills, certifications, education or summary
+- **THEN** items are paired by likeness, roles by employer and start date
+- **AND** each item is compared exactly, ignoring case, spacing, typographic quotes and dashes, and trailing punctuation
+- **AND** missing items or a summary present on only one side are listed with their available versions
+
+#### Scenario: Incorrect reading format
+- **WHEN** a reading has an invalid shape
+- **THEN** it is refused with the field named
 
 #### Scenario: Parser missed a bullet
 - **WHEN** the visual reading has a bullet the parse lacks
@@ -143,7 +164,25 @@ The system SHALL print the JSON shape of a visual reading (`process-resumes visu
 - **THEN** the next run parses that text instead of the PDF text, until the PDF changes
 
 ### Requirement: A PDF the parser cannot read may be read visually, once the user responds with yes
-The system SHALL mark a PDF with no text layer, or one that cannot be opened as a PDF, as needing a visual reading (and no other failure, such as a Word file or a PDF that parsed but is not a resume), say so in its message, `--survey` and the unparsed report, and SHALL NOT read it visually by itself. `process-resumes visual list` SHALL list such files with the PDF path and the path for the transcript under `output/visual/` in the home folder. A transcript SHALL be used in place of the PDF text only after `process-resumes visual confirm FILE`, which ties it to the checksum of the PDF as it is then; editing a transcript SHALL NOT change which PDF it is tied to, and after the PDF is replaced the old transcript SHALL NOT be used until a new one is confirmed. The ledger SHALL record the transcript checksum and its state, so a transcript that becomes confirmed is read even when its text is unchanged. Each source path SHALL have its own transcript name, and the resume folder SHALL never be written. For an agent that cannot open a PDF's pages itself, `process-resumes visual render FILE` SHALL write the pages as images under `output/visual/pages/` in the home folder and print their paths, drawing them with `pdftoppm` when installed and otherwise copying out the embedded JPEG only of a plain scan (each page's parsed content draws one unmasked JPEG in gray or RGB over the whole page and nothing else: no text, tiles, clip, vector painting, graphics state, annotations, crop box or rotation), and SHALL say how to install poppler when neither works; a PDF of more than 30 pages SHALL be refused with a message, never cut short; confirming the transcript SHALL remove those images.
+The system SHALL flag a PDF with no text layer or one that cannot be opened as a PDF for visual reading in its message, the survey and the unparsed report. The skill SHALL ask before reading it visually.
+
+#### Scenario: Eligibility and transcript locations
+- **WHEN** the input is a Word file or a readable PDF that just fails to parse as a resume
+- **THEN** it is not flagged for visual reading
+- **AND** eligible PDFs are listed by `process-resumes visual list` with a separate transcript path for each source under `output/visual/` in the home folder
+
+#### Scenario: Binding the transcript to its source
+- **WHEN** `process-resumes visual confirm FILE` is run
+- **THEN** the transcript is tied to the current PDF checksum and substitutes for extraction, including when the PDF also has readable text
+- **AND** editing the transcript does not retie it to a replaced PDF
+- **AND** the ledger tracks the transcript checksum and confirmation, so confirmation is noticed even when the text is unchanged
+
+#### Scenario: Rendering a scan
+- **WHEN** the agent needs the command to render pages
+- **THEN** it writes images under `output/visual/pages/` and prints their paths, leaving the resume folder read-only
+- **AND** it uses `pdftoppm` when available, or copies an embedded JPEG only from a plain full-page gray or RGB scan without other drawing, masking, annotations, cropping or rotation
+- **AND** a PDF longer than 30 pages is refused, and the command explains how to install poppler if neither rendering path works
+- **AND** confirming the transcript removes the rendered images
 
 #### Scenario: Scan found
 - **WHEN** a PDF has no text layer

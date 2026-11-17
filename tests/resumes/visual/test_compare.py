@@ -57,11 +57,11 @@ class CompareTests(ParserCase):
         self.assertIn("41 services", found[0].visual)
 
     def test_dates_and_titles_are_compared(self):
-        found = self.differences(employers=[{**READING["employers"][0], "start": "2020-09", "title": "Staff Engineer"}])
+        found = self.differences(employers=[{**READING["employers"][0], "start": "2020-09", "title": "People Director"}])
         self.assertEqual({d.section.rsplit(" ", 1)[1] for d in found}, {"title", "start"})
 
     def test_an_employer_the_parser_missed_is_reported(self):
-        extra = {"name": "Fabrikam Inc", "title": "Engineer", "start": "2018-01", "end": "2021-08", "bullets": ["Built a queue."]}
+        extra = {"name": "Acme 5", "title": "Engineer", "start": "2018-01", "end": "2021-08", "bullets": ["Built a queue."]}
         found = self.differences(employers=[*READING["employers"], extra])
         self.assertEqual([(d.section, d.kind) for d in found], [("employers", "missing")])
 
@@ -122,9 +122,9 @@ class MeaningTests(ParserCase):
     def test_close_but_different_content_is_reported(self):
         cases = [("education", "BS Computer Science", "MS Computer Science"),
                  ("skills", "C", "C++"),
-                 ("certifications", "Example Certified Developer - Associate",
-                  "Example Certified Developer - Professional"),
-                 ("summary", "Engineer with 10 years of cloud work.", "Engineer with 20 years of cloud work."),
+                 ("certifications", "Example Certified Coach - Associate",
+                  "Example Certified Coach - Professional"),
+                 ("summary", "Designer with 10 years of product work.", "Designer with 20 years of product work."),
                  ("summary", "A nonempty opening summary.", ""),
                  ("summary", "", "A summary only the pages show."),
                  ("bullets", "Reduced processing time by 1.5 hours.", "Reduced processing time by 15 hours.")]
@@ -142,8 +142,8 @@ class MeaningTests(ParserCase):
             found = vc.compare(resume, {**READING, "employers": [role]})
             self.assertEqual([(d.kind, d.parsed, d.visual) for d in found], [("different", parsed_title, visual_title)])
         resume = parsed()
-        resume["work"][0]["title"] = "Senior Engineer \u2013 Platform"
-        role = {**READING["employers"][0], "title": "senior engineer - platform"}
+        resume["work"][0]["title"] = "Senior Strategist \u2013 Platform"
+        role = {**READING["employers"][0], "title": "senior strategist - platform"}
         self.assertEqual(vc.compare(resume, {**READING, "employers": [role]}), [])
 
     def test_typography_alone_is_not_a_difference(self):

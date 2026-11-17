@@ -78,6 +78,7 @@ class BuildNotes:  # pylint: disable=too-many-instance-attributes
     set_aside: list[str] = field(default_factory=list)
     no_bullets: list[str] = field(default_factory=list)
     too_long: list[str] = field(default_factory=list)
+    other_wording: list[str] = field(default_factory=list)
 
 
 def stored_header() -> str | None:
@@ -216,15 +217,27 @@ def render_summary(result: qr.Analysis) -> list[str]:
     return ["## Summary", "", with_years(summary["text"], up.years_experience()), ""] if summary else []
 
 
-def fitting_text(bullet: Bullet, approved: Mapping[str, str]) -> str:
+def shown_count(text: str, wanted: Iterable[str], terms: Mapping[str, str] | None = None) -> int:
+    """How many of the wanted skills or requirements a wording names (an alias in `terms` counts)."""
+    return sum(1 for want in wanted if evidence.names(text, want, terms))
+
+
+def fitting_text(bullet: Bullet, approved: Mapping[str, str], wanted: Iterable[str] = (),
+                 terms: Mapping[str, str] | None = None) -> str:
     """The wording to print for a line, within LINE_LIMIT characters when possible and always the user's own:
-    their approved shorter wording (only while it still passes the checks against the stored line), else the line itself when it fits, else the longest stored wording of
-    the same line that fits, else the line as stored (the build report lists it as too long)."""
+    their approved shorter wording (only while it still passes the checks against the stored line); else, among the
+    stored wordings that fit (text, variants, per-file wordings), the one that names the most `wanted` posting
+    skills when it names more than the usual choice; else the line itself when it fits, else the longest stored
+    wording that fits, else the line as stored (the build report lists it as too long)."""
     if approved.get(bullet["id"]) and not line_rules.problems(bullet["text"], approved[bullet["id"]])[0]:
         return approved[bullet["id"]]
-    options = [bullet["text"], *bullet.get("variants", []), *(w for ws in bullet.get("wordings", {}).values() for w in ws)]
-    fits = [o for o in options if len(o) <= LINE_LIMIT]
-    return bullet["text"] if len(bullet["text"]) <= LINE_LIMIT else max(fits, key=len, default=bullet["text"])
+    fits = [o for o in rd.wordings_of(bullet) if len(o) <= LINE_LIMIT]
+    usual = bullet["text"] if len(bullet["text"]) <= LINE_LIMIT else max(fits, key=len, default=bullet["text"])
+    wanted = list(wanted)
+    if not wanted or not fits:
+        return usual
+    best = max(fits, key=lambda o: (shown_count(o, wanted, terms), o == usual))
+    return best if shown_count(best, wanted, terms) > shown_count(usual, wanted, terms) else usual
 
 
 def approved_wordings() -> dict[str, str]:
@@ -232,13 +245,17 @@ def approved_wordings() -> dict[str, str]:
     return dict(rd.load_curated().get("short_wording", {}))
 
 
-def printed(bullet: Bullet, approved: Mapping[str, str]) -> Bullet:
-    """The line as the resume prints it: the wording that is used, and only the skill tags whose words are still in
-    it (a tag is no proof that a requirement is visible once the wording that named it was shortened away)."""
-    text = fitting_text(bullet, approved)
-    if text == bullet["text"]:
-        return bullet
-    return {**bullet, "text": text, "skills": [s for s in bullet["skills"] if pr.term_found(s, text)]}
+def printed(bullet: Bullet, approved: Mapping[str, str], wanted: Iterable[str] = (),
+            terms: Mapping[str, str] | None = None) -> Bullet:
+    """The line as the resume prints it: only the wording that is used (no other stored wording), and only the
+    skill tags its words still name, plus tags added by hand (a tag is no proof that a requirement is visible once
+    the wording that named it is not printed)."""
+    text = fitting_text(bullet, approved, wanted, terms)
+    if rd.wordings_of(bullet) == [text]:
+        return bullet                            # one wording only: every tag came from the printed words
+    manual = set(bullet.get("skills_manual", []))
+    tags = [s for s in bullet["skills"] if s in manual or evidence.names(text, s, terms)]
+    return {**bullet, "text": text, "variants": [], "wordings": {}, "skills": tags}
 
 
 def bullet_cap(company: Company, options: BuildOptions) -> int:
@@ -313,7 +330,7 @@ def shown_skills(chosen: Sequence[tuple[Company, list[Bullet]]], need: Iterable[
     """The skills that the printed lines show (their wording as it will be printed), including requirements named
     in a line's words; a tag on a line that denies using that skill does not count."""
     wording = approved_wordings() if approved is None else approved
-    bullets = [printed(b, wording) for _, picks in chosen for b in picks]
+    bullets = [printed(b, wording, need, terms) for _, picks in chosen for b in picks]
     tagged = {skill for b in bullets for skill in b["skills"] if shows(b, skill, terms)}
     return tagged | {n for n in need if any(shows(b, n, terms) for b in bullets)}
 
@@ -332,7 +349,7 @@ def cover_gaps(result: qr.Analysis, chosen: list[tuple[Company, list[Bullet]]], 
             continue
         for company, scored in result.ranked:
             used = [b for _, picks in chosen for b in picks]
-            pool = [item.bullet for item in scored if shows(printed(item.bullet, approved), skill, terms)
+            pool = [item.bullet for item in scored if shows(printed(item.bullet, approved, result.need, terms), skill, terms)
                     and item.bullet not in used
                     and not too_similar(item.bullet, used)]
             picks = picks_of[company["id"]]
@@ -342,7 +359,7 @@ def cover_gaps(result: qr.Analysis, chosen: list[tuple[Company, list[Bullet]]], 
                 picks.append(pool[0])
                 break
             rest = [(c, p[:-1] if p is picks else p) for c, p in chosen]
-            last = printed(picks[-1], approved)
+            last = printed(picks[-1], approved, result.need, terms)
             if not {n for n in result.need if shows(last, n, terms)} - shown_skills(rest, result.need, terms, approved):
                 picks[-1] = pool[0]
                 break
@@ -353,6 +370,8 @@ def render_experience(result: qr.Analysis, options: BuildOptions,
     """The experience section: each company once, then each role with its own title and dates and its bullets."""
     lines = ["## Experience", ""]
     approved = approved_wordings()
+    terms = qr.vocabulary(result.skills) if result is not None else {}
+    wanted = list(result.need) if result is not None else []
     for company, picks in chosen if chosen is not None else choose_experience(result, options):
         latest = roles_newest_first(company)[0] if company["roles"] else None
         if not picks and latest is None:
@@ -362,7 +381,7 @@ def render_experience(result: qr.Analysis, options: BuildOptions,
         for role, group in groups:
             override = options.titles.get(company["id"]) if role is latest else None
             lines += [f"#### {role_line(role, override)}", ""]
-            lines += [f"- {fitting_text(b, approved)}" for b in group] + [""]
+            lines += [f"- {fitting_text(b, approved, wanted, terms)}" for b in group] + [""]
     return lines
 
 
@@ -427,11 +446,14 @@ def render_credentials(profile: ResumeProfile, need: Iterable[str] = ()) -> list
     return lines
 
 
-def too_long_lines(chosen: Sequence[tuple[Company, list[Bullet]]], summary: Summary | None) -> list[str]:
+def too_long_lines(chosen: Sequence[tuple[Company, list[Bullet]]], summary: Summary | None,
+                   wanted: Iterable[str] = (), terms: Mapping[str, str] | None = None) -> list[str]:
     """One note for each printed line (and the summary) that is over its limit, with the id to curate it by."""
     approved = approved_wordings()
+    wanted = list(wanted)
     notes = [f"{b['id']} ({len(text)} characters{', FAR OVER' if len(text) > LINE_WARN else ''}, {company['name']}): {text}"
-             for company, picks in chosen for b in picks if len(text := fitting_text(b, approved)) > LINE_LIMIT]
+             for company, picks in chosen for b in picks
+             if len(text := fitting_text(b, approved, wanted, terms)) > LINE_LIMIT]
     notes += [f"{b['id']} (approved wording ignored, it no longer keeps this line's figures or fits {LINE_LIMIT} characters): {b['text']}"
               for _, picks in chosen for b in picks
               if approved.get(b["id"]) and line_rules.problems(b["text"], approved[b["id"]])[0]]
@@ -441,11 +463,28 @@ def too_long_lines(chosen: Sequence[tuple[Company, list[Bullet]]], summary: Summ
     return notes
 
 
+def posting_wants(text: str, requirements: Iterable[str]) -> tuple[list[str], dict[str, str]]:
+    """(the posting's skills and requirements, the skills vocabulary): what a printed wording should show."""
+    vocab = qr.vocabulary(rd.load_skills())
+    need = qr.jd_skills(text, vocab)
+    plain = qr.add_requirements(need, text, requirements, vocab)
+    return [*need, *plain], vocab
+
+
+def other_wordings(chosen: Sequence[tuple[Company, list[Bullet]]], wanted: Sequence[str],
+                   terms: Mapping[str, str]) -> list[str]:
+    """Ids of the chosen lines printed in another stored wording because it shows more of the posting."""
+    approved = approved_wordings()
+    return [b["id"] for _, picks in chosen for b in picks
+            if fitting_text(b, approved, wanted, terms) != fitting_text(b, approved)]
+
+
 def build(text: str, options: BuildOptions, header: str | None) -> tuple[str, BuildNotes]:
     """Markdown resume for the job description; `header` is the name/contact text (None: use the template)."""
     approved = approved_wordings()
+    wanted, vocab = posting_wants(text, options.requirements)
     result = qr.analyze(text, (), options.include_review, options.recency, options.requirements,
-                        lambda b: printed(b, approved))
+                        lambda b: printed(b, approved, wanted, vocab))
     lines = [(header or HEADER_TEMPLATE).rstrip(), ""]
     chosen = choose_experience(result, options)
     lines += render_summary(result) + render_experience(result, options, chosen) + render_skills(result, text)
@@ -462,7 +501,8 @@ def build(text: str, options: BuildOptions, header: str | None) -> tuple[str, Bu
                        unplaced=unplaced(chosen), requirements_given=bool(options.requirements), possible=result.possible,
                        set_aside=set_aside_lines((company for company, _ in result.ranked), result.need, terms),
                        no_bullets=[company["name"] for company, picks in chosen if not picks and company["roles"]],
-                       too_long=too_long_lines(chosen, summary))
+                       too_long=too_long_lines(chosen, summary, wanted, terms),
+                       other_wording=other_wordings(chosen, wanted, terms))
     return "\n".join(lines).rstrip() + "\n", notes
 
 
@@ -483,7 +523,7 @@ def write_record(out: Path, args: argparse.Namespace, text: str, notes: BuildNot
               "settings": {"top": args.top, "titles": args.title, "recency": args.recency, "requirements": args.requirement,
                            "include_review": args.include_review, "max_bullets": args.max_bullets},
               "summary": notes.used_summary, "bullets": notes.selected, "header_present": not notes.header_missing,
-              "no_supporting_bullet": notes.missing, "not_shown": notes.not_shown,
+              "no_supporting_bullet": notes.missing, "not_shown": notes.not_shown, "other_wording": notes.other_wording,
               "possible_matches": [{"skill": n, "sentence": q} for n, q in notes.possible]}
     path = out.with_suffix(".build.json")
     path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
@@ -573,6 +613,9 @@ def build_and_write(args: argparse.Namespace) -> None:
         print(qr.NOT_CHECKED.strip())
     if notes.not_shown:
         print("JD skills you have evidence for that this draft does not show: " + ", ".join(notes.not_shown))
+    if notes.other_wording:
+        print("Printed in another of your stored wordings, because it shows more of the posting: "
+              + ", ".join(notes.other_wording))
     if notes.set_aside:
         print("Lines set aside or capped for the skills the posting asks for:")
         print("\n".join(f"  - {note}" for note in notes.set_aside))
@@ -609,7 +652,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "or -2, -3 ... when that file exists; an explicit path is overwritten)")
     parser.add_argument("--top", type=int, default=4, help="bullets per company (default 4; old companies get at most 2)")
     parser.add_argument("--title", action="append", default=[], metavar="COMPANY=TITLE", type=company_title,
-                        help='override the job title shown for a company id, e.g. --title <company-id>="placeholder"')
+                        help='override the job title shown for a company id, e.g. --title <company-id>="Head of People"')
     parser.add_argument("--max-bullets", type=int, help="limit the total number of bullets in the resume")
     parser.add_argument("--recency", type=float, default=2.0, help="recency weight, as in query-resume for-jd")
     parser.add_argument("--include-review", action="store_true", help="allow bullets flagged needs_review")

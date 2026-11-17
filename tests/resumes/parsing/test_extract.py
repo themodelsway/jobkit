@@ -45,9 +45,9 @@ class FormatEquivalenceTests(ExtractCase):
             with self.subTest(fmt=fmt):
                 self.assertTrue(parsed["is_resume"], parsed["problems"])
                 self.assertEqual(parsed["problems"], [])
-                self.assertEqual([e["company_id"] for e in parsed["work"]], ["acme-corp", "globex"])
+                self.assertEqual([e["company_id"] for e in parsed["work"]], ["acme-corp", "acme-2"])
                 self.assertEqual([(e["start"], e["end"]) for e in parsed["work"]], [("2021-03", None), ("2015-01", "2021-02")])
-                self.assertEqual([e["title"] for e in parsed["work"]], ["Lead Engineer", "Senior Engineer"])
+                self.assertEqual([e["title"] for e in parsed["work"]], ["Lead Designer", "Senior Strategist"])
                 self.assertEqual([e["bullets"] for e in parsed["work"]], [JOBS[0][3], JOBS[1][3]])
         self.assertEqual(results["txt"]["work"], results["md"]["work"])
         self.assertEqual(results["txt"]["work"], results["docx"]["work"])
@@ -187,10 +187,10 @@ class PdfWithoutPopplerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "me.pdf"
             path.write_bytes(tiny_pdf([(50, 700, "Acme Corp"), (420, 700, "01/2020 - Present"),
-                                       (50, 680, "Senior Engineer")]))
+                                       (50, 680, "Senior Strategist")]))
             with mock.patch("jk.resumes.extract.shutil.which", return_value=None):
                 doc = extract.extract(path)
-        self.assertIn("Senior Engineer", doc.text)
+        self.assertIn("Senior Strategist", doc.text)
         self.assertRegex(doc.layout_text, r"Acme Corp {2,}01/2020 - Present")
 
 
@@ -297,8 +297,8 @@ class MarkdownTableTests(unittest.TestCase):
 
     def test_grid_timeline_row_puts_the_date_after_the_employer(self):
         rule = "+" + "-" * 19 + "+" + "-" * 21 + "+\n"
-        grid = rule + "| Northwind Traders | 09/2021 - Present   |\n|" + " " * 19 + "|" + " " * 21 + "|\n" + rule
-        self.assertEqual(self.md(grid), ["Northwind Traders   09/2021 - Present"])
+        grid = rule + "| " + "Acme 4".ljust(18) + "| 09/2021 - Present   |\n|" + " " * 19 + "|" + " " * 21 + "|\n" + rule
+        self.assertEqual(self.md(grid), ["Acme 4   09/2021 - Present"])
 
     def test_pipe_layout_table_is_read_column_by_column(self):
         table_md = "| Skills | Certifications |\n|---|---|\n| Python | Example Certification |\n"

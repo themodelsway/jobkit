@@ -48,12 +48,12 @@ Each step above is one of the three skills. The three skills share one datastore
 
 ### Resumes
 
-- **One store from many resumes.** Every resume is read once, split by employer, and merged. Wording that appears in several resumes is kept once, with its sources.
+- **Every resume version in one place.** Old resumes often show the same career from different perspectives, each covering a different side of the work. jobkit gathers them together, so experience left out of a recent resume can still be used to build stories and tailored resumes for a new position.
 - **Incremental.** Files that have not changed are skipped; new files are added; deleted or renamed files are removed.
 - **Many layouts.** Resumes laid out with a side column (PDF columns, Word text boxes or tables), Markdown tables, headings written many ways (`Experience`, `Career Highlights`), dates such as `09/2021`, `Sep 2021` or `2012`, and several titles at one employer are read. After an update that changes how resumes are read, the next run saves a copy of the data and re-reads every resume once, keeping curation.
 - **Scanned PDFs.** A PDF with no readable text (a scan or a damaged file) is reported with its reason. The skill tells the agent to ask first, and to read its pages as pictures once the user responds with yes; the agent then types out the text and shows it for checking. The commands use the typed-out text only after it is confirmed with `process-resumes visual confirm`, which the skill tells the agent to run once the user agrees with the text.
 - **Checking a PDF against its pages.** For a PDF that reads as text, the parse can be compared with a reading of its pages; the skill tells the agent to do this only when the user asks. The agent shows each difference with both versions for the user to decide. Agreed corrections are kept in the data folder and used until the PDF changes; the jobkit commands do not write to the resume file.
-- **Wrong figures can be flagged.** A figure known to be wrong can be listed, so lines that use it are marked and left out of matching.
+- **Inconsistencies are raised.** The skill tells the agent to look for inconsistent information across resumes, such as contact details, numbers, employer spellings, dates or locations, and bring it to the user; both versions can be reviewed and reconciled or kept as a variant.
 
 ### Learning with the tutor
 
@@ -62,9 +62,10 @@ The tutor teaches a card, question or story first, then checks understanding wit
 ### Mock interviews and practice
 
 - **Stories.** Stories seeded from the resumes, one per employer and theme. Each is written once and can be told as STAR (situation, task, action, result), SOAR (situation, obstacle, action, result) or CARL (challenge, action, result, learning). Each can hold a metric with a recorded basis (measured, estimated, stated or unknown), spoken 60-second and 2-minute versions, and follow-up questions.
-- **Knowledge drill cards for any role.** Cards for the topics, comparisons and scenarios of the technologies or fields an interview covers, plus cases (a question developed over several turns) and role-plays (the agent plays a part, such as a skeptical stakeholder). Each topic belongs to a role family (engineering, product, delivery, people or operations), and answers are graded against that topic's rubric. One example technology is bundled, and any other technology or field is added from a JSON topic list, with no code. Facts come from official sources (vendor documentation, regulators, standards bodies), for the user's country where it matters, never from memory. Coding exercises, tests with one right answer and written work samples are not covered.
+- **Role-knowledge cards for any role.** Cards for the topics, comparisons and scenarios of the fields or technologies an interview covers, plus cases (a question developed over several turns) and role-plays (the agent plays a part, such as a skeptical stakeholder). Each track belongs to a role family (for example people, design, strategy, product or engineering), and answers are graded against that track's rubric. Any field or technology is added from a JSON topic list, with no code; AWS is bundled as one example and is never loaded unless chosen. Facts come from official sources (vendor documentation, regulators, standards bodies), for the user's country where it matters, never from memory. Coding exercises, tests with one right answer and written work samples are not covered.
 - **Leadership questions.** A question set (roadmapping, mentoring, conflict, prioritization and more), each with the user's principle and one example per recent employer.
 - **Company research.** For a named company, where the agent can read web pages, the skill tells the agent to look up how that company hires (published values, interview rounds, what interviewers look for, typical questions) and to save each fact with its link, a short quote and the date read, leaving out reviews and other user-written posts. Stories and practice sessions can then be ranked against that company's values. Nothing about any company is shipped. The skill tells the agent to recheck stale facts when they are next needed; the default research window is 30 days. The commands refuse a fact without a link or quote, but cannot check that a quote is on its page; each fact keeps its link to open.
+- **Questions for the role.** The skill tells the agent to offer optional web research and remember the answer. Practice can use published questions with citations, general role questions, or personal questions drawn from resume claims and posting gaps.
 - **Practice sessions.** Resumable. A session keeps the complete answers and grades; later drills add entries and never edit old ones.
 - **Mock interview.** The interview-prep skill asks first, gives no hints, then grades.
 
@@ -195,7 +196,7 @@ The first time a skill runs, in either agent, the skill tells the agent to check
 - After setup, each skill tells the agent to check how far setup has got (`jobkit status --setup`) and to continue from there: create the data folder, import the resumes, or ask what the user is preparing for. When the check reports that saving is not allowed, or that the data comes from a newer version, the skill tells the agent to say so and stop. For any other failure, at setup or later, the skill tells the agent to follow the troubleshooting guide that ships with the plugin (`setup/troubleshoot.md`): it never repairs the data itself, retries only a busy database, once, and otherwise stops and offers a report without personal details for the user to post as a GitHub issue; jobkit does not post issues itself. A command that fails in a way its message does not explain ends its error output with a line that points to that guide. For a returning user, the list of what jobkit can do starts with an offer to continue an unfinished practice session (`jobkit status --summary`).
 - It does not edit your shell settings. The commands go in uv's tool folder and the skills run them by full path.
 - If setup stops half way (for example offline), what it already installed stays; asking again finishes it.
-- Your data is kept in `~/.jobkit` on macOS and Linux, and in `%USERPROFILE%\.jobkit` (the `.jobkit` folder in your user home folder) on Windows. This README writes it as `~/.jobkit`.
+- **No database server.** Structured data (resume lines, stories, practice sessions and settings) is kept in one SQLite database file (SQLite is part of Python), `~/.jobkit/data/jobkit.db` on macOS and Linux and `%USERPROFILE%\.jobkit\data\jobkit.db` on Windows. Extracted resume text, saved job postings, page readings and generated resumes are kept as files in the `output` folder, and copies of the database in the `backup` folder, both in the same `.jobkit` folder. The skill tells the agent to create the database after setup, before the first import. This README refers to the folder as `~/.jobkit`.
 
 ## Using both agents
 
@@ -247,7 +248,7 @@ match-score extract --jd jd.txt   # first of three steps; the resume-workflows s
 build-resume jd.txt               # tailored resume in ~/.jobkit/output/resumes/
 prep init                         # seed interview stories from the resume data
 lead init                         # seed the leadership questions
-arch init --track NAME            # seed drill cards for a technology or field (see docs/guides/interview-prep.md)
+cards init --track NAME            # set up cards for a field or technology (see docs/guides/interview-prep.md)
 readiness --jd jd.txt             # what to rehearse for this job
 ```
 
@@ -259,7 +260,7 @@ Save the name and contact line once with `profile header set NAME CONTACT_LINE` 
 | `query-resume` | `for-jd` ranks lines for a posting; `search`, `review` and `stats` filter lines, list items that need a human look and show counts. |
 | `match-score` | The match score, in three steps: `extract`, `check`, `run`. The model used by the agent rates each requirement against the lines; the command does the arithmetic. `extract` saves the posting, and the later steps can name it with `--key`. |
 | `build-resume JD` | Writes a tailored Markdown resume. Name and contact come from the saved header (`profile header`), never from the resume data. |
-| `prep`, `arch`, `lead` | Stories, drill cards and the leadership question set. |
+| `prep`, `cards`, `lead`, `questions` | Stories, role-knowledge cards, leadership questions, and questions for a role. |
 | `target` | Researched target companies: each fact with its link, quote, label and date read. |
 | `sessions`, `readiness` | Practice sessions and the readiness report. |
 

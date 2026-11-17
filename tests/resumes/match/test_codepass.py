@@ -56,15 +56,15 @@ class DegreeTests(unittest.TestCase):
 
 class CertificationTests(unittest.TestCase):
     def test_associate_against_professional_is_partial(self):
-        item = by_id("Example Certified Developer - Professional preferred.")["code:cert:example-certified-developer"]
+        item = by_id("Example Certified Coach - Professional preferred.")["code:cert:example-certified-coach"]
         self.assertEqual(item["level"], "partial")
 
     def test_same_or_lower_level_asked_is_full(self):
-        found = by_id("Example Certified Developer Associate is a plus.")
-        self.assertEqual(found["code:cert:example-certified-developer"]["level"], "full")
+        found = by_id("Example Certified Coach Associate is a plus.")
+        self.assertEqual(found["code:cert:example-certified-coach"]["level"], "full")
 
     def test_unnamed_level_is_full_and_unheld_certification_is_left_alone(self):
-        self.assertEqual(len([i for i in by_id("Example Certified Developer required. PMP preferred.").values()
+        self.assertEqual(len([i for i in by_id("Example Certified Coach required. PMP preferred.").values()
                               if i["kind"] == "certification"]), 1)
 
 
@@ -87,7 +87,7 @@ class YearsTests(unittest.TestCase):
                                       "clients": [], "sources": []})
         months, owners = cp.months_covered(mf.ResumeFacts(both, FACTS.skills, [], []), TODAY)
         self.assertEqual(months, 72 + 61)
-        self.assertEqual(owners[0], "globex")
+        self.assertEqual(owners[0], "acme-2")
 
     def test_skill_specific_years_are_left_unrated(self):
         for text in ("5 years of AWS experience.", "10+ years of experience in software development."):

@@ -1,11 +1,11 @@
-"""Drill tracks: a technology or field a user is preparing for (AWS, Acme Data, product management, ...).
+"""Tracks: a field or technology a user is preparing for (people operations, product management, AWS, ...).
 
-A track is a seed of topics (services, decision pairs, scenarios, cases, role-plays) plus the hosts that
+A track is a seed of cards (topics, decision pairs, scenarios, cases, role-plays) plus the hosts that
 count as a source for facts. Each track belongs to a role family (`families.json`), whose default rubric it
-uses unless its seed gives its own. AWS is bundled as the worked example (`jk.interview.aws.arch_seed`).
-Any other track is a seed stored in the database, added with `arch track add`;
+uses unless its seed gives its own; every seed names its family, and no family is the default. AWS is bundled as the worked example (`jk.interview.aws.aws_seed`).
+Any other track is a seed stored in the database, added with `cards track add`;
 no code is needed. A seed holds topic names only, never facts: facts are researched and recorded
-with a source URL by `arch refresh`.
+with a source URL by `cards refresh`.
 """
 from __future__ import annotations
 
@@ -19,30 +19,32 @@ from urllib.parse import urlparse
 
 from jk.interview import tables
 from jk.common import ToolError, slug
-from jk.interview.aws import arch_seed
+from jk.interview.aws import aws_seed
 
 BUILTIN: Final[str] = "aws"
 NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9-]{1,30}")
 HOST_PATTERN: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}")
-DEFAULT_FAMILY: Final[str] = "engineering"
 RUBRIC_MAX: Final[int] = 12
 COUNTRY_MAX: Final[int] = 60
-# The part of a card id that names its kind (services have none): `<track>-<marker><slug of the name>`.
-ID_MARKERS: Final[dict[str, str]] = {"service": "", "pair": "pair-", "scenario": "scn-", "case": "case-",
+# The part of a card id that names its kind (topics have none): `<track>-<marker><slug of the name>`.
+ID_MARKERS: Final[dict[str, str]] = {"topic": "", "pair": "pair-", "scenario": "scn-", "case": "case-",
                                      "role-play": "role-"}
 
 
 class Family(TypedDict):
-    """A role family: who it fits and the rubric its tracks use by default."""
+    """A role family: who it fits, example focus areas, where its facts come from, and the rubric its tracks use by
+    default. All families are equal; none is the default."""
 
     name: str
     label: str
     description: str
+    examples: list[str]
+    sources: str
     dimensions: list[str]
 
 
-class ServiceSeed(TypedDict):
-    """One service (or product, or feature area) card."""
+class TopicSeed(TypedDict):
+    """One topic card: a service, product, method, regulation or concept of the field."""
 
     area: str
     name: str
@@ -81,11 +83,11 @@ class TrackSeed(TypedDict):
     name: str
     label: str
     source_hosts: list[str]
-    services: list[ServiceSeed]
+    topics: list[TopicSeed]
     pairs: list[PairSeed]
     scenarios: list[str]
     dimensions: NotRequired[list[str]]
-    family: NotRequired[str]
+    family: str
     country: NotRequired[str]
     cases: NotRequired[list[CaseSeed]]
     role_plays: NotRequired[list[RolePlaySeed]]
@@ -99,8 +101,8 @@ def families() -> dict[str, Family]:
 
 
 def family_of(seed: TrackSeed) -> str:
-    """The track's role family (engineering when the seed names none)."""
-    return seed.get("family") or DEFAULT_FAMILY
+    """The track's role family."""
+    return seed["family"]
 
 
 def rubric(seed: TrackSeed) -> list[str]:
@@ -116,11 +118,11 @@ def prefix(track: str) -> str:
 def builtin_seed() -> TrackSeed:
     """The bundled AWS seed as a track."""
     return {
-        "name": BUILTIN, "label": "AWS", "source_hosts": list(arch_seed.SOURCE_HOSTS),
-        "services": [{"area": s.area, "name": s.name, "tier": s.tier, "aliases": list(s.aliases)}
-                     for s in arch_seed.SERVICES],
-        "pairs": [{"topic": p.topic, "name": p.name, "members": list(p.members)} for p in arch_seed.PAIRS],
-        "scenarios": list(arch_seed.SCENARIOS), "dimensions": list(arch_seed.DIMENSIONS),
+        "name": BUILTIN, "label": "AWS", "family": "engineering", "source_hosts": list(aws_seed.SOURCE_HOSTS),
+        "topics": [{"area": s.area, "name": s.name, "tier": s.tier, "aliases": list(s.aliases)}
+                     for s in aws_seed.SERVICES],
+        "pairs": [{"topic": p.topic, "name": p.name, "members": list(p.members)} for p in aws_seed.PAIRS],
+        "scenarios": list(aws_seed.SCENARIOS), "dimensions": list(aws_seed.DIMENSIONS),
     }
 
 
@@ -130,14 +132,14 @@ def _text_list(value: object, what: str) -> list[str]:
     return [v.strip() for v in value]
 
 
-def _check_service(row: object, index: int) -> ServiceSeed:
+def _check_topic(row: object, index: int) -> TopicSeed:
     if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not isinstance(row.get("area"), str):
-        raise ToolError(f"services[{index}] needs a text 'area' and 'name'")
+        raise ToolError(f"topics[{index}] needs a text 'area' and 'name'")
     if row.get("tier", 2) not in (2, 3):
-        raise ToolError(f"services[{index}].tier must be 2 (core) or 3 (optional); tier 1 comes from your resumes")
+        raise ToolError(f"topics[{index}].tier must be 2 (core) or 3 (optional); tier 1 comes from your resumes")
     aliases = row.get("aliases") or []
     if not isinstance(aliases, list) or not all(isinstance(a, str) for a in aliases):
-        raise ToolError(f"services[{index}].aliases must be a list of strings")
+        raise ToolError(f"topics[{index}].aliases must be a list of strings")
     return {"area": row["area"].strip(), "name": row["name"].strip(), "tier": row.get("tier", 2), "aliases": aliases}
 
 
@@ -180,11 +182,7 @@ def _check_role_play(row: dict[str, object], index: int) -> RolePlaySeed:
 
 
 def _add_role_fields(seed: TrackSeed, raw: dict[str, object]) -> None:
-    """Family, rubric, country, cases and role-plays: the fields every role family may use."""
-    if raw.get("family") is not None:
-        if raw["family"] not in families():
-            raise ToolError(f"family must be one of: {', '.join(families())}")
-        seed["family"] = str(raw["family"])
+    """Rubric, country, cases and role-plays: the fields every role family may use."""
     if raw.get("dimensions"):
         seed["dimensions"] = _text_list(raw["dimensions"], "dimensions")
     if raw.get("country") is not None:
@@ -195,7 +193,7 @@ def _add_role_fields(seed: TrackSeed, raw: dict[str, object]) -> None:
 
 def card_count(seed: TrackSeed) -> int:
     """How many cards the seed makes, of every kind."""
-    return sum(len(seed.get(key) or []) for key in ("services", "pairs", "scenarios", "cases", "role_plays"))
+    return sum(len(seed.get(key) or []) for key in ("topics", "pairs", "scenarios", "cases", "role_plays"))
 
 
 def _check_hosts(value: object) -> list[str]:
@@ -212,18 +210,21 @@ def validate_seed(raw: object, name: str) -> TrackSeed:
         raise ToolError(f"Track name {name!r} must be 2-31 lower-case letters, digits or '-', and not '{BUILTIN}'")
     if not isinstance(raw, dict):
         raise ToolError("The seed must be a JSON object")
-    services = raw.get("services") or []
-    if not isinstance(services, list):
-        raise ToolError("'services' must be a list")
+    topics = raw.get("topics") or []
+    if not isinstance(topics, list):
+        raise ToolError("'topics' must be a list")
+    if raw.get("family") not in families():
+        raise ToolError(f"'family' is required and must be one of: {', '.join(families())} (`cards families` lists them)")
     seed: TrackSeed = {
-        "name": name, "label": str(raw.get("label") or name), "source_hosts": _check_hosts(raw.get("source_hosts")),
-        "services": [_check_service(row, i) for i, row in enumerate(services)],
+        "name": name, "label": str(raw.get("label") or name), "family": str(raw["family"]),
+        "source_hosts": _check_hosts(raw.get("source_hosts")),
+        "topics": [_check_topic(row, i) for i, row in enumerate(topics)],
         "pairs": [_check_pair(row, i) for i, row in enumerate(raw.get("pairs") or [])],
         "scenarios": _text_list(raw["scenarios"], "scenarios") if raw.get("scenarios") else [],
     }
     _add_role_fields(seed, raw)
     if not card_count(seed):
-        raise ToolError("The seed needs at least one card: services, pairs, scenarios, cases or role_plays")
+        raise ToolError("The seed needs at least one card: topics, pairs, scenarios, cases or role_plays")
     return seed
 
 
@@ -234,7 +235,7 @@ def card_id(kind: str, track: str, name: str) -> str:
 
 def seed_cards(seed: TrackSeed) -> list[tuple[str, str, str]]:
     """(id, kind, name) of every card the seed makes, in seed order."""
-    rows = [("service", row["name"]) for row in seed["services"]] + [("pair", row["name"]) for row in seed["pairs"]]
+    rows = [("topic", row["name"]) for row in seed["topics"]] + [("pair", row["name"]) for row in seed["pairs"]]
     rows += [("scenario", text) for text in seed["scenarios"]]
     rows += [("case", row["title"]) for row in seed.get("cases", [])]
     rows += [("role-play", row["title"]) for row in seed.get("role_plays", [])]
@@ -260,11 +261,11 @@ def _check_new_rows(seed: TrackSeed) -> None:
     """Checks that apply to a seed being added, but not to one stored by an earlier version."""
     if len(seed.get("dimensions") or []) > RUBRIC_MAX:
         raise ToolError(f"dimensions may have at most {RUBRIC_MAX} lines")
-    for index, service in enumerate(seed["services"]):
-        if not service["name"] or not service["area"]:
-            raise ToolError(f"services[{index}] needs a text 'area' and 'name'")
-        if not isinstance(service["tier"], int):    # 2.0 equals 2 but is not a tier
-            raise ToolError(f"services[{index}].tier must be 2 (core) or 3 (optional); tier 1 comes from your resumes")
+    for index, topic in enumerate(seed["topics"]):
+        if not topic["name"] or not topic["area"]:
+            raise ToolError(f"topics[{index}] needs a text 'area' and 'name'")
+        if not isinstance(topic["tier"], int):    # 2.0 equals 2 but is not a tier
+            raise ToolError(f"topics[{index}].tier must be 2 (core) or 3 (optional); tier 1 comes from your resumes")
     for index, pair in enumerate(seed["pairs"]):
         if not pair["name"] or not pair["topic"]:
             raise ToolError(f"pairs[{index}] needs a text 'topic' and 'name'")
@@ -299,7 +300,7 @@ def load_seed(name: str) -> TrackSeed:
     stored = tables.load_track(name)
     if stored is None:
         known = ", ".join(known_tracks())
-        raise ToolError(f"Unknown track {name!r} (known: {known}). Add one with `arch track add {name} --seed FILE`.")
+        raise ToolError(f"Unknown track {name!r} (known: {known}). Add one with `cards track add {name} --seed FILE`.")
     return validate_seed(stored, name)
 
 

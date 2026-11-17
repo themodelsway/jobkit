@@ -22,20 +22,20 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 # The employers of the fictional resume below, as the parser's registry holds them.
 REGISTRY = {
     "acme-corp": ("Acme Corp", r"Acme Corp(?:" + pr.SEP + r"(?P<t>.+))?"),
-    "globex": ("Globex Inc", r"Globex Inc"),
+    "acme-2": ("Acme 2", r"Acme 2"),
 }
 # The employers of the sample files in `data/`.
-DATA_REGISTRY = {**REGISTRY, "initech": ("Initech", r"Initech(?:" + pr.SEP + r"(?P<t>.+))?")}
+DATA_REGISTRY = {**REGISTRY, "acme-3": ("Acme 3", r"Acme 3(?:" + pr.SEP + r"(?P<t>.+))?")}
 
 JOBS = [
-    ("Acme Corp", "03/2021 - Present", "Lead Engineer",
-     ["Cut page load time by 30% across 12 services using caching.", "Built a search service on PostgreSQL."]),
-    ("Globex Inc", "01/2015 - 02/2021", "Senior Engineer", ["Moved 40 services to a shared build system."]),
+    ("Acme Corp", "03/2021 - Present", "Lead Designer",
+     ["Cut checkout drop-off by 18% across 7 product flows using usability testing.", "Built a design system with shared prototypes."]),
+    ("Acme 2", "01/2015 - 02/2021", "Senior Strategist", ["Moved 40 screens to a shared component library."]),
 ]
-HEAD = ["Jane Example", "Senior Software Engineer"]
-SKILLS = "Languages: Python, TypeScript and Go"
+HEAD = ["Jane Example", "Senior Product Designer"]
+SKILLS = "Languages: English, Spanish and French"
 EXTRA_BULLET = "Reduced build times by 40% with a shared cache."
-JD = "Senior Software Engineer: Python, PostgreSQL, performance tuning, search services, mentor engineers, shared build systems."
+JD = "Senior Product Designer: prototyping, English, usability testing, design systems, mentor designers, component libraries."
 
 
 def as_txt() -> str:
@@ -108,7 +108,7 @@ class RebuildCase(HomeCase):
         self.resumes, self.text_dir = tmp / "resumes", tmp / "output"
         self.resumes.mkdir()
         saved = dict(pr.COMPANIES)
-        pr.set_companies({**REGISTRY, "initech": ("Initech", r"Initech")})
+        pr.set_companies({**REGISTRY, "acme-3": ("Acme 3", r"Acme 3")})
         self.addCleanup(lambda: pr.set_companies(saved))
         self.tmp = tmp
         for patch in (mock.patch.object(proc, "TEXT_DIR", self.text_dir), mock.patch.object(rd, "TEXT_DIR", self.text_dir)):
@@ -201,9 +201,9 @@ class ExtractCase(EmployersCase):
 
 
 def second_resume() -> str:
-    """A tailored resume with its own headline, education, certification, project and a different Globex title."""
-    text = as_txt().replace("Senior Software Engineer\n", "Senior Software Engineer\nWeb performance specialist\n")
-    return text.replace("Senior Engineer", "Staff Engineer") + EXTRAS
+    """A tailored resume with its own headline, education, certification, project and a different Acme 2 title."""
+    text = as_txt().replace("Senior Product Designer\n", "Senior Product Designer\nAccessibility specialist\n")
+    return text.replace("Senior Strategist", "People Director") + EXTRAS
 
 
 EXTRAS = ("\nEDUCATION\nBSc Physics, Example University\nCERTIFICATIONS\n• Example Certified Practitioner\n"

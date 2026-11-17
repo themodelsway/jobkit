@@ -9,7 +9,7 @@ from tests.resumes.support import JD, PipelineCase
 
 class WriteTests(PipelineCase):
     def test_files_written(self):
-        self.assertEqual(sorted(tables.load_companies()), ["acme-corp", "globex", "initech"])
+        self.assertEqual(sorted(tables.load_companies()), ["acme-2", "acme-3", "acme-corp"])
         for loaded in (tables.load_skills(), tables.load_profile(), tables.load_index(), tables.load_ledger()):
             self.assertTrue(loaded)
         self.assertEqual(tables.load_unparsed(), {})
@@ -17,13 +17,12 @@ class WriteTests(PipelineCase):
 
     def test_index_orders_companies_newest_first(self):
         index = tables.load_index()
-        self.assertEqual([c["id"] for c in index["companies"]], ["acme-corp", "initech", "globex"])
+        self.assertEqual([c["id"] for c in index["companies"]], ["acme-corp", "acme-3", "acme-2"])
         self.assertEqual(index["resumes"], 3)
 
-    def test_skills_curated_into_groups(self) -> None:
-        """Group the sample database skills and retain the unlabeled line."""
+    def test_skills_curated_into_groups(self):
         groups = tables.load_skills()["groups"]
-        self.assertIn("PostgreSQL", [s["name"] for s in groups["Data"]])
+        self.assertIn("UX", [s["name"] for s in groups["Design"]])
         self.assertIn("Unsorted", groups)                         # the unlabeled list awaits curation
 
     def test_bullets_are_tagged_with_skills(self):
@@ -33,14 +32,14 @@ class WriteTests(PipelineCase):
 
 
 class QueryTests(PipelineCase):
-    def test_analyze_ranks_and_reports(self) -> None:
-        """Rank the fictional employers and report the posting skill and angle."""
+    def test_analyze_ranks_and_reports(self):
+        tables.save_curation("themes", {"positioning_words": {"focus-a": ["design systems"]}})     # the user's own positioning word
         r = qr.analyze(JD)
-        self.assertIn("PostgreSQL", r.need)
+        self.assertIn("Prototyping", r.need)
         self.assertEqual(r["need"], r.need)                        # still readable like a dict
-        self.assertEqual([c["id"] for c, _ in r.ranked], ["acme-corp", "initech", "globex"])
+        self.assertEqual([c["id"] for c, _ in r.ranked], ["acme-corp", "acme-3", "acme-2"])
         self.assertTrue(r.summaries)
-        self.assertIn("focus-2", r.angles)
+        self.assertIn("focus-a", r.angles)
         for _, scored in r.ranked:
             self.assertEqual([s.score for s in scored], sorted((s.score for s in scored), reverse=True))
 
@@ -54,9 +53,8 @@ class QueryTests(PipelineCase):
         self.assertIn("== Suggested opening summaries", a[1])
         self.assertIn("== Skills to feature, by group:", a[1])
 
-    def test_search_stats_review(self) -> None:
-        """Find the page-load bullet and report the repository counts."""
-        _code, out, _ = self.cli(qr.main, "search", "--text", "page load")
+    def test_search_stats_review(self):
+        _code, out, _ = self.cli(qr.main, "search", "--text", "drop-off")
         self.assertIn("1 bullet(s) matched", out)
         self.assertIn("Resumes processed: 2 (+1 non-resume files skipped)", self.cli(qr.main, "stats")[1])
         self.assertIn("Bullets flagged needs_review:", self.cli(qr.main, "review")[1])
@@ -69,35 +67,34 @@ class QueryTests(PipelineCase):
 
 
 class BuildTests(PipelineCase):
-    def test_build_sections_and_notes(self) -> None:
-        """Render the current fictional role and record draft notes."""
+    def test_build_sections_and_notes(self):
         md, notes = br.build(JD, br.BuildOptions(top=2), header=None)
         self.assertTrue(md.startswith("# Your Name"))
-        for section in ("## Summary", "## Experience", "### Acme Corp\n", "#### Lead Engineer | 03/2021 - Present", "## Skills"):
+        for section in ("## Summary", "## Experience", "### Acme Corp\n", "#### Lead Designer | 03/2021 - Present", "## Skills"):
             self.assertIn(section, md)
         self.assertTrue(notes.header_missing)
         self.assertIsNotNone(notes.used_summary)
 
     def test_skills_section_names_posting_skills_first_and_echoes_wording(self):
-        skills = {"groups": {"Data": [{"name": "PostgreSQL", "sources": ["a"]}, {"name": "Stream Processing Systems", "sources": ["a"]},
-                                       {"name": "Hadoop", "sources": ["a"]}],
+        skills = {"groups": {"Design": [{"name": "Prototyping", "sources": ["a"]}, {"name": "Design System Governance", "sources": ["a"]},
+                                       {"name": "Wireframing", "sources": ["a"]}],
                              "Leadership": [{"name": "Stakeholder management", "sources": ["a", "b"]},
                                             {"name": "Collaborative Problem Solving", "sources": ["a"]}]}}
-        result = qr.Analysis(need=qr.Counter({"PostgreSQL": 1}), themes=set(), angles={}, summaries=[], ranked=[],
+        result = qr.Analysis(need=qr.Counter({"Prototyping": 1}), themes=set(), angles={}, summaries=[], ranked=[],
                              skills=skills)
-        text = "\n".join(br.render_skills(result, "We need PostgreSQL, stream processing and strong stakeholders."))
-        self.assertIn("- **Data:** PostgreSQL, Stream Processing Systems", text)
+        text = "\n".join(br.render_skills(result, "We need prototyping, design systems and strong stakeholders."))
+        self.assertIn("- **Design:** Prototyping, Design System Governance", text)
         self.assertIn("- **Leadership:** Stakeholder management", text)
-        for left_out in ("Hadoop", "Collaborative"):
+        for left_out in ("Wireframing", "Collaborative"):
             self.assertNotIn(left_out, text)
-        self.assertLess(text.index("Data"), text.index("Leadership"))
+        self.assertLess(text.index("Design"), text.index("Leadership"))
 
     def test_same_result_told_twice_is_a_repeat_but_other_results_sharing_a_number_are_not(self):
         def bullet(text, metrics):
             return {"text": text, "metrics": metrics}
-        first = bullet("Built request throttling comparing Redis and Memcached rate limits; cut costs by 70 percent.", [])
-        again = bullet("Evaluated rate limits in Redis versus Memcached, delivering 70% cost savings.", ["70%"])
-        other = bullet("Migrated the billing platform to Kubernetes and reduced release time by 70%.", ["70%"])
+        first = bullet("Built a pricing model comparing Acme CRM and Acme Ads data; cut costs by 70 percent.", [])
+        again = bullet("Evaluated pricing data in Acme CRM versus Acme Ads, delivering 70% cost savings.", ["70%"])
+        other = bullet("Moved the finance team to a new close process and reduced close time by 70%.", ["70%"])
         self.assertTrue(br.too_similar(again, [first]))
         self.assertFalse(br.too_similar(other, [first]))
 
@@ -131,7 +128,7 @@ class BuildTests(PipelineCase):
         self.assertEqual(len(br.company_bullets(company(None), scored, options)), 5)
 
     def test_unmatched_company_keeps_one_proven_bullet(self):
-        company = self.data["companies"]["globex"]
+        company = self.data["companies"]["acme-2"]
         self.assertEqual(len(br.company_bullets(company, [], br.BuildOptions())), 1)
 
     def test_helpers(self):

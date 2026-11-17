@@ -8,10 +8,10 @@ reviewer can contest a level that it gets wrong (see `match_codepass.apply_code`
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 
-from jk.resumes.resume_data import Bullet
+from jk.resumes.resume_data import Bullet, wordings_of
 
 OK: Final[str] = "ok"
 CONFIRM_USE: Final[str] = "confirm_use"
@@ -33,7 +33,7 @@ def admissible(bullet: Bullet) -> bool:
     return not bullet.get("ignored") and not bullet.get("needs_review")
 
 
-def _names(clause: str, skill: str, terms: Mapping[str, str] | None = None) -> bool:
+def names(clause: str, skill: str, terms: Mapping[str, str] | None = None) -> bool:
     """True when the clause names the skill, or one of its aliases in `terms` ({term: canonical name}), as a
     whole word (case-insensitive)."""
     spellings = [skill, *(t for t, canon in (terms or {}).items() if canon == skill)]
@@ -43,10 +43,10 @@ def _names(clause: str, skill: str, terms: Mapping[str, str] | None = None) -> b
 def _applies(clause: str, skill: str, tagged: Sequence[str], terms: Mapping[str, str] | None = None) -> bool:
     """Whether a clause says something about this skill: it names it (or an alias), or it names no other tagged
     skill and the line is about this skill alone."""
-    if _names(clause, skill, terms):
+    if names(clause, skill, terms):
         return True
     others = [s for s in tagged if s != skill]
-    return not others and not any(_names(clause, s, terms) for s in tagged)
+    return not others and not any(names(clause, s, terms) for s in tagged)
 
 
 def use_state(text: str, skill: str, tagged: Sequence[str] = (), terms: Mapping[str, str] | None = None) -> str:
@@ -64,16 +64,22 @@ def use_state(text: str, skill: str, tagged: Sequence[str] = (), terms: Mapping[
     return state
 
 
+def wordings_state(bullet: Bullet, skill: str, terms: Mapping[str, str] | None = None) -> str:
+    """`use_state` of a line over all its stored wordings (text, variants, per-file wordings): `not_demonstrated`
+    when any wording denies professional use, else `ok` when any wording shows it without training words, else
+    `confirm_use`."""
+    tagged = [*bullet.get("skills", []), *bullet.get("skills_manual", [])]
+    states = {use_state(text, skill, tagged, terms) for text in wordings_of(bullet)}
+    if NOT_DEMONSTRATED in states:
+        return NOT_DEMONSTRATED
+    return OK if OK in states else CONFIRM_USE
+
+
 def line_state(bullet: Bullet, skill: str, terms: Mapping[str, str] | None = None) -> str | None:
-    """`use_state` of a stored line for a skill, or None when the line is ignored or flagged (set aside)."""
+    """`wordings_state` of a stored line for a skill, or None when the line is ignored or flagged (set aside)."""
     if not admissible(bullet):
         return None
-    return use_state(bullet["text"], skill, [*bullet.get("skills", []), *bullet.get("skills_manual", [])], terms)
-
-
-def lead_lines(bullets: Iterable[Bullet], skill: str, terms: Mapping[str, str] | None = None) -> list[Bullet]:
-    """The lines that may be offered as a lead for a skill: not ignored, not flagged, not denying its use."""
-    return [b for b in bullets if line_state(b, skill, terms) in (OK, CONFIRM_USE)]
+    return wordings_state(bullet, skill, terms)
 
 
 def weight(bullet: Bullet) -> int:

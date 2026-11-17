@@ -163,7 +163,7 @@ RELATED_FIELDS: Final[tuple[frozenset[str], ...]] = tuple(frozenset(group) for g
 
 
 def _field_phrase(sentence: str) -> str:
-    """The field a degree sentence names ("in Computer Science") as normalised lower-case words, or ""."""
+    """The field a degree sentence names ("in Computer Science") as normalized lower-case words, or ""."""
     found = re.search(r"\bin\s+([A-Za-z][A-Za-z ,/&-]{2,60})", sentence)
     if not found:
         return ""

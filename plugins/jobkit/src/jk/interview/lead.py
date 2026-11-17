@@ -3,10 +3,10 @@
 
   lead init                      # create/extend questions + progress (never overwrites answers)
   lead status                    # per category: confidence counts; profile gaps
-  lead next [--category C] [--order default|random]
+  lead next [--category C] [--audience everyone] [--order default|random]
   lead show ID [--target COMPANY]   # question, profile facts, candidate stories for the 3 newest companies, saved
                                     # answers; with --target, the company values it matches and their typical questions
-  lead list [--category C] [--target COMPANY]   # with --target, each question's matching values; read-only
+  lead list [--category C] [--audience everyone] [--target COMPANY]   # with --target, each question's matching values; read-only
   lead set ID principle|notes|confidence VALUE      # principle = "how I handle this" in your own words
   lead example ID COMPANY FIELD VALUE               # FIELD: situation task action result metric
   lead skip ID COMPANY [REASON]                     # no real example there (never had that role, say): not a gap
@@ -26,11 +26,11 @@ import random
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
-from typing import Any, Final, NamedTuple, TypedDict, cast
+from typing import Any, Final, NamedTuple, NotRequired, TypedDict, cast
 
 from jk import common
 from jk.common import ToolError
-from jk.interview import arch
+from jk.interview import cards as deck
 from jk.interview import prep, tables, targets
 from jk.interview.story_model import Story
 from jk.resumes import query_resume as qr
@@ -42,16 +42,19 @@ STAR: Final[tuple[str, ...]] = ("situation", "task", "action", "result", "metric
 PROFILE_FIELDS: Final[tuple[str, ...]] = ("title", "direct_reports", "indirect_team", "team_composition", "budget",
                                           "stakeholders", "reporting_to", "cadence", "notes")
 SCOPE_FIELDS: Final[tuple[str, ...]] = ("direct_reports", "indirect_team", "budget")
+AUDIENCES: Final[tuple[str, ...]] = ("everyone", "people-leader")
+AUDIENCE_HELP: Final[str] = "everyone: leave out the questions only people leaders are asked"
 SETTABLE: Final[tuple[str, ...]] = ("principle", "notes", "confidence")
 
 
 class SeedQuestion(NamedTuple):
-    """A question every user gets: id, category, text and generic theme names."""
+    """A question every user gets: id, category, text, generic theme names, and who it fits (AUDIENCES)."""
 
     id: str
     category: str
     question: str
     themes: list[str]
+    audience: str = "everyone"
 
 
 class Question(TypedDict):
@@ -61,6 +64,7 @@ class Question(TypedDict):
     category: str
     question: str
     themes: list[str]
+    audience: NotRequired[str]
 
 
 class QuestionProgress(TypedDict):
@@ -75,35 +79,35 @@ class QuestionProgress(TypedDict):
 
 # `init` keeps only the themes that appear in the user's own scanned resume data (the stored resume index),
 # so nothing here depends on any one person's resume.
-SEED: Final[tuple[SeedQuestion, ...]] = tuple(SeedQuestion(*row) for row in (
-    ("team-scope", "Scope and facts", "How many people have you led, directly and indirectly, in each role?", ["team-leadership"]),
-    ("budget-scope", "Scope and facts", "What budget, P&L or spend have you owned or influenced?", ["topic-06", "topic-09"]),
+SEED: Final[tuple[SeedQuestion, ...]] = tuple(SeedQuestion(*cast(Any, row)) for row in (
+    ("team-scope", "Scope and facts", "How many people have you led, directly and indirectly, in each role?", ["team-leadership"], "people-leader"),
+    ("budget-scope", "Scope and facts", "What budget, P&L or spend have you owned or influenced?", ["budget-financial"]),
     ("principles", "Scope and facts", "Describe your leadership style in one minute, with an example.", ["team-leadership"]),
-    ("roadmap-build", "Roadmapping and strategy", "Walk me through how you build a technology roadmap.", ["strategy-roadmap"]),
+    ("roadmap-build", "Roadmapping and strategy", "Walk me through how you build a roadmap.", ["strategy-roadmap"]),
     ("roadmap-buyin", "Roadmapping and strategy", "How do you get executives who disagree to buy into a roadmap?", ["stakeholder-alignment", "executive-advisory", "strategy-roadmap"]),
-    ("roadmap-change", "Roadmapping and strategy", "Tell me about a time you changed a roadmap midway. Why, and how did you communicate it?", ["strategy-roadmap", "topic-17"]),
-    ("metrics-success", "Roadmapping and strategy", "How do you measure the success of an architecture or a team?", ["strategy-roadmap", "delivery-leadership"]),
+    ("roadmap-change", "Roadmapping and strategy", "Tell me about a time you changed a roadmap midway. Why, and how did you communicate it?", ["strategy-roadmap", "stakeholder-alignment"]),
+    ("metrics-success", "Roadmapping and strategy", "How do you measure the success of a project or a team?", ["strategy-roadmap", "delivery-leadership"]),
     ("prioritize-framework", "Prioritization", "How do you prioritize when everything is urgent?", ["delivery-leadership", "strategy-roadmap"]),
     ("prioritize-no", "Prioritization", "Tell me about a time you said no to a stakeholder.", ["stakeholder-alignment", "executive-advisory"]),
-    ("tech-debt", "Prioritization", "How do you balance technical debt against new features?", ["topic-17"]),
-    ("mentoring-approach", "Mentoring and people", "How do you mentor and grow architects and engineers?", ["mentoring"]),
-    ("mentoring-example", "Mentoring and people", "Tell me about someone you developed who grew significantly.", ["mentoring", "team-leadership"]),
-    ("underperformer", "Mentoring and people", "How do you handle an underperformer?", ["team-leadership", "mentoring"]),
-    ("hiring", "Mentoring and people", "How do you hire, and what do you look for in an architect?", ["team-leadership"]),
-    ("delegation", "Mentoring and people", "How do you delegate while staying accountable?", ["team-leadership", "delivery-leadership"]),
-    ("conflict-team", "Conflict", "Tell me about a conflict between two people on your team and how you resolved it.", ["team-leadership"]),
-    ("conflict-peer", "Conflict", "Tell me about a disagreement with a peer or another architect.", ["stakeholder-alignment"]),
+    ("tech-debt", "Prioritization", "How do you balance fixing what is already there against new work?", ["strategy-roadmap", "delivery-leadership"]),
+    ("mentoring-approach", "Mentoring and people", "How do you mentor and grow the people on your team?", ["mentoring"], "people-leader"),
+    ("mentoring-example", "Mentoring and people", "Tell me about someone you developed who grew significantly.", ["mentoring", "team-leadership"], "people-leader"),
+    ("underperformer", "Mentoring and people", "How do you handle an underperformer?", ["team-leadership", "mentoring"], "people-leader"),
+    ("hiring", "Mentoring and people", "How do you hire, and what do you look for in a candidate?", ["team-leadership"], "people-leader"),
+    ("delegation", "Mentoring and people", "How do you delegate while staying accountable?", ["team-leadership", "delivery-leadership"], "people-leader"),
+    ("conflict-team", "Conflict", "Tell me about a conflict between two people on your team and how you resolved it.", ["team-leadership"], "people-leader"),
+    ("conflict-peer", "Conflict", "Tell me about a disagreement with a peer.", ["stakeholder-alignment"]),
     ("conflict-exec", "Conflict", "Tell me about disagreeing with a senior executive or client.", ["executive-advisory", "stakeholder-alignment"]),
     ("conflict-vendor", "Conflict", "A vendor or partner is underperforming. What do you do?", ["vendor-management"]),
     ("delivery-risk", "Execution", "Tell me about a delivery that was at risk and how you recovered it.", ["delivery-leadership"]),
     ("failure", "Execution", "Tell me about your biggest professional failure or mistake.", ["delivery-leadership"]),
-    ("ambiguity", "Execution", "Tell me about leading through ambiguity.", ["strategy-roadmap", "topic-01", "topic-17"]),
-    ("change-resisted", "Execution", "Tell me about driving a change people resisted.", ["topic-17", "workshops", "stakeholder-alignment"]),
+    ("ambiguity", "Execution", "Tell me about leading through ambiguity.", ["strategy-roadmap", "delivery-leadership"]),
+    ("change-resisted", "Execution", "Tell me about driving a change people resisted.", ["stakeholder-alignment", "workshops"]),
     ("influence-no-authority", "Influence and communication", "How do you influence without authority?", ["stakeholder-alignment", "workshops"]),
-    ("exec-tradeoff", "Influence and communication", "How do you explain a technical trade-off to a non-technical executive?", ["executive-advisory", "workshops"]),
+    ("exec-tradeoff", "Influence and communication", "How do you explain a complex trade-off to an executive from another field?", ["executive-advisory", "workshops"]),
     ("decide-incomplete", "Influence and communication", "Tell me about a decision you made with incomplete data, or one you disagreed with and committed to.", ["delivery-leadership", "governance-compliance"]),
-    ("multi-engagement", "Influence and communication", "How do you manage several clients or engagements at once?", ["topic-18", "delivery-leadership"]),
-    ("team-culture", "Culture", "How do you build team culture, including on remote or mixed teams?", ["team-leadership", "mentoring"]),
+    ("multi-engagement", "Influence and communication", "How do you manage several projects or clients at once?", ["delivery-leadership", "stakeholder-alignment"]),
+    ("team-culture", "Culture", "How do you build team culture, including on remote or mixed teams?", ["team-leadership", "mentoring"], "people-leader"),
 ))
 
 
@@ -215,7 +219,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         added += seed.id not in old
         old.pop(seed.id, None)
         out.append({"id": seed.id, "category": seed.category, "question": seed.question,
-                    "themes": [t for t in seed.themes if mine is None or t in mine]})
+                    "themes": [t for t in seed.themes if mine is None or t in mine], "audience": seed.audience})
     out += list(old.values())
     tables.replace_questions(out)
     progress = prog()
@@ -276,8 +280,9 @@ def print_candidates(question: Question, progress: QuestionProgress, companies: 
 def show(question: Question) -> None:
     """Print a question with its progress, profile facts and candidate stories."""
     progress = prog()["questions"].get(question["id"], blank())
-    print(f"[{question['id']}] {question['category']}\n  Q: {question['question']}")
-    print(f"  confidence: {arch.CONF[progress['confidence']]} | last drilled: {progress['last_drilled'] or '-'}")
+    leaders = " (asked of people leaders)" if question.get("audience") == "people-leader" else ""
+    print(f"[{question['id']}] {question['category']}{leaders}\n  Q: {question['question']}")
+    print(f"  confidence: {deck.CONF[progress['confidence']]} | last drilled: {progress['last_drilled'] or '-'}")
     print(f"  my principle: {progress['principle'] or '-'}")
     top = top_company_ids()
     print("  profile facts:")
@@ -320,16 +325,24 @@ def in_category(question: Question, category: str | None) -> bool:
     return not category or category.lower() in question["category"].lower()
 
 
+def picked(question: Question, args: argparse.Namespace) -> bool:
+    """Whether the question passes the --category and --audience filters (`--audience everyone` leaves out the
+    questions only people leaders are asked)."""
+    audience = getattr(args, "audience", None)
+    return in_category(question, getattr(args, "category", None)) and (
+        audience != "everyone" or question.get("audience", "everyone") == "everyone")
+
+
 def question_row(question: Question, progress: dict[str, Any]) -> str:
     """One listing row: id, category, confidence and example counts."""
     p = progress.get(question["id"], blank())
-    return f"  {question['id']:<24} {question['category']:<28} {arch.CONF[p['confidence']]:<12} {examples_text(p)}"
+    return f"  {question['id']:<24} {question['category']:<28} {deck.CONF[p['confidence']]:<12} {examples_text(p)}"
 
 
 def cmd_list(args: argparse.Namespace) -> None:
     """List questions with confidence and example counts; with --target, the company values each matches."""
     progress = prog()["questions"]
-    chosen = [q for q in cards() if in_category(q, args.category)]
+    chosen = [q for q in cards() if picked(q, args)]
     if not args.target:
         for question in chosen:
             print(question_row(question, progress))
@@ -355,7 +368,7 @@ def ordered(args: argparse.Namespace, include_solid: bool = False) -> list[Quest
     """Questions not yet solid: weakest and least recently drilled first (or random). With `include_solid`, solid
     questions follow, the least recently drilled first."""
     progress = prog()["questions"]
-    todo = [q for q in cards() if in_category(q, args.category)
+    todo = [q for q in cards() if picked(q, args)
             and (include_solid or progress.get(q["id"], blank())["confidence"] < 2)]
     if getattr(args, "order", "default") == "random":
         random.shuffle(todo)
@@ -460,10 +473,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status").set_defaults(fn=cmd_status)
     nxt = sub.add_parser("next")
     nxt.add_argument("--category")
+    nxt.add_argument("--audience", choices=AUDIENCES, help=AUDIENCE_HELP)
     nxt.add_argument("--order", choices=["default", "random"], default="default")
     nxt.set_defaults(fn=cmd_next)
     listing = sub.add_parser("list")
     listing.add_argument("--category")
+    listing.add_argument("--audience", choices=AUDIENCES, help=AUDIENCE_HELP)
     listing.add_argument("--target", help="a researched company: mark each question with the values it matches")
     listing.set_defaults(fn=cmd_list)
     shower = sub.add_parser("show")

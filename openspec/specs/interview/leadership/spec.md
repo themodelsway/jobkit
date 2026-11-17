@@ -74,3 +74,14 @@ Viewing leadership questions against a company SHALL NOT change any principle, e
 #### Scenario: View twice
 - **WHEN** a company view is run twice
 - **THEN** stored principles and examples are unchanged
+
+### Requirement: Questions for people leaders are marked
+Each bundled leadership question SHALL say whether it is asked of everyone or only of people leaders, and `lead next`, `lead list` and `sessions new` SHALL accept `--audience everyone` to leave out the questions only people leaders are asked.
+
+#### Scenario: A role without reports
+- **WHEN** `lead list --audience everyone` is run
+- **THEN** questions such as handling an underperformer are not listed, and questions such as prioritizing when everything is urgent are
+
+#### Scenario: Shown with the question
+- **WHEN** `lead show` is run for a question asked of people leaders
+- **THEN** the output says so

@@ -141,7 +141,7 @@ class BandTests(unittest.TestCase):
         ok = dict(EXEC)
         for label, change, text in (
                 ("total", {"impact": D("0.24")}, "total"), ("negative", {"impact": D("-0.25"), "domain": D("0.70")},
-                                                            "not negative"), ("unknown", {"colour": 0}, "unknown")):
+                                                            "not negative"), ("unknown", {"color": 0}, "unknown")):
             with self.subTest(label=label), self.assertRaises(ValueError) as caught:
                 me.validate_band("x", {**ok, **change})
             self.assertIn(text, str(caught.exception))

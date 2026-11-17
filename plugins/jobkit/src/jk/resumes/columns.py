@@ -3,7 +3,7 @@
 A resume with a side column puts both columns on the same text lines:
 
   SKILLS                  SUMMARY
-  Python                  Engineer with 15 years of experience.
+  Python                  Strategist with 15 years of experience.
   Java                    WORK EXPERIENCE
 
 Read line by line, the work heading is buried and the side column is mixed into the main one. `split_columns`

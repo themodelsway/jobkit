@@ -11,7 +11,7 @@ Record = dict[str, Any]
 
 
 def load_settings() -> Record:
-    """{setting: value} (resume_root, resume_dirs, name, tier1_services, ...); empty before `profile init`."""
+    """{setting: value} (resume_root, resume_dirs, name, key_topics, ...); empty before `profile init`."""
     with store.transaction(write=False) as conn:
         return {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM setting ORDER BY rowid")}
 

@@ -1,14 +1,14 @@
 """Seed topics for the architecture drill (generic, no personal data, no model answers).
 
-`arch init` merges this into the stored catalog. Everything AWS-specific lives in
+`cards init` merges this into the stored catalog. Everything AWS-specific lives in
 src/aws/. Lifecycle facts and recent changes are NOT seeded: they are looked up on AWS pages and stored
-with a source URL and a verified_on date by `arch refresh`.
+with a source URL and a verified_on date by `cards refresh`.
 """
 from __future__ import annotations
 
 from typing import Final, NamedTuple
 
-# Hosts accepted as a source for `arch refresh` (a specific page, not just the host)
+# Hosts accepted as a source for `cards refresh` (a specific page, not just the host)
 SOURCE_HOSTS: Final[tuple[str, ...]] = ("aws.amazon.com", "docs.aws.amazon.com")
 
 DIMENSIONS: Final[tuple[str, ...]] = (
@@ -17,7 +17,7 @@ DIMENSIONS: Final[tuple[str, ...]] = (
     "Key limits and gotchas",
     "Security (identity, encryption, network exposure)",
     "Cost drivers",
-    "Scaling and failure behaviour (multi-AZ, regional limits, quotas)",
+    "Scaling and failure behavior (multi-AZ, regional limits, quotas)",
     "Where you have used it",
     "What changed in the last 3 years, and anything deprecated",
 )
@@ -53,8 +53,8 @@ class Pair(NamedTuple):
     members: tuple[str, ...]
 
 
-# Tier 1 is never seeded: `arch init` promotes the services your resume mentions
-# (or the list pinned with `profile tier1`).
+# Tier 1 is never seeded: `cards init` promotes the services your resume mentions
+# (or the key topics pinned with `profile key-topics`).
 SERVICES: Final[tuple[Service, ...]] = (
     # Edge & Networking
     Service(AREA_EDGE_NETWORKING, "CloudFront", 2, ("CDN", "OAC", "Origin Access Control")),

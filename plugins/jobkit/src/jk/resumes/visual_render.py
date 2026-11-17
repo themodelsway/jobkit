@@ -85,7 +85,7 @@ TOLERANCE: Final[float] = 0.03       # share of the page an image may miss or ov
 
 
 def _plain_image(item: Any) -> bool:
-    """True when an image is drawn exactly as its JPEG looks: no mask, soft mask, decode array or unusual colours."""
+    """True when an image is drawn exactly as its JPEG looks: no mask, soft mask, decode array or unusual colors."""
     if any(item.get(key) is not None for key in ("/SMask", "/Mask", "/Decode")) or item.get("/ImageMask"):
         return False
     space = item.get("/ColorSpace")

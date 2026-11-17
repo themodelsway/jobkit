@@ -9,8 +9,8 @@ Read this before looking up how a company hires. Nothing about any company ships
   > I can't look up how this company interviews from here, so I'll use the usual answer structure.
 
 ## Searching
-- Search with only the company name and the role title. Never put the user's name, employers, resume text or contact details in a search.
-- Read, in this order: pages the company publishes (careers, how-we-hire, interview guides, culture or values pages, engineering blog posts about hiring, the job posting when it has a link), then articles that other sites publish themselves about this company's hiring process.
+- Search with only the company name and the role title. Keep the user's name, contact details, employers, clients, employer-specific products, figures, and resume sentences out of the search.
+- Read, in this order: pages the company publishes (careers, how-we-hire, interview guides, culture or values pages, the company's own blog posts about hiring, the job posting when it has a link), then articles that other sites publish themselves about this company's hiring process.
 - Leave out anything written by individual users, on any site: reviews, interview reports, salary posts, comments, forum or question-and-answer threads, personal blog posts and social media posts. A job site's own editorial article is fine; its reviews and interview reports are not. The command refuses links on the sites and pages it knows, but it does not know them all.
 
 ## Writing facts

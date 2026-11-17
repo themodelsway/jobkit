@@ -1,24 +1,24 @@
 Jane Example
 Example City | portfolio on request
-Senior Software Engineer
-Engineer with deep experience in web services and data pipelines.
+Senior Product Designer
+Designer with deep experience in mobile apps and design systems.
 Leads teams and ships on time.
 SKILLS
 • Leadership Skills: Roadmapping, Mentoring, Stakeholder Management
-• Databases: SQL (Structured Query Language), PostgreSQL, Performance Tuning
-• Languages: Python, TypeScript and Go
-• Example Certified Designer
+• Design Tools: UX (User Experience), Prototyping, Usability Testing
+• Languages: English, Spanish and French
+• Design sprints, Journey mapping, Accessibility
 WORK EXPERIENCE
 Acme Corp                      03/2021 - Present
-Lead Engineer
-• Cut page load time by 30% across 12 services using
-caching and query tuning.
-• Built a search service on PostgreSQL serving 5,000 users.
-      o Added monitoring and a test harness.
-Globex Inc                     01/2015 - 02/2021
-Senior Engineer
-• Moved 40 services to a shared build system.
+Lead Designer
+• Cut checkout drop-off by 18% across 7 product flows using
+usability testing and clearer copy.
+• Built a design system with shared prototypes serving 2,400 users.
+      o Added accessibility checks and a review guide.
+Acme 2                     01/2015 - 02/2021
+Senior Strategist
+• Moved 40 screens to a shared component library.
 CERTIFICATIONS
-• Example Certified Engineer
+• Example Certified Designer
 EDUCATION
 BS Computer Science, Example University

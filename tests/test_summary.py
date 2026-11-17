@@ -45,7 +45,7 @@ class SummaryTests(HomeCase):
     def test_ready_data_lists_sessions_retests_and_research(self):
         seed()
         add_resumes()
-        profile.main(["set", "preparing_for", "Backend engineer, Python"])
+        profile.main(["set", "preparing_for", "HR business partner, people analytics"])
         code, out, _ = jobkit("status", "--summary")
         self.assertEqual(code, 0)
         lines = out.splitlines()

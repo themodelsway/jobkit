@@ -50,7 +50,7 @@ The database SHALL record its schema version, and the system SHALL apply any mis
 - **THEN** every step is rolled back and the database stays at the version it had
 
 ### Requirement: A copy is saved before an upgrade
-Before applying upgrade steps to an existing database that holds a schema version, the system SHALL save a consistent copy to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db` under the home folder. The version SHALL be read again after the write lock is taken, so that commands running at the same time upgrade and copy once, and a copy SHALL never overwrite an earlier one. If the copy cannot be written, the system SHALL stop with a message (never a traceback) and leave the database unchanged. A new or empty database SHALL NOT be copied.
+Before applying upgrade steps to an existing database that holds a schema version, the system SHALL save a consistent copy to `backup/jobkit-before-upgrade-v<old version>-<timestamp>.db` under the home folder, upgrading and copying once when commands run at the same time and never overwriting an earlier copy. A copy that cannot be written SHALL stop the upgrade and leave the database unchanged. A new or empty database SHALL NOT be copied.
 
 #### Scenario: Older database
 - **WHEN** a command opens a database at an older schema version
@@ -58,7 +58,7 @@ Before applying upgrade steps to an existing database that holds a schema versio
 
 #### Scenario: Another command upgraded first
 - **WHEN** a command read an older version but another command upgraded the database before this one took the write lock
-- **THEN** no copy is made and no second upgrade runs
+- **THEN** the version is read again under the lock, no copy is made and no second upgrade runs
 
 #### Scenario: Two copies get the same name
 - **WHEN** a copy would have the name of an existing copy
@@ -66,7 +66,7 @@ Before applying upgrade steps to an existing database that holds a schema versio
 
 #### Scenario: Copy cannot be written
 - **WHEN** the copy fails (for example, the disk is full)
-- **THEN** the command exits with status 1, names the cause and the database stays at its old version
+- **THEN** the command exits with status 1 with a one-line message naming the cause (no traceback) and the database stays at its old version
 
 ### Requirement: Changes are atomic
 Each command SHALL commit all of its changes together or none of them. A write that fails inside a larger command SHALL leave none of its own changes behind, even when the command handles the failure and carries on.
@@ -91,7 +91,7 @@ Several commands running at the same time SHALL NOT lose each other's changes. A
 - **THEN** the reader sees the data as it was before or after that write, never half of it
 
 #### Scenario: Read-only subcommands take no write lock
-- **WHEN** a subcommand that only shows data (such as `arch show`, `prep list` or `sessions list`) runs while another command holds the write lock
+- **WHEN** a subcommand that only shows data (such as `cards show`, `prep list` or `sessions list`) runs while another command holds the write lock
 - **THEN** it does not wait for that lock, and any attempt it made to change data would fail
 
 ### Requirement: References stay valid
@@ -162,3 +162,12 @@ An upgrade SHALL keep every record and field, so that a JSON export has the same
 #### Scenario: Answers stay protected
 - **WHEN** the upgrade has finished
 - **THEN** logged answers still cannot be edited or removed
+
+### Requirement: Role-question storage upgrade
+
+Schema step 15 SHALL add role questions, role research outcomes and question progress without changing existing records or session logs.
+
+#### Scenario: Upgrade from step 14
+
+- **WHEN** a database at step 14 is opened
+- **THEN** the three new tables are available and all previous records are intact

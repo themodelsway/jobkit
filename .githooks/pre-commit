@@ -3,6 +3,7 @@
 #   git config core.hooksPath .githooks
 # Skip in an emergency with: git commit --no-verify
 cd "$(git rev-parse --show-toplevel)" || exit 1
+echo "Running pre-commit hooks ..."
 PY=.venv/bin/python
 [ -x "$PY" ] || PY=.venv/Scripts/python.exe     # Windows (Git for Windows runs this hook)
 if [ ! -x "$PY" ]; then
@@ -19,8 +20,9 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 run "gitleaks" gitleaks git --pre-commit --staged --redact --no-banner
-# Your own personal terms (name, employers, products...) must not be in what is staged; skipped without a database.
-run "personal terms" "$PY" -m jk.user.profile terms check --staged
+# Your own personal terms (name, employers, products...) and text from your stored data (resume lines, stories,
+# figures, titles) must not be in what is staged; skipped without a database.
+run "personal terms and phrases" "$PY" -m jk.user.profile terms check --staged
 run "ruff"  "$PY" -m ruff check plugins/jobkit/src tests tools
 run "pyright" "$PY" -m pyright --project pyrightconfig.json
 run "tests" "$PY" -m unittest discover -s tests -t .

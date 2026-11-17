@@ -1,4 +1,4 @@
-"""Architecture cards, the user's progress on them, custom tracks, and leadership questions in the database.
+"""Role-knowledge cards, the user's progress on them, custom tracks, and leadership questions in the database.
 
 A card or question keeps only its id and position as columns; the rest of the record is in `body`. Progress
 rows keep the whole entry in `body`. Every change runs inside the caller's transaction (`store.transaction`).
@@ -17,15 +17,15 @@ Record = dict[str, Any]
 
 
 def has_catalog() -> bool:
-    """True once `arch init` has stored a catalog."""
+    """True once `cards init` has stored a catalog."""
     with store.transaction(write=False) as conn:
-        return conn.execute("SELECT 1 FROM meta WHERE key='arch.catalog'").fetchone() is not None
+        return conn.execute("SELECT 1 FROM meta WHERE key='cards.catalog'").fetchone() is not None
 
 
 def load_catalog() -> Record | None:
-    """The card catalog (top-level fields plus `cards`), or None before `arch init`."""
+    """The card catalog (top-level fields plus `cards`), or None before `cards init`."""
     with store.transaction(write=False) as conn:
-        head = store.meta_get(conn, "arch.catalog", None)
+        head = store.meta_get(conn, "cards.catalog", None)
         if head is None:
             return None
         head["cards"] = store.records(conn, "SELECT id, body FROM card ORDER BY position", (), ("id",))
@@ -36,7 +36,7 @@ def replace_catalog(catalog: Mapping[str, Any]) -> None:
     """Store the catalog; progress of cards that stay is kept, progress of removed cards goes with them."""
     head = {k: v for k, v in catalog.items() if k != "cards"}
     with store.transaction() as conn:
-        store.meta_put(conn, "arch.catalog", head)
+        store.meta_put(conn, "cards.catalog", head)
         for position, card in enumerate(catalog["cards"]):
             (cid,), body = store.split(card, ("id",))
             conn.execute("INSERT INTO card(id, position, body) VALUES(?,?,?) "

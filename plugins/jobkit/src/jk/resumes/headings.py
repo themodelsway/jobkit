@@ -1,4 +1,4 @@
-"""Recognise resume section headings by meaning, not by one exact spelling.
+"""Recognize resume section headings by meaning, not by one exact spelling.
 
   heading_key("PROFESSIONAL EXPERIENCE")  ->  "work"
   heading_key("Volunteer Experience:")    ->  "other"   (a known section whose content is not stored)

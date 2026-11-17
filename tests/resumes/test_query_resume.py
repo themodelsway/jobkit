@@ -13,7 +13,7 @@ from tests.support import HomeCase
 
 
 class ShortSkillNameTests(unittest.TestCase):
-    """L2: short names are recognised as whole words, and only where they are the skill."""
+    """L2: short names are recognized as whole words, and only where they are the skill."""
 
     TERMS = pr.skill_terms({"Languages": [{"name": "R", "aliases": []}, {"name": "Go", "aliases": []},
                                           {"name": "HR", "aliases": []}, {"name": "SQL", "aliases": []},

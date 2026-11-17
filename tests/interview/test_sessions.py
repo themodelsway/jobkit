@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from unittest import mock
 
-from jk.interview import arch, lead, prep, readiness, sessions, tables
+from jk.interview import cards, lead, prep, readiness, sessions, tables
 from tests.interview.support import COMPANIES, SKILLS, SessionCase
 
 
@@ -13,7 +13,7 @@ class SessionTests(SessionCase):
         sid = self.new_session()
         self.assertTrue(sid.startswith(date.today().isoformat() + "-warm-up"))
         s = self.session(sid)
-        self.assertEqual((s["mode"], s["status"], len(s["queue"])), ("architecture", "open", 3))
+        self.assertEqual((s["mode"], s["status"], len(s["queue"])), ("knowledge", "open", 3))
         self.assertIn(sid, self.cli(sessions.main, "list")[1])
         self.assertNotEqual(self.new_session(), sid)               # same title the same day -> -2
 
@@ -58,7 +58,7 @@ class SessionTests(SessionCase):
         self.assertIn("No session", self.cli(sessions.main, "resume", "../etc")[2])
 
     def test_tutor_lessons_cap_confidence_and_quiz_allows_solid(self):
-        sid = self.new_session("--mode", "tutor", "--topic", "architecture")
+        sid = self.new_session("--mode", "tutor", "--topic", "knowledge")
         item = self.session(sid)["queue"][0]["id"]
         taught = ["log", sid, item, "--question", "Q", "--answer", "lesson", "--confidence", "2"]
         self.cli(sessions.main, *taught)
@@ -125,7 +125,7 @@ class SessionFilterTests(SessionCase):
         self.assertEqual(code, 0, err)
 
     def test_jd_mode_respects_filters(self):
-        code, _, err = self.cli(sessions.main, "new", "x", "--mode", "jd", "--jd", self.jd(), "--track", "acmedata")
+        code, _, err = self.cli(sessions.main, "new", "x", "--mode", "jd", "--jd", self.jd(), "--track", "people-ops")
         self.assertEqual(code, 1, err)
         code, _, err = self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--area", "NO SUCH AREA")
         self.assertEqual(code, 1, err)
@@ -137,12 +137,12 @@ class SessionFilterTests(SessionCase):
             self.assertEqual(raised.exception.code, 2)
 
     def test_jd_with_a_kind_it_cannot_match_is_refused(self):
-        self.assertEqual(self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--kind", "service")[0], 0)
+        self.assertEqual(self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--kind", "topic")[0], 0)
         for kind in ("pair", "scenario", "case", "role-play"):
             with self.subTest(kind=kind):
                 code, _, err = self.cli(sessions.main, "new", "x", "--jd", self.jd(), "--kind", kind)
                 self.assertEqual(code, 1)
-                self.assertIn("service cards only", err)
+                self.assertIn("topic cards only", err)
 
     def test_jd_alone_means_jd_mode(self):
         code, out, err = self.cli(sessions.main, "new", "implicit", "--jd", self.jd())
@@ -172,7 +172,7 @@ class MixedQueueTests(SessionCase):
 
     def items(self, kind, n):
         if kind == "card":
-            return [{"id": c["id"], "kind": "card"} for c in arch.catalog()["cards"][:n]]
+            return [{"id": c["id"], "kind": "card"} for c in cards.catalog()["cards"][:n]]
         blank = dict.fromkeys(("situation", "task", "action", "result", "metric", "lessons", "notes"))
         tables.replace_stories({"stories": [
             {"id": f"acme-s{i}", "company": "acme", "company_name": "Acme", "theme": f"s{i}", "headline": "h",
@@ -208,23 +208,23 @@ class JdThemeTests(unittest.TestCase):
 
 class LessonDateTests(SessionCase):
     def test_lesson_without_quiz_keeps_the_drill_date(self):
-        cards = dict(sessions.arch.progress()["cards"])
-        entry = cards.setdefault("vpc", sessions.arch.blank_progress())
+        cards = dict(sessions.deck.progress()["cards"])
+        entry = cards.setdefault("vpc", sessions.deck.blank_progress())
         entry["confidence"], entry["last_drilled"] = 2, "2000-01-01"
         tables.replace_progress(cards)
         sessions.record_confidence("card", "vpc", 1, True)
-        self.assertEqual(sessions.arch.progress()["cards"]["vpc"]["last_drilled"], "2000-01-01")
+        self.assertEqual(sessions.deck.progress()["cards"]["vpc"]["last_drilled"], "2000-01-01")
 
     def test_passed_quiz_refreshes_the_date_of_an_aging_solid_card(self):
-        cards = dict(sessions.arch.progress()["cards"])
-        entry = cards.setdefault("vpc", sessions.arch.blank_progress())
+        cards = dict(sessions.deck.progress()["cards"])
+        entry = cards.setdefault("vpc", sessions.deck.blank_progress())
         entry["confidence"], entry["last_drilled"] = 2, "2000-01-01"
         tables.replace_progress(cards)
-        sid = self.new_session("--mode", "tutor", "--topic", "architecture")
+        sid = self.new_session("--mode", "tutor", "--topic", "knowledge")
         code, _, err = self.cli(sessions.main, "log", sid, "vpc", "--question", "Q", "--answer", "a", "--grade", "g",
                                 "--confidence", "2", "--quiz")
         self.assertEqual(code, 0, err)
-        self.assertEqual(sessions.arch.progress()["cards"]["vpc"]["last_drilled"], date.today().isoformat())
+        self.assertEqual(sessions.deck.progress()["cards"]["vpc"]["last_drilled"], date.today().isoformat())
 
 
 class QueueTests(SessionCase):
@@ -234,8 +234,8 @@ class QueueTests(SessionCase):
         return sessions.build_parser().parse_args(["new", "t", *extra])
 
     def set_card(self, card_id: str, confidence: int, drilled: str | None) -> None:
-        cards = dict(sessions.arch.progress()["cards"])
-        entry = cards.setdefault(card_id, sessions.arch.blank_progress())
+        cards = dict(sessions.deck.progress()["cards"])
+        entry = cards.setdefault(card_id, sessions.deck.blank_progress())
         entry["confidence"], entry["last_drilled"] = confidence, drilled
         tables.replace_progress(cards)
 
@@ -247,10 +247,10 @@ class QueueTests(SessionCase):
         queue = self.ids(sessions.card_queue(self.args()))
         self.assertIn("vpc", queue)
         self.assertEqual(queue[-1], "vpc")
-        self.assertEqual(sessions.arch.progress()["cards"]["vpc"]["confidence"], 2)
+        self.assertEqual(sessions.deck.progress()["cards"]["vpc"]["confidence"], 2)
 
     def test_old_solid_card_comes_before_a_freshly_solid_one(self):
-        cards = [c["id"] for c in sessions.arch.catalog()["cards"]][:2]
+        cards = [c["id"] for c in sessions.deck.catalog()["cards"]][:2]
         self.set_card(cards[0], 2, date.today().isoformat())
         self.set_card(cards[1], 2, "2000-01-01")
         queue = self.ids(sessions.card_queue(self.args()))
@@ -291,11 +291,11 @@ class SessionOptionTests(SessionCase):
 
     def test_filters_shape_the_queue(self):
         cards = {c["id"]: c for c in tables.load_catalog()["cards"]}
-        sid = self.new_session("--kind", "service", "--tier", "2", "--order", "random", "--track", "aws")
+        sid = self.new_session("--kind", "topic", "--tier", "2", "--order", "random", "--track", "aws")
         queue = self.session(sid)["queue"]
         self.assertTrue(queue)
         for item in queue:
-            self.assertEqual(cards[item["id"]]["kind"], "service")
+            self.assertEqual(cards[item["id"]]["kind"], "topic")
             self.assertLessEqual(cards[item["id"]]["tier"], 2)         # --tier N means tier N or lower
 
     def test_area_filter(self):
@@ -330,7 +330,7 @@ class SessionOptionTests(SessionCase):
                     "theme": "topic-a", "headline": "h", "metrics_on_resume": [], "anchor_bullets": [],
                     "situation": None, "task": None, "action": None, "result": None, "metric": None, "lessons": None,
                     "notes": None, "follow_ups": [], "status": "empty"}
-        tables.replace_stories({"stories": [story("acme"), story("globex")]})
+        tables.replace_stories({"stories": [story("acme"), story("acme-2")]})
         code, out, err = self.cli(sessions.main, "new", "Stories", "--mode", "stories", "--company", "acme")
         self.assertEqual(code, 0, err)
         sid = out.split("Started session ")[1].split(" ")[0]

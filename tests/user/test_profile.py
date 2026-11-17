@@ -26,7 +26,7 @@ class ProfileTests(ProfileCase):
         self.assertIn("No profile", out)
 
     def test_need_explains_how_to_set_up(self):
-        code, _, err = run_profile("tier1")
+        code, _, err = run_profile("key-topics")
         self.assertEqual(code, 1)
         self.assertIn("Ask the user where their resume files are", err)
 
@@ -96,19 +96,19 @@ class ProfileTests(ProfileCase):
 
     def test_set_validates_key(self):
         run_profile("init", "--resume-root", str(self.resumes))
-        self.assertEqual(run_profile("set", "colour", "red")[0], 1)
+        self.assertEqual(run_profile("set", "color", "red")[0], 1)
         self.assertEqual(run_profile("set", "name", "Sam")[0], 0)
         self.assertEqual(up.load()["name"], "Sam")
 
-    def test_tier1_pin_and_show(self):
+    def test_key_topics_pin_and_show(self):
         run_profile("init", "--resume-root", str(self.resumes))
-        _, out, _ = run_profile("tier1", "Lambda", "S3")
-        self.assertEqual(out.split(), ["Lambda", "S3"])
-        self.assertEqual(up.tier1_services(), ["Lambda", "S3"])
+        _, out, _ = run_profile("key-topics", "Payroll calendar", "Leave policy")
+        self.assertEqual(out.splitlines(), ["Payroll calendar", "Leave policy"])
+        self.assertEqual(up.key_topics(), ["Payroll calendar", "Leave policy"])
 
     def test_companies_registry_never_overwrites(self):
         self.assertEqual(up.add_companies({"acme": "Acme Corp"}), ["acme"])
-        self.assertEqual(up.add_companies({"acme": "Other Name", "globex": "Globex"}), ["globex"])
+        self.assertEqual(up.add_companies({"acme": "Other Name", "acme-2": "Acme 2"}), ["acme-2"])
         reg = up.company_registry()
         self.assertEqual(reg["acme"][0], "Acme Corp")
         self.assertTrue(reg["acme"][1].startswith("Acme\\ Corp"))
@@ -128,7 +128,7 @@ class ProfileTests(ProfileCase):
         registry = up.company_registry()
         self.assertEqual(list(registry), ["acme"])
         pattern = re.compile(registry["acme"][1] + "$")
-        for line in ("Acme Corp", "Acme Ltd", "Acme Ltd - Lead Engineer"):
+        for line in ("Acme Corp", "Acme Ltd", "Acme Ltd - Lead Designer"):
             self.assertTrue(pattern.match(line), line)
         self.assertEqual(run_profile("companies", "merge", "acme", "acme")[0], 1)
         self.assertEqual(run_profile("companies", "merge", "acme", "gone")[0], 1)
@@ -262,13 +262,13 @@ class PreparingForTests(HomeCase):
         run_profile("init", "--resume-root", str(root))
         self.assertIsNone(up.preparing_for())
         self.assertIn("preparing for: (not set yet)", run_profile("status")[1])
-        self.assertEqual(run_profile("set", "preparing_for", "  Backend engineer,\n Python  ")[0], 0)
-        self.assertEqual(up.preparing_for(), "Backend engineer, Python")
-        self.assertIn("preparing for: Backend engineer, Python", run_profile("status")[1])
+        self.assertEqual(run_profile("set", "preparing_for", "  HR business partner,\n people analytics  ")[0], 0)
+        self.assertEqual(up.preparing_for(), "HR business partner, people analytics")
+        self.assertIn("preparing for: HR business partner, people analytics", run_profile("status")[1])
         for bad in ("", "   ", "x" * (up.PREPARING_FOR_MAX + 1)):
             with self.subTest(bad=bad[:10]):
                 self.assertEqual(run_profile("set", "preparing_for", bad)[0], 1)
-        self.assertEqual(up.preparing_for(), "Backend engineer, Python")
+        self.assertEqual(up.preparing_for(), "HR business partner, people analytics")
 
 
 class ProfileCompaniesTests(HomeCase):

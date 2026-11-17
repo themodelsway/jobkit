@@ -6,7 +6,7 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - The resume folder (the `resume_root` setting; `profile status` shows it) is READ-ONLY. Never edit or write there, not even with Bash (an agent's deny rules do not block shell writes).
 - Committed files hold nothing personal (name, employers, folders, figures). Personal data lives only under the home folder (`~/.jobkit`, or `JOBKIT_HOME`), outside the repository; `tests/meta/test_no_personal.py` enforces it.
 - No phone, email or LinkedIn in the resume data. The test suite checks the stored data; `jobkit export --only resume-companies | grep -Ei '@|[0-9]{3}[ -][0-9]{3,4}'` shows any hit to review.
-- Personal terms (name, contact details, resume folder, employers, products) are checked in every commit by `profile terms check --staged` (pre-commit hook) and `tests/meta/test_no_personal.py`; add products with `profile terms add`. See the last section of `docs/manual.md`.
+- Personal terms (name, contact details, resume folder, employers, products) are checked in every commit by `profile terms check --staged` (pre-commit hook) and `tests/meta/test_no_personal.py`; add products with `profile terms add`. See the last section of `docs/contributing.md`.
 - Raw extracted text goes only in `output/` under the home folder.
 - Never invent resume bullets; suggest edits to the user instead.
 - Prefer Python scripts over `jq` for repeated tasks. If a question is needed, ask one at a time.
@@ -35,10 +35,10 @@ Resume tooling and interview prep. Features, setup and commands are in `README.m
 - A behavior change updates the matching spec in `openspec/specs/` and the docs in the same change.
 
 ## Interview data
-- All data is in one database, `~/.jobkit/data/jobkit.db`. Read and write it only through the commands (`prep`, `arch`, `lead`, `sessions`, `profile`, `process-resumes`; `readiness` and `jobkit export` are read-only); never open the database directly. To look at data use `jobkit export`. Each command is one transaction, and `jobkit backup` saves a copy. Run `jobkit init` once on a new machine.
+- All data is in one database, `~/.jobkit/data/jobkit.db`. Read and write it only through the commands (`prep`, `cards`, `lead`, `questions`, `sessions`, `target`, `profile`, `process-resumes`; `readiness` and `jobkit export` are read-only); never open the database directly. To look at data use `jobkit export`. Each command is one transaction, and `jobkit backup` saves a copy. Run `jobkit init` once on a new machine.
 - A match judgment's origin is `agent`, `code` or `fallback`, never an agent or model name; stored `claude` values are legacy and are not rewritten.
 - Teaching caps card confidence at 1; a passed quiz (`--quiz`) allows 2.
-- Lifecycle words: maintenance = closed to new customers, no new features; sunset = has an end date. Seeded AWS values are unverified leads until refreshed.
+- Lifecycle words: maintenance = closed to new customers, no new features; sunset = has an end date. Seeded lifecycle values of the bundled AWS example track are unverified leads until refreshed.
 
 ## Resume data model
 Parsing layouts, bullet ids and variants, and curation are described in `plugins/jobkit/skills/resume-workflows/data-model.md` (it ships with the skill). Read it when you work on `plugins/jobkit/src/jk/resumes/` or `tests/resumes/`.

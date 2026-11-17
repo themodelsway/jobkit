@@ -74,7 +74,7 @@ def title_score(line: str) -> float:
 
 def employer_by_context(name: str, other: str | None) -> bool:
     """True when `name` holds a title word but is the employer, because `other` (the line on the other side of the
-    dates) is a clearer job title: 'Principal Labs' beside 'Senior Engineer'."""
+    dates) is a clearer job title: 'Principal Labs' beside 'Senior Strategist'."""
     return bool(other) and is_title_line(name) and is_title_line(other or "") and title_score(other or "") > title_score(name)
 
 
@@ -241,7 +241,7 @@ class _Structurer:
             self.out[h] = canonical_header(line)                          # 'Company | Title' with its dates on the next line
             self.company = parts.company
         elif employer_by_context(line, after):
-            self.company = _company_of(line)                              # 'Principal Labs' above 'Senior Engineer'
+            self.company = _company_of(line)                              # 'Principal Labs' above 'Senior Strategist'
         elif is_title_line(line):
             self._title_header(i, h)
         else:

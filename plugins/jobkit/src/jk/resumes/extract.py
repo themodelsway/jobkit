@@ -363,7 +363,7 @@ class TextFileExtractor:
     suffixes: ClassVar[tuple[str, ...]] = (".txt",)
 
     def extract(self, path: Path) -> ExtractedDocument:
-        """The file's text with bullets normalised; it also serves as layout text (lines keep their dates)."""
+        """The file's text with bullets normalized; it also serves as layout text (lines keep their dates)."""
         text = normalize(read_text_file(path))
         return ExtractedDocument(text, text, "txt")
 
@@ -396,7 +396,7 @@ WRAPPED_EMPHASIS_RE: Final = re.compile(r"(\*\*|__|\*|_)(.+)\1")
 
 
 def _unwrap(text: str) -> str:
-    """'**Skills**' -> 'Skills', so a bold heading cell is recognised as a heading; other text unchanged."""
+    """'**Skills**' -> 'Skills', so a bold heading cell is recognized as a heading; other text unchanged."""
     found = WRAPPED_EMPHASIS_RE.fullmatch(text)
     return found[2].strip() if found else text
 

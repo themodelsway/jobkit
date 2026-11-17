@@ -16,7 +16,7 @@ from jk.resumes import process_resumes as proc
 from jk.resumes import visual_render as vr
 from tests.resumes.visual.support import READING, TEXT
 
-TRANSCRIPT = ("Alex Example\n\nWORK EXPERIENCE\nNorthwind Traders   09/2021 - Present\nSenior Engineer\n"
+TRANSCRIPT = ("Alex Example\n\nWORK EXPERIENCE\nAcme 4   09/2021 - Present\nSenior Strategist\n"
               "• Led migration of 40 services to Kubernetes, cutting hosting cost by 30%.\n")
 
 
@@ -189,7 +189,7 @@ class CommandTests(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             visual.cmd_text(self.files, "r.pdf")
-        self.assertIn("Northwind Traders", out.getvalue())
+        self.assertIn("Acme 4", out.getvalue())
 
     def test_compare_says_where_to_save_agreed_corrections(self):
         out = self.run_compare({**READING, "skills": ["Python", "Terraform"]})
@@ -197,8 +197,8 @@ class CommandTests(unittest.TestCase):
         self.assertIn("visual confirm r.pdf", out)
 
     def test_a_correction_that_loses_work_bullets_is_not_confirmed(self):
-        scrambled = TEXT.replace("Northwind Traders   09/2021 - Present\nSenior Engineer\n", "").replace(
-            "Skills:", "Northwind Traders   09/2021 - Present\nSenior Engineer\nSkills:")
+        scrambled = TEXT.replace("Acme 4   09/2021 - Present\nSenior Strategist\n", "").replace(
+            "Skills:", "Acme 4   09/2021 - Present\nSenior Strategist\nSkills:")
         self.transcript.write_text(scrambled, encoding="utf-8")
         with self.assertRaises(common.ToolError) as caught:
             visual.cmd_confirm(self.files, "r.pdf")
@@ -235,7 +235,7 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(self.tmp.joinpath("t.txt.removed").read_text(encoding="utf-8"), bullet + "\n")
 
     def test_a_bullet_moved_to_another_employer_is_a_loss_though_totals_agree(self):
-        two_jobs = TEXT.replace("Skills:", "Fabrikam Inc   01/2018 - 08/2021\nEngineer\n• Built a queue for billing.\nSkills:")
+        two_jobs = TEXT.replace("Skills:", "Acme 5   01/2018 - 08/2021\nEngineer\n• Built a queue for billing.\nSkills:")
         self.use_pdf_text(two_jobs)
         moved = two_jobs.replace("• Built a queue for billing.\n", "").replace(
             "• Led migration", "• Wrote an onboarding guide for new staff.\n• Led migration")
@@ -245,22 +245,22 @@ class CommandTests(unittest.TestCase):
         self.assertIn("Built a queue for billing.", str(caught.exception))
 
     def test_a_reworded_bullet_and_an_agreed_role_removal(self):
-        two_jobs = TEXT.replace("Skills:", "Fabrikam Inc   01/2018 - 08/2021\nEngineer\n• Built a queue for billing.\nSkills:")
+        two_jobs = TEXT.replace("Skills:", "Acme 5   01/2018 - 08/2021\nEngineer\n• Built a queue for billing.\nSkills:")
         self.use_pdf_text(two_jobs)
         self.transcript.write_text(TEXT.replace("40 services", "41 services"), encoding="utf-8")
         with self.assertRaises(common.ToolError) as caught:
             visual.cmd_confirm(self.files, "r.pdf")
-        self.assertIn("Fabrikam Inc 2018-01", str(caught.exception))
+        self.assertIn("Acme 5 2018-01", str(caught.exception))
         self.assertNotIn("41 services", str(caught.exception))
         with contextlib.redirect_stdout(io.StringIO()):
-            visual.cmd_confirm(self.files, "r.pdf", ["Fabrikam Inc 2018-01"])
+            visual.cmd_confirm(self.files, "r.pdf", ["Acme 5 2018-01"])
         self.assertEqual(visual.state(self.pdf, self.transcript), "fresh")
 
     def test_layout_text_can_be_printed(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             visual.cmd_text(self.files, "r.pdf", layout=True)
-        self.assertIn("Northwind Traders", out.getvalue())
+        self.assertIn("Acme 4", out.getvalue())
 
     def test_cli_schema_prints_the_shape(self):
         out = io.StringIO()

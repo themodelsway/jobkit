@@ -1,4 +1,4 @@
-"""Interview data in the database: sessions, architecture cards, leadership questions, stories, engagements.
+"""Interview data in the database: sessions, role-knowledge cards, leadership questions, stories, engagements.
 
 Each function takes or returns the same dicts the tools used to keep in JSON files, so the tool code is
 unchanged. The tables are known to three modules in this folder, re-exported here so callers import one name:

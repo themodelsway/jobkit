@@ -109,3 +109,13 @@ An exported session SHALL include its company and current style, and each export
 #### Scenario: Session with a company
 - **WHEN** a session started for a company in soar is exported
 - **THEN** the session and each of its story entries show that company and soar
+
+### Requirement: Role questions and practice progress are exported
+
+The export SHALL include saved role questions and research outcomes under `role-questions` and shared question confidence under `question-progress`.
+
+#### Scenario: A practiced role question
+
+- **WHEN** a saved question has practice progress
+- **THEN** the question and its provenance are exported with its role
+- **AND** the progress is keyed by the same question ID

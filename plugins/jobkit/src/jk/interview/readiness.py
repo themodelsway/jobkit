@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Readiness report across architecture cards, leadership questions and STAR stories. Read-only, stdlib only.
+"""Readiness report across role-knowledge cards, role and leadership questions, and STAR stories.
 
   readiness                 # summary per area / category / company, plus gaps to work on
-  readiness --jd jd.txt     # same, limited to what that job description touches (architecture + stories)
+  readiness --jd jd.txt     # same, limited to what that job description touches (role-knowledge cards + stories)
+  readiness --role ROLE     # include the saved questions for this role; with --due, limit retests to this role
   readiness --days 30       # a "solid" answer older than this many days counts as aging (default: the stored
                             # retest window, 30 when none is set; `profile set reassess_days N` changes it)
   readiness --due           # list the items due for a retest (the aging ones) instead of the report [--json] [-o FILE]
@@ -32,9 +33,10 @@ from typing import Final, TypedDict, cast
 
 from jk import common
 from jk.common import ToolError
-from jk.interview import arch
+from jk.interview import cards as deck
 from jk.interview import lead
 from jk.interview import prep
+from jk.interview import question_tables as qt
 from jk.interview import tables, targets
 from jk.interview.story_model import Engagement, Story
 from jk.resumes import query_resume as qr
@@ -85,46 +87,46 @@ def line(name: str, labels: Sequence[str], width: int = 30) -> str:
     return f"  {name:<{width}} {len(labels):>3} items | {parts}"
 
 
-# ---------------------------------------------------------------- architecture
+# ---------------------------------------------------------------- role knowledge
 
-def jd_cards(jd_text: str, cat: arch.Catalog) -> list[arch.Card]:
-    """Service cards the JD mentions, plus the decision pairs that compare any of them."""
-    services = arch.matches(jd_text, cat)
-    names = {n.lower() for c in services for n in [c["name"], *c["aliases"]]}
+def jd_cards(jd_text: str, cat: deck.Catalog) -> list[deck.Card]:
+    """Topic cards the JD mentions, plus the decision pairs that compare any of them."""
+    topics = deck.matches(jd_text, cat)
+    names = {n.lower() for c in topics for n in [c["name"], *c["aliases"]]}
     pairs = [c for c in cat["cards"] if c["kind"] == "pair" and any(m.lower() in names for m in c["members"])]
-    return services + pairs
+    return topics + pairs
 
 
-def card_label(card: arch.Card, prog: Mapping[str, arch.Progress], hist: Mapping[str, Evidence], days: int) -> str:
+def card_label(card: deck.Card, prog: Mapping[str, deck.Progress], hist: Mapping[str, Evidence], days: int) -> str:
     """The evidence label of a card."""
-    p = arch.progress_of(dict(prog), card["id"])
+    p = deck.progress_of(dict(prog), card["id"])
     return label(p["confidence"], p["last_drilled"], hist.get(card["id"]), days)
 
 
-def arch_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -> list[tuple[int, str, str]]:
-    """Print the architecture summary; returns the weak tier-1 cards (sort key, name, label)."""
-    cat = arch.catalog()
+def knowledge_section(jd_text: str | None, hist: Mapping[str, Evidence], days: int) -> list[tuple[int, str, str]]:
+    """Print the role-knowledge summary and return weak key cards by priority."""
+    cat = deck.catalog()
     cards = jd_cards(jd_text, cat) if jd_text is not None else cat["cards"]
-    prog = arch.progress()["cards"]
-    several = len({arch.track_of(c) for c in cat["cards"]}) > 1
+    prog = deck.progress()["cards"]
+    several = len({deck.track_of(c) for c in cat["cards"]}) > 1
     by_area: dict[str, list[str]] = defaultdict(list)
     weak: list[tuple[int, str, str]] = []
     for card in cards:
         lab = card_label(card, prog, hist, days)
-        by_area[arch.area_label(card, several)].append(lab)
+        by_area[deck.area_label(card, several)].append(lab)
         if card["tier"] == 1 and lab in WEAK_LABELS:
             weak.append((ORDER.index(lab), card["name"], lab))
-    print("ARCHITECTURE" + (" (cards matching the JD)" if jd_text is not None else ""))
+    print("ROLE KNOWLEDGE" + (" (cards matching the JD)" if jd_text is not None else ""))
     for area, labels in sorted(by_area.items()):
         print(line(area, labels))
-    print(line("Tier 1 services (your list)",
-               [card_label(c, prog, hist, days) for c in cards if c["tier"] == 1 and c["kind"] == "service"]))
-    services = [c for c in cards if c["kind"] == "service"]
-    unchecked = sum(1 for c in services if c.get("verified_on") is None)
-    print(f"  Lifecycle facts not yet checked against the vendor docs: {unchecked} of {len(services)} services "
+    print(line("Key topics (your list)",
+               [card_label(c, prog, hist, days) for c in cards if c["tier"] == 1 and c["kind"] == "topic"]))
+    topics = [c for c in cards if c["kind"] == "topic"]
+    unchecked = sum(1 for c in topics if c.get("verified_on") is None)
+    print(f"  Topics without a recorded lifecycle verification: {unchecked} of {len(topics)} topics "
           "(checked on first drill)")
     if jd_text is not None:
-        print("  (design scenarios are not matched to a JD; run without --jd to see them)")
+        print("  (run without --jd to see scenarios, cases and role-plays)")
     return sorted(weak)[:MAX_GAPS]
 
 
@@ -248,14 +250,53 @@ def _due_row(item: str, name: str, last: str | None, days: set[str] | None) -> D
     return Due(id=item, name=name, last=day, age_days=(date.today() - date.fromisoformat(day)).days)
 
 
-def due_items(hist: Mapping[str, Evidence], days: int) -> list[Due]:
+def question_labels(role: qt.RoleResearch, progress: Mapping[str, qt.Progress], hist: Mapping[str, Evidence],
+                    days: int) -> list[tuple[qt.Question, qt.Progress, str]]:
+    """Pair each question with its progress and evidence label."""
+    blank = qt.Progress(confidence=0, last_drilled=None)
+    rows: list[tuple[qt.Question, qt.Progress, str]] = []
+    for question in role["questions"]:
+        item = question["id"]
+        entry = progress.get(item, blank)
+        rows.append((question, entry, label(entry["confidence"], entry["last_drilled"], hist.get(item), days)))
+    return rows
+
+
+def question_section(roles: Sequence[qt.RoleResearch], hist: Mapping[str, Evidence],
+                     days: int) -> list[tuple[str, str]]:
+    """Print question evidence by role and return questions to work on."""
+    if not any(role["questions"] for role in roles):
+        print("\nROLE QUESTIONS: none saved.")
+        return []
+    print("\nROLE QUESTIONS")
+    progress = qt.load_progress()
+    weak: list[tuple[str, str]] = []
+    for role in roles:
+        labels = question_labels(role, progress, hist, days)
+        if labels:
+            print(line(role["role"], [lab for _, _, lab in labels]))
+            weak.extend((q["id"], lab) for q, _, lab in labels if lab in WEAK_LABELS)
+    return weak
+
+
+def due_questions(hist: Mapping[str, Evidence], days: int, role: str | None = None) -> list[Due | None]:
+    """Read aging role questions, optionally limited to one role."""
+    progress = qt.load_progress()
+    return [_due_row(q["id"], q["question"], entry["last_drilled"], hist.get(q["id"], {}).get("graded2"))
+            for group in qt.load_roles(role) for q, entry, lab in question_labels(group, progress, hist, days)
+            if lab == "aging"]
+
+
+def due_items(hist: Mapping[str, Evidence], days: int, role: str | None = None) -> list[Due]:
     """Items the report labels aging (cards, leadership questions) or done-aging (stories), oldest first."""
-    rows: list[Due | None] = []
+    rows = due_questions(hist, days, role)
+    if role is not None:
+        return ordered_due(rows)
     if tables.has_catalog():
-        prog = arch.progress()["cards"]
-        rows += [_due_row(c["id"], c["name"], arch.progress_of(prog, c["id"])["last_drilled"],
+        prog = deck.progress()["cards"]
+        rows += [_due_row(c["id"], c["name"], deck.progress_of(prog, c["id"])["last_drilled"],
                           hist.get(c["id"], {}).get("graded2"))
-                 for c in arch.catalog()["cards"] if card_label(c, prog, hist, days) == "aging"]
+                 for c in deck.catalog()["cards"] if card_label(c, prog, hist, days) == "aging"]
     if tables.has_questions():
         progress = lead.prog()["questions"]
         rows += [_due_row(q["id"], q["question"], progress.get(q["id"], lead.blank())["last_drilled"],
@@ -266,6 +307,11 @@ def due_items(hist: Mapping[str, Evidence], days: int) -> list[Due]:
     if tables.has_stories():
         rows += [_due_row(s["id"], f"{s['company_name']}: {s['theme']}", None, hist.get(s["id"], {}).get("answered"))
                  for s in prep.stories() if story_label(s, hist, days) == "done-aging"]
+    return ordered_due(rows)
+
+
+def ordered_due(rows: Iterable[Due | None]) -> list[Due]:
+    """Order due rows oldest first."""
     return sorted((r for r in rows if r), key=lambda r: (-r["age_days"], r["id"]))
 
 
@@ -313,7 +359,7 @@ def cmd_due(args: argparse.Namespace, days: int) -> None:
     """Print the items due for a retest, as text or `--json`; with --target only those matching the company."""
     if args.jd:
         raise ToolError("--due lists what is due for a retest across everything; it cannot be combined with --jd.")
-    rows = due_items(attempts(), days)
+    rows = due_items(attempts(), days, args.role)
     if args.target:
         matching = due_for_target(rows, args.target)
         if rows and not matching and not args.json:
@@ -333,15 +379,17 @@ def cmd_due(args: argparse.Namespace, days: int) -> None:
 # ---------------------------------------------------------------- entry point
 
 def print_next(weak: Sequence[tuple[int, str, str]], gaps: Sequence[tuple[int, str, str, str]],
-               todo: Sequence[tuple[str, str, str]]) -> None:
+               todo: Sequence[tuple[str, str, str]], role_gaps: Sequence[tuple[str, str]] = ()) -> None:
     """The 'WORK ON NEXT' list."""
     print("\nWORK ON NEXT")
     for _, name, lab in weak:
-        print(f"  architecture: {name} ({lab})")
+        print(f"  knowledge: {name} ({lab})")
     for _, qid, lab, text in gaps[:SHOWN_NEXT]:
         print(f"  leadership: {qid} ({lab}, {text})")
     for company, theme, lab in todo[:SHOWN_NEXT]:
         print(f"  story: {company} / {theme} ({lab})")
+    for qid, lab in role_gaps[:SHOWN_NEXT]:
+        print(f"  role question: {qid} ({lab})")
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -353,12 +401,15 @@ def cmd_report(args: argparse.Namespace) -> None:
     company = targets.find(args.target) if args.target else None
     jd_text = common.read_text_arg(args.jd) if args.jd else None
     hist = attempts()
-    if not tables.has_catalog():
-        raise ToolError("No architecture catalog yet: run arch init.")
-    weak = arch_section(jd_text, hist, days)
+    roles = qt.load_roles(args.role) if jd_text is None or args.role else []
+    has_catalog = tables.has_catalog()
+    if not has_catalog and not args.role and not any(role["questions"] for role in roles):
+        raise ToolError("No card catalog yet: run `cards init --track NAME` (`cards tracks` lists them).")
+    weak = knowledge_section(jd_text, hist, days) if has_catalog else []
     gaps = lead_section(jd_text, hist, days)
     todo = story_section(jd_text, hist, days)
-    print_next(weak, gaps, todo)
+    role_gaps = question_section(roles, hist, days) if jd_text is None or args.role else []
+    print_next(weak, gaps, todo, role_gaps)
     if company is not None:
         target_section(company, jd_text, hist, days)
     print("\n" + NOTE)
@@ -368,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     """The command-line parser."""
     parser = common.make_parser(__doc__)
     parser.add_argument("--jd", help="job description file, or - for stdin")
+    parser.add_argument("--role", help="show role questions for this role; with --due, show only those questions")
     parser.add_argument("--days", type=int, default=None,
                         help="a solid answer older than this counts as aging (default: the stored retest window, else 30)")
     parser.add_argument("--due", action="store_true", help="list the items due for a retest instead of the report")

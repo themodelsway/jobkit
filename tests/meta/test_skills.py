@@ -71,6 +71,16 @@ class PrivacyWordingTests(unittest.TestCase):
         self.assertIn("stored in the `~/.jobkit` folder", privacy)
         self.assertIn("privacy settings you have configured", privacy)
 
+    def test_interview_search_guides_exclude_personal_values(self):
+        expected = ("name, contact details, employers, clients, employer-specific products, figures, "
+                    "and resume sentences")
+        for guide in ("questions.md", "research.md"):
+            text = (SKILLS / "interview-prep" / guide).read_text(encoding="utf-8")
+            self.assertIn(expected, text)
+        text = (SKILLS / "interview-prep" / "questions.md").read_text(encoding="utf-8")
+        self.assertIn("only the posting's title, level and skills, recent role titles, and general stored skills", text)
+        self.assertIn("Before each search, tell the user the exact search terms in one line", text)
+
     def test_consent_question_says_where_the_data_is_kept(self):
         text = setup_text("preflight")
         questions = [x for x in text.splitlines() if "Proceed?" in x]
@@ -83,6 +93,12 @@ class ShippedSkillTests(unittest.TestCase):
     def test_only_the_user_skills_ship(self):
         self.assertEqual({p.name for p in SKILLS.iterdir() if p.is_dir()}, SHIPPED)
 
+
+    def test_correcting_education_keeps_the_entries_the_user_did_not_reject(self):
+        # a curated education or certification list replaces the whole parsed one, so one correction alone hides the rest
+        text = skill_text("resume-workflows")
+        self.assertIn("save every entry the user keeps together with the corrected one", text)
+        self.assertIn("a curated list with any entry replaces the whole list read from the resumes", text)
     def test_frontmatter(self):
         for name in SHIPPED:
             head = re.match(r"---\n(.*?)\n---\n", skill_text(name), re.DOTALL)
@@ -127,9 +143,9 @@ class ShippedSkillTests(unittest.TestCase):
 
     def test_facts_come_from_official_sources_for_the_tracks_country(self):
         text = (SKILLS / "interview-prep" / "role-knowledge.md").read_text(encoding="utf-8")
-        self.assertIn("search and read the official sources on the hosts `arch tracks` lists", text)
-        self.assertIn("If `arch show` prints a country, check the fact for that country", text)
-        self.assertIn("For a vendor's product the official source is the vendor's own documentation", text)
+        self.assertIn("search and read the official sources on the hosts `cards tracks` lists", text)
+        self.assertIn("If `cards show` prints a country, check the fact for that country", text)
+        self.assertIn("The official sources for each family are listed by `cards families`", text)
 
     def test_role_knowledge_guide_runs_each_card_kind_and_grades_against_the_printed_rubric(self):
         text = (SKILLS / "interview-prep" / "role-knowledge.md").read_text(encoding="utf-8")
@@ -147,7 +163,9 @@ class ShippedSkillTests(unittest.TestCase):
         for skill in ("tutor", "interview-prep"):
             text = skill_text(skill)
             with self.subTest(skill=skill):
-                self.assertIn("or a field such as product, project delivery, HR or finance", text)
+                self.assertIn("It could be a field such as HR, product design, strategy, finance or project delivery", text)
+                for engineering_only in ("ALB vs NLB", "AWS, Azure, Google Cloud", "architecture mode", "a key service"):
+                    self.assertNotIn(engineering_only, text)
                 self.assertIn("choose its role family yourself", text)
                 self.assertIn("only once they respond with yes register it", text)
                 self.assertIn("for other roles, do not suggest them unless the user asks", text)
@@ -222,7 +240,7 @@ class CommandNameTests(unittest.TestCase):
                      "profile terms [list | add TEXT]", "readiness --jd -", "lead profile show",
                      'build-resume --title COMPANY-ID="Title"', "sessions resume ID"):
             self.assertIsNone(check_span(span, parsers), span)
-        for span in ("sessions log ID --due", "arch drill ID"):
+        for span in ("sessions log ID --due", "cards drill ID"):
             self.assertIsNotNone(check_span(span, parsers), span)
 
     def test_written_commands_exist(self):
@@ -380,7 +398,7 @@ class SharedTextTests(unittest.TestCase):
             start = text.index("## What they are preparing for")
             section = text[start:text.index("\n\n", start)]
             self.assertIn('`profile set preparing_for "TEXT"`', section, skill)
-            self.assertLess(section.index("`arch init"), section.index("preparing_for"), skill)
+            self.assertLess(section.index("`cards init"), section.index("preparing_for"), skill)
             self.assertIn("safe to run again", section, skill)
             self.assertIn("never tell the user about a setup check", section, skill)
             role, tech = section.index("what kind of role"), section.index("anything you'd like to focus on")
@@ -427,7 +445,7 @@ class SharedTextTests(unittest.TestCase):
         for name in SHIPPED:
             text = skill_text(name)
             self.assertNotIn('PATH="', text, name)
-            self.assertIn('"JOBKIT_COMMANDS_DIR/arch" next', text, name)
+            self.assertIn('"JOBKIT_COMMANDS_DIR/cards" next', text, name)
 
     def test_folders_are_quoted_because_they_may_have_spaces(self):
         for name in SHIPPED:

@@ -1,7 +1,7 @@
 """Postings saved for `match-score`, so the agent hands text over on standard input and writes no file itself.
 
 `extract` saves the posting under `output/match/postings/` in the home folder, named by a short digest of the
-normalised posting (the KEY); `check` and `run` read it back with `--key`. Copies unused for `RETENTION_DAYS` days
+normalized posting (the KEY); `check` and `run` read it back with `--key`. Copies unused for `RETENTION_DAYS` days
 are removed when a run finishes.
 """
 from __future__ import annotations

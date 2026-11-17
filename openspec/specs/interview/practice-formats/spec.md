@@ -41,7 +41,7 @@ The skills SHALL tell the agent to check facts on the track's source hosts befor
 The setup questions SHALL ask what kind of role the user is preparing for and what to focus on, with a technology as only one example. The skill SHALL tell the agent to choose the role family itself and to ask the user only when the role could fit more than one.
 
 #### Scenario: Clear role
-- **WHEN** the user says they are preparing for a backend engineer role
+- **WHEN** the user says they are preparing for an HR business partner role
 - **THEN** the skill tells the agent to use the engineering family without asking
 
 #### Scenario: Unclear role
@@ -56,7 +56,7 @@ The setup questions SHALL ask what kind of role the user is preparing for and wh
 The skills SHALL tell the agent to offer leadership practice when the user's role or resumes involve leading people, and not to push it on other roles; the user SHALL still be able to ask for it.
 
 #### Scenario: Individual contributor
-- **WHEN** the user prepares for a frontend developer role and has never led a team
+- **WHEN** the user prepares for a junior product designer role and has never led a team
 - **THEN** the skill tells the agent not to suggest leadership practice unless the user asks
 
 ### Requirement: Teaching a case or role-play

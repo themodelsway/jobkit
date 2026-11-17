@@ -1,30 +1,30 @@
 {
  "certifications": [
-  "Example Certified Engineer"
+  "Example Certified HR Professional"
  ],
  "education": [],
  "headline": "",
  "is_resume": true,
  "problems": [],
  "profile_points": [
-  "Hands-on engineer with 10+ years of experience."
+  "Hands-on HR leader with 10+ years of experience."
  ],
  "projects": [],
  "skills": {
-  "Data": [
+  "People": [
    {
     "aliases": [],
-    "name": "MySQL"
+    "name": "HRIS"
    },
    {
     "aliases": [
-     "data platform"
+     "Applicant Tracking System"
     ],
-    "name": "Spark"
+    "name": "ATS"
    },
    {
     "aliases": [],
-    "name": "Kafka"
+    "name": "Spreadsheets"
    }
   ]
  },
@@ -32,20 +32,20 @@
  "work": [
   {
    "bullets": [
-    "Designed an order pipeline processing 2 million orders per day.",
-    "Reduced deploy time by 45% with automated pipelines."
+    "Designed a hiring process handling 2 thousand applications per month.",
+    "Reduced time to hire by 45% with structured interviews."
    ],
-   "client": "Hooli",
-   "company_id": "initech",
+   "client": "Acme 6",
+   "company_id": "acme-3",
    "dated": true,
    "end": "2020-12",
    "start": "2018-06",
-   "subtitle": "Backend Developer",
-   "title": "Lead Developer"
+   "subtitle": "People Partner",
+   "title": "HR Business Partner"
   },
   {
    "bullets": [
-    "Mentored 6 engineers."
+    "Mentored 6 managers."
    ],
    "client": "",
    "company_id": "acme-corp",
@@ -53,7 +53,7 @@
    "end": null,
    "start": "2021-03",
    "subtitle": "",
-   "title": "Staff Engineer"
+   "title": "People Director"
   }
  ]
 }

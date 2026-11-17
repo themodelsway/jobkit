@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any, NamedTuple
 
 from jk.base import ToolError
-from jk.interview import tables
+from jk.interview import question_tables, tables
 from jk.interview import target_tables
 from jk.resumes import match_tables
 from jk.resumes import tables as resume_tables
@@ -42,14 +42,16 @@ KINDS: tuple[Kind, ...] = (
     Kind("stories", _export_stories, lambda d: len(d["stories"])),
     Kind("engagements", _export_engagements, lambda d: len(d["engagements"])),
     Kind("themes", lambda: {"themes": tables.load_themes()}, lambda d: len(d["themes"])),
-    Kind("arch-catalog", tables.load_catalog, lambda d: len(d["cards"])),
-    Kind("arch-progress", _export_progress, lambda d: len(d["cards"])),
-    Kind("arch-tracks", lambda: {n: tables.load_track(n) for n in tables.track_names()}, len),
+    Kind("cards-catalog", tables.load_catalog, lambda d: len(d["cards"])),
+    Kind("cards-progress", _export_progress, lambda d: len(d["cards"])),
+    Kind("cards-tracks", lambda: {n: tables.load_track(n) for n in tables.track_names()}, len),
     Kind("lead-questions", lambda: {"questions": tables.load_questions()}, lambda d: len(d["questions"])),
     Kind("lead-progress", lambda: {"questions": tables.load_lead_progress()}, lambda d: len(d["questions"])),
     Kind("lead-scope", lambda: {"companies": tables.load_company_facts()}, lambda d: len(d["companies"])),
     Kind("sessions", lambda: {s["id"]: s for s in tables.all_sessions()}, len),
     Kind("research", lambda: {"companies": target_tables.load_companies()}, lambda d: len(d["companies"])),
+    Kind("role-questions", lambda: {"roles": question_tables.load_roles()}, lambda d: len(d["roles"])),
+    Kind("question-progress", question_tables.load_progress, len),
     Kind("settings", user_tables.load_settings, len),
     Kind("employers", user_tables.load_employers, len),
     Kind("open-items", user_tables.load_open_items, len),
