@@ -84,17 +84,19 @@ Resume tailoring and match scoring are early previews. Their output requires rev
 
 | Agent | Where | macOS | Linux | Windows |
 |---|---|---|---|---|
-| Claude Code | terminal, desktop app, IDE extensions | yes | yes | yes, with Git for Windows |
-| Codex | command line (`codex`), running locally | yes | yes | not yet |
+| Claude Code | terminal, desktop app, IDE extensions | ✅ | ✔️ | ✔️ (with Git for Windows) |
+| Codex | command line (`codex`), running locally | ✅ | ✔️ | not yet |
 
-Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Codex. The setup refuses, and installs nothing, only where it can tell: on an operating system other than macOS, Linux or Windows, and for Codex on Windows. It does not detect the Codex IDE extension or hosted Codex on macOS or Linux, so these are untested rather than blocked. Checked with Claude Code 2.1 and Codex CLI 0.167 on macOS.
+✅ supported · ✔️ supported, validation in progress: please report any issues in [jobkit GitHub issues](https://github.com/themodelsway/jobkit/issues)
+
+Not supported: Codex on Windows, the Codex IDE extension and hosted (cloud) Codex. Validated with Claude Code 2.1 and Codex CLI 0.167 on macOS.
 
 ## Before you begin
 
 | Prerequisite | Purpose | Install |
 |---|---|---|
 | Claude Code or Codex, signed in and recent enough to have plugin commands (`claude plugin --help` or `codex plugin --help` in a terminal lists them) | the agent that runs jobkit | the agent's official documentation |
-| [uv](https://github.com/astral-sh/uv) 0.13.7 or newer | Python package manager; downloads the Python version and packages jobkit uses. Python itself does not need to be installed | instructions at https://github.com/astral-sh/uv |
+| [uv](https://github.com/astral-sh/uv) 0.13.7 or newer | Python package manager; installs the packages jobkit uses, and the required Python version, if missing | instructions at https://github.com/astral-sh/uv |
 | Git for Windows (Windows only) | runs the agent's commands on Windows | [Windows](#windows) |
 
 If uv is missing, the skill tells the agent to explain this prerequisite and to install uv only when the user asks.
@@ -181,7 +183,7 @@ Common problems:
 
 ## What setup installs
 
-The first time a skill runs, in either agent, the skill tells the agent to run the installer's read-only check (`setup/install --check` from the plugin folder, `setup/install.ps1 --check` on Windows). The check finds out what is already on the computer: uv and its version, the Python version jobkit needs, and the installed jobkit commands and their version. If uv is missing, the skill tells the agent to name it as a prerequisite, point to its instructions, and install it only when the user asks. If uv is older than the minimum, the skill tells the agent to say so and stop before asking anything. Otherwise the skill tells the agent to say that a small helper needs to be set up or updated, naming only what will be downloaded (the Python packages, and Python only when the check found it missing), to install nothing on a no, and once the user responds with yes to run `setup/install` (`setup/install.ps1` on Windows). That installer installs exactly this:
+The first time a skill runs, in either agent, the skill tells the agent to run the installer's read-only check (`setup/install --check` from the plugin folder, `setup/install.ps1 --check` on Windows). The check finds out what is already in the environment: uv and its version, the Python version jobkit needs, and the installed jobkit commands and their version. If uv is missing, the skill tells the agent to name it as a prerequisite, point to its instructions, and install it only when the user asks. If uv is older than the minimum, the skill tells the agent to say so and stop before asking anything. Otherwise the skill tells the agent to say that a small helper needs to be set up or updated, naming only what will be downloaded (the Python packages, and Python only when the check found it missing), to install nothing on a no, and once the user responds with yes to run `setup/install` (`setup/install.ps1` on Windows). That installer installs exactly this:
 
 | What | Version | From | When |
 |---|---|---|---|
