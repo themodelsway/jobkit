@@ -2,11 +2,18 @@
 
 Read by a jobkit skill right after the first resume import, or at the start of a conversation whose request names no task. The user only sees the lines that start with `>`.
 
-First run `jobkit status --summary` (by its full path inside JOBKIT_COMMANDS_DIR). If it shows a `latest open session`, say this before the list, with TITLE replaced by that session's title:
-> You have an unfinished practice session, "TITLE". Would you like to continue it, or start something below?
+First run `jobkit status --summary` (by its full path inside JOBKIT_COMMANDS_DIR). Its `suggested next` line is the next step the stored data points to. When it is not `none` and the request that started this named no task, go for it: say the matching line below, then start that step straight away, without showing the list or asking what to do first. That line is the user's go-ahead for the step; if the user asks for something else instead, do that.
+- `continue-session ID`: with TITLE taken from the `latest open session` line, say:
+  > Let's pick up your unfinished practice session, "TITLE", where you left off. If you'd rather do something else, just say so.
+  Continue it with `sessions resume ID`: a session whose mode is `tutor` continues in the tutor skill, any other in the interview-prep skill (its "Sessions" section, from step 3).
+- `retest N`: say:
+  > A few things you practiced a while ago are due for a quick refresh, so let's start with those. If you'd rather do something else, just say so.
+  Start the refresh in the interview-prep skill (its "Sessions" section): a new session with `--due`.
+- `prepare-for COMPANY`: say:
+  > Let's keep preparing for COMPANY, starting with a practice round on what its interviewers look for. If you'd rather do something else, just say so.
+  Continue in the "Preparing for a specific company" section of the interview-prep skill, with COMPANY as the company the user named for this session.
 
-If the user wants to continue it: a session whose mode is `tutor` continues in the tutor skill, any other in the interview-prep skill (its "Sessions" section, with `sessions resume ID`). If `due for a retest` is above 0, add after the list:
-> A few things you practiced a while ago are due for a quick refresh. Just ask when you want to go over them.
+Otherwise (it is `none`, or the request named a task), show the list:
 
 > Your resumes are ready. Here is what we can do with them:
 > 1. **Learn a topic.** I explain a topic from your field, a choice between two approaches, or one of your own stories, then check with a short quiz.

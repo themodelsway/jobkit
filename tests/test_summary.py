@@ -3,11 +3,12 @@ import contextlib
 import io
 import platform
 import sys
+from datetime import date
 from importlib.metadata import version
 from pathlib import Path
 from unittest import mock
 
-from jk import admin, common, setup_state, store
+from jk import admin, common, setup_state, store, summary
 from jk.common import TROUBLESHOOT_HINT
 from jk.user import profile
 from tests.seed_data import seed
@@ -53,6 +54,35 @@ class SummaryTests(HomeCase):
         for start in ("open sessions: ", "due for a retest: ", "company research: "):
             self.assertTrue(any(x.startswith(start) for x in lines), (start, out))
         self.assertIn("latest open session: s1", out)
+        self.assertEqual(lines[-1], "suggested next: continue-session s1")
+
+    def test_nothing_is_suggested_until_setup_is_ready(self):
+        seed()
+        add_resumes()
+        out = jobkit("status", "--summary")[1]
+        self.assertIn("setup: no-target", out)
+        self.assertEqual(out.splitlines()[-1], "suggested next: none")
+
+    def test_the_suggestion_is_the_first_step_that_applies(self):
+        today = date(2026, 11, 17)
+        session = [{"id": "s9"}]
+        with mock.patch.object(summary, "_fresh_default_company", return_value="Acme Corp"):
+            self.assertEqual(summary.suggested_next(session, 4, today), "continue-session s9")
+            self.assertEqual(summary.suggested_next([], 4, today), "retest 4")
+            self.assertEqual(summary.suggested_next([], 0, today), "prepare-for Acme Corp")
+        with mock.patch.object(summary, "_fresh_default_company", return_value=None):
+            self.assertEqual(summary.suggested_next([], 0, today), "none")
+
+    def test_only_a_freshly_researched_default_company_is_suggested(self):
+        today = date(2026, 11, 17)
+        companies = [{"name": "Acme Corp"}]
+        with mock.patch.object(summary.target_tables, "load_companies", return_value=companies), \
+                mock.patch.object(summary.profile, "target_company", return_value="acme corp"):
+            for state, wanted in (("fresh", "acme corp"), ("stale", None), ("none found", None)):
+                with mock.patch.object(summary.targets, "state", return_value=state):
+                    self.assertEqual(summary._fresh_default_company(today), wanted, state)
+        with mock.patch.object(summary.profile, "target_company", return_value=None):
+            self.assertIsNone(summary._fresh_default_company(today))
 
     def test_setup_and_summary_cannot_be_combined(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

@@ -84,9 +84,23 @@ class PrivacyWordingTests(unittest.TestCase):
     def test_consent_question_says_where_the_data_is_kept(self):
         text = setup_text("preflight")
         questions = [x for x in text.splitlines() if "Proceed?" in x]
-        self.assertEqual(len(questions), 2)
+        self.assertEqual(len(questions), 5)
         for question in questions:
             self.assertIn("Data is stored in a folder on this computer", question)
+
+    def test_setup_asks_only_about_what_the_check_found_missing(self):
+        text = setup_text("preflight")
+        for state in ("`ok:", "`newer:", "`no-uv`", "`old-uv`", "`missing`", "`missing+python`",
+                      "`older:JOBKIT_COMMANDS_DIR`", "`older+python:JOBKIT_COMMANDS_DIR`", "`unsupported`"):
+            self.assertIn(state, text, state)
+        self.assertIn("Never ask about installing uv or Python here", text)
+        for state, python in (("`missing`:", False), ("`missing+python`:", True),
+                              ("`older:JOBKIT_COMMANDS_DIR`:", False), ("`older+python:JOBKIT_COMMANDS_DIR`:", True)):
+            start = text.index(f"     - {state}")
+            question = text[start:text.index("Proceed?", start)]
+            self.assertEqual("download Python" in question, python, state)
+        old = text[text.index("- `old-uv`"):text.index("- `missing`, ")]
+        self.assertNotIn("Proceed?", old, "a uv that is too old is reported before anything is asked")
 
 
 class ShippedSkillTests(unittest.TestCase):
@@ -325,6 +339,10 @@ class SharedTextTests(unittest.TestCase):
         self.assertNotIn("its own published pages", text, "company research also reads other sites' articles")
         self.assertLess(text.index("`jobkit status --summary`"), text.index("Your resumes are ready"))
         self.assertIn("unfinished practice session", text)
+        for step in ("`continue-session ID`", "`retest N`", "`prepare-for COMPANY`", "`none`"):
+            self.assertIn(step, text, "every suggested next step of `jobkit status --summary` is handled")
+        self.assertLess(text.index("go for it"), text.index("Your resumes are ready"))
+        self.assertIn("without showing the list or asking what to do first", text)
         for skill in SHIPPED:
             self.assertIn(f"`JOBKIT_PLUGIN_DIR/skills/{skill}/SKILL.md`", text)
             self.assertTrue((SKILLS / skill / "SKILL.md").is_file())
@@ -385,6 +403,14 @@ class SharedTextTests(unittest.TestCase):
         self.assertIn("If the user says no, ask what is wrong", text)
         self.assertIn('`profile init --replace --resume-root "RESUME_FOLDER"', text, "plain init keeps the first answer")
         self.assertLess(text.index("--replace"), text.rindex("`process-resumes`"))
+
+    def test_first_run_asks_about_employer_names_once_and_only_when_unclear(self):
+        text = setup_text("first-run")
+        self.assertIn("never ask about those", text)
+        self.assertIn("ask once, naming every listed pair in the one question", text)
+        self.assertNotIn("Are they the same company?", text, "one question per pair")
+        self.assertLess(text.index("`profile companies merge FROM INTO`"), text.index("Does that look right?"),
+                        "names are settled before the employers are counted")
 
     def test_plugin_files_are_read_with_cat_before_any_guide_is_named(self):
         for skill in ("tutor", "interview-prep", "resume-workflows"):

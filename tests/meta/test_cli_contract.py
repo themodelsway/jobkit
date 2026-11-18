@@ -22,6 +22,8 @@ RELEASED_COMMANDS = {
               "arch", "lead", "prep", "sessions", "readiness", "target"},
     "0.7.0": {"jobkit", "profile", "process-resumes", "query-resume", "build-resume", "resume-lines", "match-score",
               "cards", "lead", "prep", "sessions", "readiness", "target", "questions"},
+    "0.7.1": {"jobkit", "profile", "process-resumes", "query-resume", "build-resume", "resume-lines", "match-score",
+              "cards", "lead", "prep", "sessions", "readiness", "target", "questions"},
 }
 
 

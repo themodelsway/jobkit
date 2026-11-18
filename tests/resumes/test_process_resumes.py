@@ -14,6 +14,7 @@ from jk.resumes import parse_resume as pr
 from jk.resumes import process_resumes as proc
 from jk.resumes import resume_data as rd
 from jk.resumes import tables
+from jk.user import employers
 from jk.user import profile as up
 from tests.resumes.support import (
     DATA_DIR,
@@ -361,6 +362,56 @@ class PipelineTests(ExtractCase):
             (self.tmp / name).write_bytes(b"x")
         found = sorted(p.name for p in proc.list_resumes([self.tmp]))
         self.assertEqual(found, ["a.pdf", "b.docx", "c.md", "d.txt"])
+
+
+class EmployerScanTests(HomeCase):
+    """The first-run scan stores each employer once, however its name is written across the resumes."""
+
+    def setUp(self):
+        super().setUp()
+        self.root = self.home / "resumes"
+        self.root.mkdir()
+        text = (DATA_DIR / "layout_b.txt").read_text(encoding="utf-8")
+        (self.root / "a.txt").write_text(text, encoding="utf-8")
+        (self.root / "b.txt").write_text(text.replace("Acme Corp", "ACME CORP, Inc.").replace("Acme 3", "Acme 3 Labs"),
+                                         encoding="utf-8")
+        saved = dict(pr.COMPANIES)
+        self.addCleanup(pr.set_companies, saved)
+        pr.set_companies({})
+
+    def scan(self, save: bool) -> str:
+        """Run the scan over both resumes; what it printed."""
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            proc.scan_companies(proc.list_resumes([self.root]), self.root, save=save)
+        return out.getvalue()
+
+    def test_spellings_of_one_employer_are_merged_and_look_alikes_are_named(self):
+        out = self.scan(save=True)
+        stored = up.company_registry()
+        self.assertEqual(sorted(stored), ["acme-3", "acme-3-labs", "acme-corp"])
+        self.assertIn('Acme Corp: also written as "ACME CORP, Inc." (the same employer)', out)
+        self.assertIn('"Acme 3 Labs" and "Acme 3"', out)
+        self.assertIn("Saved the employers.", out)
+        self.assertTrue(pr.COMPANY_RES["acme-corp"].match("ACME CORP, Inc. - Lead Designer"))
+        self.assertEqual(self.scan(save=True), "", "a second scan finds nothing new")
+        (self.root / "c.txt").write_text((self.root / "a.txt").read_text(encoding="utf-8").replace(
+            "Acme 3", "Acme Research"), encoding="utf-8")
+        out = self.scan(save=True)
+        self.assertIn("Employers found in your resumes: Acme Research", out)
+        self.assertNotIn('"Acme 3 Labs" and "Acme 3"', out, "pairs reported before are not repeated")
+
+    def test_a_spelling_that_could_not_be_stored_is_named(self):
+        scan = employers.Scan({}, skipped=["Acme-Labs"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            proc.report_scan(scan, save=True)
+        self.assertIn('Not stored, because an employer with the same id has an edited pattern', out.getvalue())
+        self.assertIn('"Acme-Labs"', out.getvalue())
+
+    def test_a_survey_reports_but_saves_nothing(self):
+        self.assertIn("(survey: not saved)", self.scan(save=False))
+        self.assertEqual(up.company_registry(), {})
 
 
 class ProcessResumesTests(HomeCase):

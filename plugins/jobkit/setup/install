@@ -1,6 +1,9 @@
 #!/bin/sh
 # Set up the jobkit commands for the jobkit plugin (macOS and Linux).
-#   sh setup/install --check     print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | no-uv | unsupported
+#   sh setup/install --check     print one line: ok:<folder> | newer:<folder> | older:<folder> | older+python:<folder>
+#                                | missing | missing+python | old-uv | no-uv | unsupported
+#                                (+python: the Python version the commands need is not on the computer yet, so an
+#                                install downloads it too; old-uv: uv is older than the minimum and is never replaced)
 #   sh setup/install             install the commands from this plugin with the uv already on the computer
 #   sh setup/install --with-uv   the same, and first download uv if it is missing
 # Run it only after the user has said yes: uv downloads Python and packages. --with-uv also downloads uv
@@ -57,18 +60,35 @@ installed_version() {
     "$1/jobkit" --version 2>/dev/null | sed 's/^jobkit //'
 }
 
+uv_version() {
+    "$1" --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p' | head -n 1
+}
+
+# "+python" when the Python version the commands need is not installed yet (uv would download it), else nothing.
+python_need() {
+    if "$1" python find --system --no-project "$python_version" >/dev/null 2>&1; then echo ""; else echo "+python"; fi
+}
+
 check() {
+    folder=
+    state=missing
     if folder=$(tool_folder); then
         case "$(compare "$(installed_version "$folder")" "$wanted")" in
-            eq) echo "ok:$folder" ;;
-            gt) echo "newer:$folder" ;;
-            *) echo "older:$folder" ;;
+            eq) echo "ok:$folder"; return 0 ;;
+            gt) echo "newer:$folder"; return 0 ;;
+            *) state=older ;;
         esac
-    elif find_uv >/dev/null; then
-        echo "missing"
-    else
-        echo "no-uv"
     fi
+    if ! uv_path=$(find_uv); then
+        echo "no-uv"
+        return 0
+    fi
+    have=$(uv_version "$uv_path")
+    if [ "$(compare "${have:-0}" "$uv_minimum")" = lt ]; then
+        echo "old-uv"
+        return 0
+    fi
+    echo "$state$(python_need "$uv_path")${folder:+:$folder}"
 }
 
 if [ "${1:-}" = "--check" ]; then
@@ -82,7 +102,7 @@ case "$current" in
 esac
 
 if uv_path=$(find_uv); then
-    have=$("$uv_path" --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9.]*\).*/\1/p' | head -n 1)
+    have=$(uv_version "$uv_path")
     if [ "$(compare "${have:-0}" "$uv_minimum")" = lt ]; then
         echo "failed: uv is too old (found ${have:-an unknown version}, need $uv_minimum or newer); it was left as it is" >&2
         exit 3

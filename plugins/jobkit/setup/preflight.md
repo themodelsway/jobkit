@@ -14,11 +14,22 @@ Read by the jobkit skills at the start of every conversation. The skill that is 
      - The user says uv is installed: run the check again and carry on with its answer. If it still prints `no-uv`, say the next line and wait:
        > I can't find uv yet. If it was installed in another window, please start a new session and ask me again.
      - The user asks you to install uv: ask this and wait for the answer:
-       > I will install uv from its official release, then set up the Jobkit engine, which stores your resumes and interview practice. uv will download Python 3.14 and the required Python packages. This takes about a minute. Data is stored in a folder on this computer. Proceed?
+       > I will install uv from its official release, then set up the Jobkit engine, which stores your resumes and interview practice. uv will download the required Python packages, and Python 3.14 if this computer doesn't have it yet. This takes about a minute. Data is stored in a folder on this computer. Proceed?
 
        On yes, run the same command without `--check` and with `--with-uv` added at the end, and continue as in the "Yes" case below. On no, install nothing and stop as in the "No" case below.
-   - `missing` or `older:JOBKIT_COMMANDS_DIR`: the helper must be set up or updated. Ask this and wait for the answer. Keep this question's wording: say where the data is kept, and never say that it stays on the computer:
-     > I need to set up the Jobkit engine, which stores your resumes and interview practice. uv will download Python 3.14 and the required Python packages. This takes about a minute. Data is stored in a folder on this computer. Proceed?
+   - `old-uv`: uv is on this computer but older than the helper needs. Never update or replace it, and ask nothing about installing. Say the next line and stop:
+     > A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
+   - `missing`, `missing+python`, `older:JOBKIT_COMMANDS_DIR` or `older+python:JOBKIT_COMMANDS_DIR`: the helper must be set up (`missing`) or updated to this plugin's version (`older`). The check already found out what is on the computer: without `+python`, uv and the Python version the helper needs are both there, so only the helper's packages are downloaded; with `+python`, uv downloads that Python version too. Never ask about installing uv or Python here. Ask the one question that matches the state, keep its wording (say where the data is kept, and never say that it stays on the computer), and wait for the answer:
+     - `missing`:
+       > I need to set up the Jobkit engine, which stores your resumes and interview practice. uv and Python are already on this computer, so only the required Python packages are downloaded; this takes a few seconds. Data is stored in a folder on this computer. Proceed?
+     - `missing+python`:
+       > I need to set up the Jobkit engine, which stores your resumes and interview practice. uv will download Python 3.14 and the required Python packages. This takes about a minute. Data is stored in a folder on this computer. Proceed?
+     - `older:JOBKIT_COMMANDS_DIR`:
+       > The Jobkit engine needs a quick update. Your resumes and practice are kept, and only the required Python packages are downloaded; this takes a few seconds. Data is stored in a folder on this computer. Proceed?
+     - `older+python:JOBKIT_COMMANDS_DIR`:
+       > The Jobkit engine needs an update. Your resumes and practice are kept; uv will download Python 3.14 and the required Python packages. This takes about a minute. Data is stored in a folder on this computer. Proceed?
+
+     The answers:
      - Yes: run the same command again without `--check`. It prints `ok:JOBKIT_COMMANDS_DIR` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
        > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
 

@@ -123,6 +123,21 @@ A session's logged answers SHALL only be added, never edited or removed by any c
 - **WHEN** `jobkit status` is run
 - **THEN** the location, version and per-kind counts are printed
 
+### Requirement: Suggested next step
+`jobkit status --summary` SHALL end, once resumes are imported, with one `suggested next:` line naming the first step that applies: `continue-session ID` for the most recently used open session, `retest N` when N practiced items are due for a retest, `prepare-for COMPANY` when the default target company's research is fresh, or `none`. It SHALL print `none` until setup is `ready`, and SHALL change nothing.
+
+#### Scenario: Open session first
+- **WHEN** a session is open and items are due for a retest
+- **THEN** the line is `suggested next: continue-session ID` for the most recently used open session
+
+#### Scenario: Retest before company
+- **WHEN** no session is open, items are due for a retest and the default company is freshly researched
+- **THEN** the line is `suggested next: retest N`
+
+#### Scenario: Setup not finished
+- **WHEN** what the user is preparing for has not been saved yet
+- **THEN** the line is `suggested next: none`
+
 ### Requirement: One value per field
 The system SHALL store each field of a record in one place, so that every command that shows a field shows the same value. A log of answers MAY repeat fields of an entry, because a logged entry can never be changed.
 

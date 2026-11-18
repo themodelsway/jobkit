@@ -4,7 +4,7 @@
   jobkit init       # create ~/.jobkit (or $JOBKIT_HOME) and an empty database; safe to repeat
   jobkit status     # where the data is, the schema version, size and how many records
   jobkit status --setup   # one word: no-database, no-resumes, no-target or ready (or why the check failed)
-  jobkit status --summary # the setup stage, open sessions, retests due and company research
+  jobkit status --summary # the setup stage, open sessions, retests due, company research and the suggested next step
   jobkit export     # view the data as JSON or Markdown (--format, --only KIND, -o DIR)
   jobkit backup     # save a copy of the database (-o FILE) or restore one (--restore FILE)
 """
@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="print one word: no-database, no-resumes, no-target or ready; when the check fails, "
                            "blocked, busy, too-new or failed (exit 1, the error on standard error)")
     view.add_argument("--summary", action="store_true",
-                      help="the setup stage, open sessions, retests due and company research")
+                      help="the setup stage, open sessions, retests due, company research and the suggested next step")
     status.set_defaults(fn=cmd_status)
     export_cmd = sub.add_parser("export", help="show the stored data as JSON or Markdown")
     export_cmd.add_argument("--format", default="json", help="json or md")

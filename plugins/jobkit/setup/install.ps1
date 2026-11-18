@@ -1,5 +1,8 @@
 # Set up the jobkit commands for the jobkit plugin (Windows).
-#   install.ps1 --check     print one line: ok:<folder> | older:<folder> | newer:<folder> | missing | no-uv | unsupported
+#   install.ps1 --check     print one line: ok:<folder> | newer:<folder> | older:<folder> | older+python:<folder>
+#                           | missing | missing+python | old-uv | no-uv | unsupported
+#                           (+python: the Python version the commands need is not on the computer yet, so an
+#                           install downloads it too; old-uv: uv is older than the minimum and is never replaced)
 #   install.ps1             install the commands from this plugin with the uv already on the computer
 #   install.ps1 --with-uv   the same, and first download uv if it is missing
 # Run it only after the user has said yes: uv downloads Python and packages. --with-uv also downloads uv
@@ -79,13 +82,34 @@ function Get-InstalledVersion($Folder) {
     return ($line -replace '^jobkit ', '')
 }
 
+function Get-UvVersion($Uv) {
+    try { $line = (Invoke-Native $Uv @('--version') | Select-Object -First 1) } catch { $line = '' }
+    if ("$line" -match '^uv (\d[\d.]*)') { return $Matches[1] }
+    return ''
+}
+
+# '+python' when the Python version the commands need is not installed yet (uv would download it), else ''.
+function Get-PythonNeed($Uv) {
+    try { Invoke-Native $Uv @('python', 'find', '--system', '--no-project', $PythonVersion) | Out-Null } catch { return '+python' }
+    if ($LASTEXITCODE -eq 0) { return '' }
+    return '+python'
+}
+
 function Get-State {
     $folder = Get-ToolFolder
-    if (-not $folder) { if (Find-Uv) { return 'missing' } else { return 'no-uv' } }
-    $order = Compare-Version (Get-InstalledVersion $folder) $Wanted
-    if ($order -eq 0) { return "ok:$folder" }
-    if ($order -gt 0) { return "newer:$folder" }
-    return "older:$folder"
+    $state = 'missing'
+    if ($folder) {
+        $order = Compare-Version (Get-InstalledVersion $folder) $Wanted
+        if ($order -eq 0) { return "ok:$folder" }
+        if ($order -gt 0) { return "newer:$folder" }
+        $state = 'older'
+    }
+    $uv = Find-Uv
+    if (-not $uv) { return 'no-uv' }
+    if ((Compare-Version (Get-UvVersion $uv) $UvMinimum) -lt 0) { return 'old-uv' }
+    $state = $state + (Get-PythonNeed $uv)
+    if ($folder) { return "${state}:$folder" }
+    return $state
 }
 
 if ($args.Count -gt 0 -and $args[0] -eq '--check') {
@@ -98,9 +122,7 @@ if ($state -like 'ok:*' -or $state -like 'newer:*') { Write-Output $state; exit 
 
 $uv = Find-Uv
 if ($uv) {
-    $have = ''
-    try { $line = (Invoke-Native $uv @('--version') | Select-Object -First 1) } catch { $line = '' }
-    if ("$line" -match '^uv (\d[\d.]*)') { $have = $Matches[1] }
+    $have = Get-UvVersion $uv
     if ((Compare-Version $have $UvMinimum) -lt 0) {
         Fail "uv is too old (found $have, need $UvMinimum or newer); it was left as it is" 3
     }

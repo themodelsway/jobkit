@@ -18,7 +18,7 @@ Commands:
                                 # default; "" clears it), preparing_for (what the user is preparing for, in a few
                                 # words; saved last, it marks that step of setup as done)
   profile header [set NAME CONTACT_LINE]   # the name and contact line at the top of built resumes; no args shows it
-  profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan; rename or merge them
+  profile companies [rename ID NAME | merge FROM INTO]   # employers from the scan (and names that look alike); rename or merge them
   profile key-topics [TOPIC ...]   # pin your own key topics (tier 1, any track); no args shows the current list
   profile open [add TEXT | done ID]   # open items and data notes 
   profile terms [list | add TEXT [--kind K] [--match word|phrase|regex] | ignore TEXT | rm TEXT | import FILE
@@ -29,8 +29,7 @@ Standard library only. Run it as the `profile` command.
 from __future__ import annotations
 
 import argparse
-import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, NotRequired, TypedDict, cast
 
@@ -38,11 +37,11 @@ from jk import common, store
 from jk.common import ToolError
 from jk.interview import target_tables
 from jk.resumes import tables as resume_tables
-from jk.user import tables, terms
+from jk.user import employers, tables, terms
+from jk.user.employers import TITLE_SUFFIX
 
 DIR: Final[Path] = common.home() / "profile"
 HEADER_FILE: Final[Path] = DIR / "header.md"
-SEP: Final[str] = r"\s*[–—-]\s*"
 SETTABLE_KEYS: Final[tuple[str, ...]] = ("name", "resume_root", "reassess_days", "years_experience", "answer_style",
                                          "research_days", "question_research", "target_company", "preparing_for")
 PREPARING_FOR_MAX: Final[int] = 200
@@ -255,22 +254,19 @@ def key_topics() -> list[str]:
 
 def company_registry() -> dict[str, tuple[str, str]]:
     """{id: (display name, header regex)} ready for parse_resume.set_companies. Empty before the first scan."""
-    stored = tables.load_employers()
-    return {cid: (entry["name"], entry["regex"]) for cid, entry in stored.items()}
+    return employers.registry(tables.load_employers())
 
 
-def add_companies(found: dict[str, str]) -> list[str]:
-    """Merge employers found by a scan ({id: name}); never overwrites or removes an entry you have edited.
+def add_companies(spellings: Mapping[str, int], save: bool = True) -> employers.Scan:
+    """Apply the employer spellings found by a scan ({spelling: number of resumes}) and, with `save`, store them.
 
-    Returns the ids that were new.
+    Spellings of one employer that differ only in case, punctuation or a legal ending are merged; a stored
+    employer is never renamed or removed (see employers.plan).
     """
-    stored = tables.load_employers()
-    new = [cid for cid in found if cid not in stored]
-    for cid in new:
-        stored[cid] = {"name": found[cid], "regex": re.escape(found[cid]) + rf"(?:{SEP}(?P<t>.+))?"}
-    if new:
-        tables.replace_employers(stored)
-    return new
+    scan = employers.plan(tables.load_employers(), spellings)
+    if save and (scan.new or scan.merged):
+        tables.replace_employers(scan.employers)
+    return scan
 
 
 def header_path() -> Path:
@@ -398,18 +394,15 @@ def cmd_set(args: argparse.Namespace) -> None:
     save(profile)
 
 
-TITLE_SUFFIX: Final[str] = rf"(?:{SEP}(?P<t>.+))?"
-
-
 def rename_company(args: list[str]) -> None:
     """`companies rename ID NAME`: change the name shown for an employer (its match pattern is unchanged)."""
     if len(args) != 2:
         raise ToolError("usage: companies rename ID NAME")
-    employers = tables.load_employers()
-    if args[0] not in employers:
+    stored = tables.load_employers()
+    if args[0] not in stored:
         raise ToolError(f"No employer {args[0]}. Run `companies` to list them.")
-    employers[args[0]]["name"] = args[1]
-    tables.replace_employers(employers)
+    stored[args[0]]["name"] = args[1]
+    tables.replace_employers(stored)
     print(f"Renamed {args[0]} to {args[1]}. Run `process-resumes --force` to rebuild with the new name.")
 
 
@@ -417,17 +410,17 @@ def merge_companies(args: list[str]) -> None:
     """`companies merge FROM INTO`: treat two names as one employer; FROM is folded into INTO."""
     if len(args) != 2 or args[0] == args[1]:
         raise ToolError("usage: companies merge FROM INTO (two different employer ids)")
-    employers = tables.load_employers()
+    stored = tables.load_employers()
     for cid in args:
-        if cid not in employers:
+        if cid not in stored:
             raise ToolError(f"No employer {cid}. Run `companies` to list them.")
-    source, target = employers.pop(args[0]), employers[args[1]]
+    source, target = stored.pop(args[0]), stored[args[1]]
     heads = [e["regex"][:-len(TITLE_SUFFIX)] for e in (target, source) if e["regex"].endswith(TITLE_SUFFIX)]
     if len(heads) != 2:
         raise ToolError("These employers have a custom match pattern, so they cannot be merged automatically.")
     target["regex"] = f"(?:{heads[0]}|{heads[1]}){TITLE_SUFFIX}"
     target["aliases"] = sorted({*target.get("aliases", []), source["name"], *source.get("aliases", [])})
-    tables.replace_employers(employers)
+    tables.replace_employers(stored)
     print(f"Merged {args[0]} into {args[1]}. Run `process-resumes --force` to rebuild.")
 
 
@@ -438,10 +431,21 @@ def cmd_companies(args: argparse.Namespace) -> None:
     elif args.action == "merge":
         merge_companies(args.args)
     else:
-        for cid, entry in tables.load_employers().items():
-            print(f"{cid:<24} {entry['name']}")
-        if not tables.has_employers():
-            print("No scan yet: run process-resumes")
+        list_companies()
+
+
+def list_companies() -> None:
+    """Print each employer, then the pairs whose names look alike (they may be one employer written two ways)."""
+    stored = tables.load_employers()
+    for cid, entry in stored.items():
+        print(f"{cid:<24} {entry['name']}")
+    if not tables.has_employers():
+        print("No scan yet: run process-resumes")
+    pairs = employers.look_alikes(stored)
+    if pairs:
+        print("\nThese names look alike and may be one employer (ask the user; join with `companies merge FROM INTO`):")
+        for a, b in pairs:
+            print(f'  {a} "{stored[a]["name"]}" and {b} "{stored[b]["name"]}"')
 
 
 def cmd_key_topics(args: argparse.Namespace) -> None:

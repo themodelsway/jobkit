@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +25,7 @@ from jk.resumes import curate, extract, tables, visual, visual_compare
 from jk.resumes import parse_resume as pr
 from jk.resumes import resume_data as rd
 from jk.resumes.resume_data import ResumeData
+from jk.user import employers
 from jk.user import profile as up
 
 TEXT_DIR: Path = rd.TEXT_DIR
@@ -58,27 +60,43 @@ def transcript_for(path: Path, root: Path) -> Path:
 
 
 def scan_companies(files: Iterable[Path], root: Path, save: bool) -> None:
-    """First-run scan: find the employers in every resume so nothing has to be typed in. With `save`, new
-    employers are stored in the database (existing entries are never changed)."""
-    found: dict[str, str] = {}
+    """First-run scan: find the employers in every resume so nothing has to be typed in. Spellings of one employer
+    that differ only in case, punctuation or a legal ending are merged. With `save`, the employers are stored in
+    the database (an existing entry is never renamed or removed)."""
+    spellings: Counter[str] = Counter()
     for path in files:
         try:
             doc = visual.read_document(path, transcript_for(path, root))
         except common.ToolError:
             continue                        # reported later, per file, by survey or build
         discovered = pr.discover_companies(doc.layout_text or doc.text) or pr.discover_companies(doc.text)
-        found.update({k: v for k, v in discovered.items() if k not in found})
-    new = [k for k in found if k not in pr.COMPANIES]
-    if not new:
-        return
-    print("Employers found in your resumes: " + ", ".join(found[k] for k in new))
-    if save:
-        up.add_companies({k: found[k] for k in new})
-        print("  Saved the employers. If one employer appears twice, use `profile companies merge FROM INTO` or `rename ID NAME`.")
-    else:
-        print("  (survey: not saved)")
-    pr.set_companies({**pr.COMPANIES, **{k: (found[k], re.escape(found[k]) + rf"(?:{pr.SEP}(?P<t>.+))?")
-                                         for k in new}})
+        spellings.update(set(discovered.values()))
+    scan = up.add_companies(spellings, save=save)
+    pr.set_companies(employers.registry(scan.employers))
+    if scan.new or scan.merged or scan.skipped:
+        report_scan(scan, save)
+
+
+def report_scan(scan: employers.Scan, save: bool) -> None:
+    """Say which employers the scan added, which spellings it merged or could not store, and which of them may be
+    one employer with another (pairs of employers stored before, already reported then, are left out)."""
+    names = scan.employers
+    changed = {*scan.new, *scan.merged}
+    if scan.new:
+        print("Employers found in your resumes: " + ", ".join(names[k]["name"] for k in scan.new))
+    for cid, others in scan.merged.items():
+        print(f"  {names[cid]['name']}: also written as " + ", ".join(f'"{x}"' for x in others)
+              + " (the same employer)")
+    if scan.skipped:
+        print("  Not stored, because an employer with the same id has an edited pattern that does not match them: "
+              + ", ".join(f'"{x}"' for x in scan.skipped)
+              + ". Resume lines under these names stay unmatched; check the employers with `profile companies`.")
+    pairs = [(x, y) for x, y in employers.look_alikes(names) if x in changed or y in changed]
+    if pairs:
+        print("  These names look alike and may be one employer: "
+              + "; ".join(f'"{names[a]["name"]}" and "{names[b]["name"]}"' for a, b in pairs)
+              + ". Ask the user, then use `profile companies merge FROM INTO`.")
+    print("  Saved the employers." if save else "  (survey: not saved)")
 
 
 def list_resumes(dirs: Iterable[Path]) -> list[Path]:

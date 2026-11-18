@@ -74,7 +74,7 @@ The sections below describe the record shapes as `jobkit export` shows them (and
 `resume_root` is read-only for all tools. `resume_dirs` limits the scan to subfolders. `key_topics` pins your own tier-1 drill topics (any track, matched by name). `reassess_days`, `years_experience`, `answer_style`, `research_days`, `question_research`, `target_company` and `preparing_for` are set with `profile set` (see the manual); `target_company` holds the name of a researched company, and `preparing_for` what the user is preparing for. Code: `user/profile.py`.
 
 ### Employers (`employer`; export kind `employers`)
-`{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found on the first scan. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
+`{ "<company-id>": { "name": "Acme Corp", "regex": "Acme( Corp)?" } }`. Employers found by the resume scans. Spellings of one name that differ only in capitals, punctuation or a legal ending are stored as one employer, the other spellings in `aliases`. The regex must match a whole header line. Change employers with `profile companies rename` and `merge`.
 
 ### `header` (a setting)
 Name and contact line printed at the top of built resumes, saved with `profile header set NAME CONTACT_LINE` and shown with `profile header`. Contact details live only here, never in the resume data. An older `profile/header.md` file is still read when no header is saved.

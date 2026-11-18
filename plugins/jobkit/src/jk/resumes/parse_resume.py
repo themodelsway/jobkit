@@ -25,6 +25,7 @@ from jk.resumes.headings import (COMBINED, JOB_LABELS, LOOKUP, heading_key, inli
                                   normalise)
 from jk.resumes.work_layout import (BULLETS, HEADER_PREFIX, MAX_HEADLINE_CHARS, SEP, SUB_MARK, can_be_company_line,
                                     employer_by_context, is_location, is_title_line, plausible_company, structure_work_lines)
+from jk.user.employers import employer_id
 
 ZERO_WIDTH: Final[dict[int, None]] = dict.fromkeys(map(ord, "\u200b‌‍﻿"))
 PARSER_VERSION: Final[int] = 6           # raise it when reading or parsing changes what a resume file yields: the next
@@ -292,7 +293,7 @@ def discover_companies(layout_text: str) -> dict[str, str]:
         name = clean(re.split(SEP, lines[header])[0]).strip(" ,")
         if plausible_company(name) and (not is_title_line(name) or _employer_by_header(lines, header, i, name)) \
                 and not is_location(name):
-            found.setdefault(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"), name)
+            found.setdefault(employer_id(name), name)
     return found
 
 

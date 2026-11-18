@@ -22,13 +22,15 @@ WINDOWS_SCRIPT = PLUGIN_ROOT / "setup" / "install.ps1"
 CONSTRAINTS = PLUGIN_ROOT / "setup" / "constraints.txt"
 ON_WINDOWS = sys.platform == "win32"
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
+CHECK_STATES = r"^(ok:.+|older(\+python)?:.+|newer:.+|missing(\+python)?|old-uv|no-uv|unsupported)$"
 TOOLS = ("sh", "sed", "head", "tr", "uname", "dirname", "mktemp", "rm", "cat", "chmod", "mkdir")
 
 FAKE_UV = """#!/bin/sh
-# A stand-in for uv: answers the three calls the installer makes and records each one.
+# A stand-in for uv: answers the calls the installer makes and records each one.
 echo "$*" >> "$FAKE/uv.log"
 case "$1 $2" in
     "--version ") echo "uv $FAKE_UV_VERSION (fake)" ;;
+    "python find") [ -z "${FAKE_NO_PYTHON:-}" ] || exit 2; echo "$FAKE/python" ;;
     "tool dir") echo "$FAKE/tools" ;;
     "tool install")
         [ -z "${FAKE_INSTALL_FAILS:-}" ] || exit 1
@@ -143,6 +145,23 @@ class ShellInstallerTests(unittest.TestCase):
                 self.assertNotIn("tool install", self.log("uv"))
                 self.assertEqual(self.log("curl"), "", "the check downloaded something")
 
+    def test_check_says_when_python_must_be_downloaded_too(self):
+        self.add_uv()
+        python = (PLUGIN_ROOT / ".python-version").read_text(encoding="utf-8").strip()
+        self.assertEqual(self.run_script("--check", FAKE_NO_PYTHON="1").stdout.strip(), "missing+python")
+        self.assertIn(f"python find --system --no-project {python}", self.log("uv"))
+        self.add_helper("0.0.9")
+        self.assertEqual(self.run_script("--check", FAKE_NO_PYTHON="1").stdout.strip(),
+                         f"older+python:{self.fake / 'tools'}")
+        self.assertEqual(self.run_script("--check").stdout.strip(), f"older:{self.fake / 'tools'}")
+
+    def test_check_reports_a_uv_below_the_minimum_before_anything_is_asked(self):
+        self.add_uv()
+        self.assertEqual(self.run_script("--check", uv_version="0.1.0").stdout.strip(), "old-uv")
+        self.add_helper(plugin_version())
+        self.assertTrue(self.run_script("--check", uv_version="0.1.0").stdout.startswith("ok:"),
+                        "ready commands need no uv update")
+
     def test_versions_are_compared_as_numbers(self):
         self.add_uv()
         major, minor, patch = (int(x) for x in plugin_version().split("."))
@@ -233,7 +252,8 @@ class InstallersAgreeTests(unittest.TestCase):
         for script in (SCRIPT, WINDOWS_SCRIPT):
             text = script.read_text(encoding="utf-8")
             for name in ("pyproject.toml", ".python-version", "constraints.txt", "--constraints", "--python",
-                         "required-version", "newer:", "older:", "ok:", "missing", "no-uv", "--with-uv",
+                         "required-version", "newer:", "older", "ok:", "missing", "no-uv", "old-uv", "+python",
+                         "python', 'find'" if script == WINDOWS_SCRIPT else "python find", "--with-uv",
                          "uv is too old", "uv is not installed"):
                 self.assertIn(name, text, f"{script.name}: {name}")
             self.assertNotIn("plugin.json", text, f"{script.name} reads the version from a manifest")
@@ -331,7 +351,7 @@ class SetupScriptTests(unittest.TestCase):
     def test_check_reports_a_known_state(self):
         result = subprocess.run(["sh", str(PLUGIN_ROOT / "setup" / "install"), "--check"], capture_output=True, text=True,
                                 timeout=60, check=False)
-        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|no-uv|unsupported)$")
+        self.assertRegex(result.stdout.strip(), CHECK_STATES)
 
     @unittest.skipIf(ON_WINDOWS, "needs a POSIX shell")
     def test_shell_script_refuses_windows(self):
@@ -374,7 +394,7 @@ class WindowsInstallScriptTests(unittest.TestCase):
 
     def test_same_check_answers_as_the_shell_script(self):
         text = self.SCRIPT.read_text(encoding="utf-8")
-        for form in ("ok:", "older:", "newer:", "missing", "no-uv", "--with-uv", "unsupported"):
+        for form in ("ok:", "older", "newer:", "missing", "+python", "old-uv", "no-uv", "--with-uv", "unsupported"):
             self.assertIn(form, text)
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is not installed")
@@ -387,4 +407,4 @@ class WindowsInstallScriptTests(unittest.TestCase):
         self.assertEqual(parse.returncode, 0, parse.stdout + parse.stderr)
         result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.SCRIPT),
                                  "--check"], capture_output=True, text=True, timeout=60, check=False)
-        self.assertRegex(result.stdout.strip(), r"^(ok:.+|older:.+|newer:.+|missing|no-uv|unsupported)$")
+        self.assertRegex(result.stdout.strip(), CHECK_STATES)

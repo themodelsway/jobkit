@@ -27,6 +27,32 @@ The system SHALL list the scanned employers with `companies` and let the user re
 - **WHEN** `companies merge FROM INTO` is run
 - **THEN** the next run treats both names as the one employer
 
+### Requirement: Employer spellings are reconciled
+The resume scan SHALL store spellings of one employer name that differ only in letter case, accents, punctuation, spacing, "&" for "and", a leading "The" or a legal ending (such as Inc, LLC, Ltd, Corp or GmbH) as one employer, named by the spelling in the most resumes, with the other spellings kept as aliases that also match. A scan SHALL never rename or remove a stored employer.
+
+#### Scenario: Spellings of one employer
+- **WHEN** the resumes name "Acme Corp", "ACME CORP." and "The Acme Corp, Inc."
+- **THEN** one employer named "Acme Corp" is stored, and header lines in any of the three spellings match it
+
+#### Scenario: A new spelling of a stored employer
+- **WHEN** a later scan finds "Acme-Labs, LLC" and "Acme Labs" is stored
+- **THEN** the spelling is added to "Acme Labs" and no new employer is stored
+
+#### Scenario: A stored employer with a custom pattern
+- **WHEN** a scan finds a new spelling of a stored employer whose pattern was edited
+- **THEN** that employer is not changed, and the scan names any spelling it could not store
+
+### Requirement: Look-alike employer names are confirmed by the user
+Employer names that only look alike (one is the start of the other, one is the initials of the other, or they differ by a letter or two) SHALL NOT be merged by a scan. `companies` SHALL list them as pairs that may be one employer, and the scan SHALL report only the pairs that involve an employer it just added or changed.
+
+#### Scenario: Names that look alike
+- **WHEN** the resumes name "Acme Research Group" and "ARG"
+- **THEN** both are stored, and `companies` lists them as a pair that may be one employer
+
+#### Scenario: A pair is not reported twice
+- **WHEN** a later scan adds an unrelated employer
+- **THEN** the scan does not report pairs between employers stored before
+
 ### Requirement: Open items
 The system SHALL keep personal open items and data notes in the database, listed with `open`, added with `open add TEXT` and closed with `open done ID`.
 

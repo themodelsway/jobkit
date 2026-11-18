@@ -15,7 +15,7 @@ Commands run from a terminal in the repository root, as `uv run` followed by the
 | `jobkit status` | Where the data is kept, and how many stories, cards, questions and sessions it holds |
 | `profile status` | The saved settings, and any that are still missing |
 | `profile open` | The open items and notes saved for later |
-| `profile companies` | The employers found in the resumes |
+| `profile companies` | The employers found in the resumes, and names that look alike |
 | `jobkit export --only stories --format md` | One kind of data, printed as readable Markdown |
 | `jobkit export --format md -o ~/jobkit-export` | All data, written as one Markdown file per kind |
 

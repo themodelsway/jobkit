@@ -107,14 +107,17 @@ class ProfileTests(ProfileCase):
         self.assertEqual(up.key_topics(), ["Payroll calendar", "Leave policy"])
 
     def test_companies_registry_never_overwrites(self):
-        self.assertEqual(up.add_companies({"acme": "Acme Corp"}), ["acme"])
-        self.assertEqual(up.add_companies({"acme": "Other Name", "acme-2": "Acme 2"}), ["acme-2"])
+        self.assertEqual(up.add_companies({"Acme Corp": 1}).new, ["acme-corp"])
+        utables.replace_employers({"acme-corp": {**utables.load_employers()["acme-corp"], "name": "Acme"}})
+        self.assertEqual(up.add_companies({"Acme Corp": 2, "Acme 2": 1}).new, ["acme-2"])
         reg = up.company_registry()
-        self.assertEqual(reg["acme"][0], "Acme Corp")
-        self.assertTrue(reg["acme"][1].startswith("Acme\\ Corp"))
+        self.assertEqual(reg["acme-corp"][0], "Acme", "a renamed employer keeps its name")
+        self.assertTrue(reg["acme-corp"][1].startswith("Acme\\ Corp"))
+        self.assertEqual(up.add_companies({"Acme 3": 1}, save=False).new, ["acme-3"])
+        self.assertNotIn("acme-3", up.company_registry(), "a survey saves nothing")
 
     def test_rename_an_employer(self):
-        up.add_companies({"acme": "Acme Corp"})
+        up.add_companies({"Acme": 1})
         self.assertEqual(run_profile("companies", "rename", "acme", "Acme Inc")[0], 0)
         self.assertEqual(up.company_registry()["acme"][0], "Acme Inc")
         self.assertIn("Acme Inc", run_profile("companies")[1])
@@ -122,23 +125,73 @@ class ProfileTests(ProfileCase):
         self.assertEqual(run_profile("companies", "rename", "acme")[0], 1)
 
     def test_merge_two_employers_into_one(self):
-        up.add_companies({"acme": "Acme Corp", "acme-ltd": "Acme Ltd"})
-        code, out, _ = run_profile("companies", "merge", "acme-ltd", "acme")
+        up.add_companies({"Acme": 1, "Acme Labs": 1})
+        code, out, _ = run_profile("companies", "merge", "acme-labs", "acme")
         self.assertEqual(code, 0, out)
         registry = up.company_registry()
         self.assertEqual(list(registry), ["acme"])
         pattern = re.compile(registry["acme"][1] + "$")
-        for line in ("Acme Corp", "Acme Ltd", "Acme Ltd - Lead Designer"):
+        for line in ("Acme", "Acme Labs", "Acme Labs - Lead Designer"):
             self.assertTrue(pattern.match(line), line)
         self.assertEqual(run_profile("companies", "merge", "acme", "acme")[0], 1)
         self.assertEqual(run_profile("companies", "merge", "acme", "gone")[0], 1)
 
     def test_merge_refuses_a_custom_pattern(self):
-        up.add_companies({"a": "A Co", "b": "B Co"})
+        up.add_companies({"Acme": 1, "Acme Labs": 1})
         employers = utables.load_employers()
-        employers["b"]["regex"] = "B.*"
+        employers["acme-labs"]["regex"] = "Acme L.*"
         utables.replace_employers(employers)
-        self.assertEqual(run_profile("companies", "merge", "b", "a")[0], 1)
+        self.assertEqual(run_profile("companies", "merge", "acme-labs", "acme")[0], 1)
+
+
+class EmployerSpellingTests(HomeCase):
+    """Spellings of one employer are merged by the scan; names that only look alike are listed for the user."""
+
+    def test_spellings_that_differ_only_in_form_are_one_employer(self):
+        scan = up.add_companies({"Acme Corp": 3, "ACME CORP.": 1, "Acme Corporation": 1, "The Acme Corp, Inc.": 1})
+        self.assertEqual(scan.new, ["acme-corp"])
+        self.assertEqual(sorted(scan.merged["acme-corp"]), ["ACME CORP.", "Acme Corporation", "The Acme Corp, Inc."])
+        pattern = re.compile(up.company_registry()["acme-corp"][1] + "$")
+        for line in ("Acme Corp", "ACME CORP.", "Acme Corporation - Lead Designer", "The Acme Corp, Inc."):
+            self.assertTrue(pattern.match(line), line)
+
+    def test_the_spelling_in_most_resumes_is_the_name_and_capitals_lose_a_tie(self):
+        self.assertEqual(up.add_companies({"ACME WORKS": 1, "Acme Works": 1}).new, ["acme-works"])
+        self.assertEqual(utables.load_employers()["acme-works"]["name"], "Acme Works")
+        self.assertEqual(up.add_companies({"Acme & Sons": 1, "Acme and Sons Ltd": 4}).new, ["acme-and-sons-ltd"])
+        self.assertEqual(up.add_companies({"ACME LABS, Inc.": 1, "Acme Labs": 1}).new, ["acme-labs"])
+
+    def test_a_new_spelling_of_a_stored_employer_is_added_to_it(self):
+        up.add_companies({"Acme Labs": 1})
+        scan = up.add_companies({"Acme-Labs, LLC": 1, "Acme Labs": 2})
+        self.assertEqual((scan.new, scan.merged), ([], {"acme-labs": ["Acme-Labs, LLC"]}))
+        stored = utables.load_employers()["acme-labs"]
+        self.assertEqual((stored["name"], stored["aliases"]), ("Acme Labs", ["Acme-Labs, LLC"]))
+        self.assertEqual(up.add_companies({"Acme-Labs, LLC": 1}).merged, {}, "a known spelling changes nothing")
+
+    def test_a_spelling_whose_id_an_edited_employer_holds_is_reported_not_stored(self):
+        utables.replace_employers({"acme-labs": {"name": "Acme Labs", "regex": "Acme Labs Ltd"}})
+        scan = up.add_companies({"Acme-Labs": 1})
+        self.assertEqual((scan.new, scan.merged, scan.skipped), ([], {}, ["Acme-Labs"]))
+        self.assertEqual(utables.load_employers()["acme-labs"]["regex"], "Acme Labs Ltd", "an edited pattern stays")
+
+    def test_names_that_only_look_alike_are_listed_not_merged(self):
+        up.add_companies({"Acme": 1, "Acme Labs": 1, "Acme Research Group": 1, "ARG": 1})
+        self.assertEqual(len(utables.load_employers()), 4)
+        out = run_profile("companies")[1]
+        self.assertIn("may be one employer", out)
+        for pair in ('acme "Acme" and acme-labs "Acme Labs"', 'acme "Acme" and acme-research-group',
+                     'acme-research-group "Acme Research Group" and arg "ARG"'):
+            self.assertIn(pair, out)
+        self.assertNotIn('acme-labs "Acme Labs" and acme-research-group', out)
+
+    def test_a_name_off_by_a_letter_looks_alike(self):
+        up.add_companies({"Acme Systems": 1, "Acme Sytems": 1})
+        self.assertIn('acme-systems "Acme Systems" and acme-sytems "Acme Sytems"', run_profile("companies")[1])
+
+    def test_no_look_alike_section_when_names_differ(self):
+        up.add_companies({"Acme Labs": 1, "Acme Works": 1})
+        self.assertNotIn("may be one employer", run_profile("companies")[1])
 
     def test_open_items_add_done_and_errors(self):
         self.assertIn("No open items", run_profile("open")[1])
@@ -277,7 +330,7 @@ class ProfileCompaniesTests(HomeCase):
         with contextlib.redirect_stdout(out):
             self.assertEqual(up.main(["companies"]), 0)
             self.assertIn("No scan yet", out.getvalue())
-            up.add_companies({"acme": "Acme Corp"})
+            up.add_companies({"Acme Corp": 1})
             out.truncate(0)
             self.assertEqual(up.main(["companies"]), 0)
         self.assertIn("Acme Corp", out.getvalue())
