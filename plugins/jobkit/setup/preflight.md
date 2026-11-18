@@ -33,8 +33,10 @@ Read by the jobkit skills at the start of every conversation. The skill that is 
      - Yes: run the same command again without `--check`. It prints `ok:JOBKIT_COMMANDS_DIR` when it worked. If it fails with a line that starts `failed: uv is too old`, say the next line and stop:
        > Setup did not finish. A tool called uv is already on your computer, but it is too old for me to use, and I won't replace it for you. Please update it, then ask me again.
 
-       If it fails in any other way, say the next line and stop:
-       > Setup did not finish. Please check that you are online and that I am allowed to download and install, then ask me to try again. I will carry on from where it stopped.
+       If it fails in any other way, say the next line:
+       > Setup did not finish. Network restrictions or my permissions may not allow me to download or install from here. Please review the command below, run it in a terminal window outside this session, and ask me again when it has finished. I will carry on from where it stopped.
+
+       Then show the install command you just ran (the same options, without `--check`) on a line of its own, with JOBKIT_PLUGIN_DIR replaced by the plugin's full folder path and the home folder expanded, so it can be pasted into a terminal as it is, and stop. Say the full path only to the user, never in a report. If the user later says the command also failed in the terminal, follow section 3 of `troubleshoot.md` (in this folder).
      - No: install nothing, say the next line and stop:
        > No problem. I can't help with your resumes or practice without that helper, so I'll stop here. Ask me again whenever you're ready.
    - `unsupported`: install nothing, say the next line and stop:

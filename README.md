@@ -149,7 +149,7 @@ Codex support is for the Codex command line on macOS and Linux, running locally.
 4. Check: `codex plugin list --marketplace themodelsway` lists jobkit. If it is missing, see [Troubleshooting](#troubleshooting).
 5. First request: the same as for Claude Code (step 5 under [macOS and Linux](#macos-and-linux)).
 
-Codex runs commands in a sandbox that can read your files but, by default, cannot write outside the folder you started it in and cannot go online. jobkit keeps its data in `~/.jobkit`, so allow that one folder. The simplest way is to approve it when Codex asks. To allow it ahead of time with the workspace-write sandbox settings, edit `~/.codex/config.toml`, using the full path that `echo ~/.jobkit` prints in a terminal:
+Codex runs commands in a sandbox that can read your files but, by default, cannot write outside the folder you started it in and cannot go online. jobkit keeps its data in `~/.jobkit`, so the sandbox must allow writing to that one folder. Codex can ask for approval: review and approve the request to let jobkit save its data. To allow the folder ahead of time with the workspace-write sandbox settings, edit `~/.codex/config.toml`, using the full path that `echo ~/.jobkit` prints in a terminal:
 
 - If the file has no `[sandbox_workspace_write]` table, add one:
 
@@ -162,7 +162,7 @@ Codex runs commands in a sandbox that can read your files but, by default, canno
 
 This setting applies to the workspace-write sandbox only; it has no effect in a read-only session. A setup that uses Codex permission profiles instead configures folders there, as described in the Codex documentation.
 
-The first-time setup also downloads and installs software (see [What setup installs](#what-setup-installs)), which the sandbox blocks: approve that step when Codex asks. If it was blocked, the skill says that setup did not finish; allow it and ask again, and it carries on from where it stopped. If a save is blocked later, the skill says that nothing was saved and names the folder to allow. Do not turn the sandbox off for this.
+The first-time setup also downloads software and installs it in uv's own folders (see [What setup installs](#what-setup-installs)); the sandbox blocks both. The setup checks those folders before it starts and says when it was blocked. When setup does not finish, the skill tells the agent to show the setup command, with the plugin's folder filled in, to paste into a terminal: review the command and run it there to continue the installation. Once it has finished, asking again carries on from where setup stopped. This needs neither the sandbox turned off nor uv's folders added to `writable_roots`. If a save is blocked later, the skill says that nothing was saved and names the folder to allow.
 
 - **Skills installed:** the same three, `interview-prep`, `tutor` and `resume-workflows`, from the same files as in Claude Code. An installed Codex plugin does not include the two helpers; the skills then use a separate helper where Codex can run one, or do that work themselves.
 - **Update:** `codex plugin marketplace upgrade themodelsway`, then `codex plugin add jobkit@themodelsway` again. The next time a skill starts it offers to update the commands.
@@ -177,7 +177,7 @@ Common problems:
 - **The agent does not know a plugin command** (`/plugin` or `codex plugin` is not recognized): the agent is too old. Update it and try again.
 - **jobkit or the marketplace is not found:** register the marketplace again (first row of the table in [Before you begin](#before-you-begin)), then install. In Claude Code, a plugin installed at project or local scope is missing from other folders; install it again at user scope. A plugin shown as disabled is turned on in the Installed tab of `/plugin` or with `claude plugin enable jobkit@themodelsway`.
 - **The skills do not respond to a request:** start a new session after installing or updating, and name jobkit in the request.
-- **Setup did not finish:** setup downloads software, so the computer must be online and the agent must allow the download (approve it when asked). Asking again carries on from where it stopped.
+- **Setup did not finish:** setup downloads software, so the computer must be online and the agent must be allowed to download. When setup does not finish, the skill tells the agent to show the setup command to paste into a terminal (review it and run it there). Asking again carries on from where it stopped.
 
 ## What setup installs
 
@@ -195,6 +195,7 @@ The first time a skill runs, in either agent, the skill tells the agent to run t
 - Setup never downgrades: if the installed commands are newer than the plugin, it changes nothing.
 - After setup, each skill tells the agent to check how far setup has got (`jobkit status --setup`) and to continue from there: create the data folder, import the resumes, or ask what the user is preparing for. When the check reports that saving is not allowed, or that the data comes from a newer version, the skill tells the agent to say so and stop. For any other failure, at setup or later, the skill tells the agent to follow the troubleshooting guide that ships with the plugin (`setup/troubleshoot.md`): it never repairs the data itself, retries only a busy database, once, and otherwise stops and offers a report without personal details for the user to post as a GitHub issue; jobkit does not post issues itself. A command that fails in a way its message does not explain ends its error output with a line that points to that guide. For a returning user, the skill tells the agent to start the next step the stored data points to (`jobkit status --summary`): continue an unfinished practice session, refresh answers due for a retest, or keep preparing for the researched default company; otherwise it lists what jobkit can do.
 - It does not edit your shell settings. The commands go in uv's tool folder and the skills run them by full path.
+- Before installing, the installer checks that it may write every folder uv writes to (its cache, its tool folders, and its Python folder when Python is downloaded), and names the first one it may not. A failed download is reported as such, and any other uv failure with uv's last error line.
 - If setup stops half way (for example offline), what it already installed stays; asking again finishes it.
 - **No database server.** Structured data (resume lines, stories, practice sessions and settings) is kept in one SQLite database file (SQLite is part of Python), `~/.jobkit/data/jobkit.db` on macOS and Linux and `%USERPROFILE%\.jobkit\data\jobkit.db` on Windows. Extracted resume text, saved job postings, page readings and generated resumes are kept as files in the `output` folder, and copies of the database in the `backup` folder, both in the same `.jobkit` folder. The skill tells the agent to create the database after setup, before the first import. This README refers to the folder as `~/.jobkit`.
 

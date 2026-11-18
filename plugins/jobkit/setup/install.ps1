@@ -8,6 +8,8 @@
 # Run it only after the user has said yes: uv downloads Python and packages. --with-uv also downloads uv
 # (from astral.sh); pass it only when the user asked for uv to be installed for them.
 # It never replaces a uv that is already there and never installs over newer commands.
+# The check only reads. An install first makes sure it may write every folder uv writes to:
+#   failed: not allowed to write to FOLDER   (exit 5; for example an agent's sandbox)
 # Keep this file ASCII only: Windows PowerShell 5.1 misreads UTF-8 without a byte order mark.
 $ErrorActionPreference = 'Stop'
 
@@ -89,10 +91,40 @@ function Get-UvVersion($Uv) {
 }
 
 # '+python' when the Python version the commands need is not installed yet (uv would download it), else ''.
+# --no-cache: the search then needs no lock in uv's cache folder, which a sandbox may not let it write.
 function Get-PythonNeed($Uv) {
-    try { Invoke-Native $Uv @('python', 'find', '--system', '--no-project', $PythonVersion) | Out-Null } catch { return '+python' }
+    try { Invoke-Native $Uv @('python', 'find', '--no-cache', '--system', '--no-project', $PythonVersion) | Out-Null } catch { return '+python' }
     if ($LASTEXITCODE -eq 0) { return '' }
     return '+python'
+}
+
+# A path with the user profile folder shown as %USERPROFILE%.
+function Format-Home($Path) {
+    if ($env:USERPROFILE -and "$Path".StartsWith($env:USERPROFILE, [StringComparison]::OrdinalIgnoreCase)) {
+        return '%USERPROFILE%' + "$Path".Substring($env:USERPROFILE.Length)
+    }
+    return "$Path"
+}
+
+# Stop with exit 5 unless this folder may be written: it is created if missing, then a file is made and removed.
+function Assert-Writable($Folder) {
+    if (-not $Folder) { return }
+    try {
+        New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+        $probe = Join-Path $Folder (".jobkit-probe-" + [Guid]::NewGuid().ToString('N'))
+        [IO.File]::WriteAllText($probe, '')
+        Remove-Item -Force -LiteralPath $probe
+    } catch {
+        Fail "not allowed to write to $(Format-Home $Folder)" 5
+    }
+}
+
+# The folders uv writes to while installing the commands; its Python folder only when Python is downloaded too.
+function Assert-UvFolders($Uv) {
+    foreach ($query in @(@('cache', 'dir'), @('tool', 'dir'), @('tool', 'dir', '--bin'))) {
+        Assert-Writable (Invoke-Native $Uv $query | Select-Object -First 1)
+    }
+    if (Get-PythonNeed $Uv) { Assert-Writable (Invoke-Native $Uv @('python', 'dir') | Select-Object -First 1) }
 }
 
 function Get-State {
@@ -149,6 +181,7 @@ if ($uv) {
 
 $uv = Find-Uv
 if (-not $uv) { Fail 'uv was not found after installing it' }
+Assert-UvFolders $uv
 Invoke-Native $uv @('tool', 'install', '--force', '--python', $PythonVersion, '--constraints', $Constraints, $Root) | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail 'the jobkit commands could not be installed' }
 

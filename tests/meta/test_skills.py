@@ -447,7 +447,7 @@ class SharedTextTests(unittest.TestCase):
         self.assertEqual(len(failed), 2)
         for line in failed:
             self.assertNotIn("Nothing was changed", line)
-        self.assertTrue(any("try again" in x for x in failed))
+        self.assertTrue(any("carry on from where it stopped" in x for x in failed))
         self.assertTrue(any("too old" in x and "won't replace" in x for x in failed))
 
     def test_blocked_write_names_the_folder_and_keeps_protections_on(self):
@@ -457,6 +457,16 @@ class SharedTextTests(unittest.TestCase):
         self.assertIn("give the user the full path, with the home folder expanded properly", text)
         self.assertIn("Say the full path only to the user, never in a report", text)
         self.assertIn("`%USERPROFILE%\\.jobkit` on Windows", text)
+
+    def test_a_failed_install_hands_over_the_exact_command(self):
+        text = setup_text("preflight")
+        branch = text[text.index("If it fails in any other way"):text.index("- No: install nothing")]
+        self.assertIn("and stop", branch)
+        self.assertIn("JOBKIT_PLUGIN_DIR replaced by the plugin's full folder path", branch)
+        self.assertIn("Say the full path only to the user, never in a report", branch)
+        self.assertNotIn("offline", branch)
+        self.assertIn("also failed in the terminal, follow section 3 of `troubleshoot.md`", branch)
+        self.assertTrue(any("run it in a terminal window outside this session" in x for x in self.said()))
 
     def test_unsupported_environment_is_said_plainly_and_installs_nothing(self):
         text = setup_text("preflight")

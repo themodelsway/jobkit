@@ -23,7 +23,7 @@ CONSTRAINTS = PLUGIN_ROOT / "setup" / "constraints.txt"
 ON_WINDOWS = sys.platform == "win32"
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 CHECK_STATES = r"^(ok:.+|older(\+python)?:.+|newer:.+|missing(\+python)?|old-uv|no-uv|unsupported)$"
-TOOLS = ("sh", "sed", "head", "tr", "uname", "dirname", "mktemp", "rm", "cat", "chmod", "mkdir")
+TOOLS = ("sh", "sed", "head", "tr", "uname", "dirname", "mktemp", "rm", "cat", "chmod", "mkdir", "grep", "awk")
 
 FAKE_UV = """#!/bin/sh
 # A stand-in for uv: answers the calls the installer makes and records each one.
@@ -31,9 +31,11 @@ echo "$*" >> "$FAKE/uv.log"
 case "$1 $2" in
     "--version ") echo "uv $FAKE_UV_VERSION (fake)" ;;
     "python find") [ -z "${FAKE_NO_PYTHON:-}" ] || exit 2; echo "$FAKE/python" ;;
+    "python dir") echo "${FAKE_PYTHON_DIR:-$FAKE/pythons}" ;;
+    "cache dir") echo "${FAKE_CACHE:-$FAKE/cache}" ;;
     "tool dir") echo "$FAKE/tools" ;;
     "tool install")
-        [ -z "${FAKE_INSTALL_FAILS:-}" ] || exit 1
+        [ -z "${FAKE_INSTALL_FAILS:-}" ] || { printf '%s\n' "$FAKE_INSTALL_FAILS" >&2; exit 1; }
         mkdir -p "$FAKE/tools"
         printf '#!/bin/sh\\necho "jobkit %s"\\n' "$FAKE_PLUGIN_VERSION" > "$FAKE/tools/jobkit"
         chmod +x "$FAKE/tools/jobkit" ;;
@@ -149,7 +151,7 @@ class ShellInstallerTests(unittest.TestCase):
         self.add_uv()
         python = (PLUGIN_ROOT / ".python-version").read_text(encoding="utf-8").strip()
         self.assertEqual(self.run_script("--check", FAKE_NO_PYTHON="1").stdout.strip(), "missing+python")
-        self.assertIn(f"python find --system --no-project {python}", self.log("uv"))
+        self.assertIn(f"python find --no-cache --system --no-project {python}", self.log("uv"))
         self.add_helper("0.0.9")
         self.assertEqual(self.run_script("--check", FAKE_NO_PYTHON="1").stdout.strip(),
                          f"older+python:{self.fake / 'tools'}")
@@ -231,6 +233,43 @@ class ShellInstallerTests(unittest.TestCase):
         self.assertEqual(self.log("curl"), "")
         self.assertNotIn("tool install", self.log("uv"))
 
+    def test_a_folder_uv_may_not_write_stops_the_install_before_uv_runs(self):
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            self.skipTest("the superuser may write anywhere")
+        self.add_uv()
+        locked = self.fake / "home" / "locked"
+        locked.mkdir()
+        locked.chmod(0o500)
+        self.addCleanup(locked.chmod, 0o700)
+        result = self.run_script(FAKE_CACHE=str(locked / "cache"))
+        self.assertEqual(result.returncode, 5, result.stderr)
+        self.assertIn("failed: not allowed to write to ~/locked/cache", result.stderr)
+        self.assertNotIn(str(self.fake / "home"), result.stderr, "the home folder is shown as ~")
+        self.assertNotIn("tool install", self.log("uv"))
+
+    def test_the_python_folder_is_checked_only_when_python_is_downloaded(self):
+        self.add_uv()
+        self.assertEqual(self.run_script().returncode, 0)
+        self.assertNotIn("python dir", self.log("uv"))
+        self.add_helper("0.0.9")
+        self.assertEqual(self.run_script(FAKE_NO_PYTHON="1").returncode, 0)
+        self.assertIn("python dir", self.log("uv"))
+        self.assertTrue((self.fake / "pythons").is_dir())
+
+    def test_a_blocked_download_is_named(self):
+        self.add_uv()
+        result = self.run_script(FAKE_INSTALL_FAILS="  cause: dns error: failed to lookup address information")
+        self.assertEqual(result.returncode, 6)
+        self.assertIn("failed: could not download the required packages", result.stderr)
+
+    def test_another_uv_failure_shows_its_last_line_without_the_home_folder(self):
+        self.add_uv()
+        home = self.fake / "home"
+        result = self.run_script(FAKE_INSTALL_FAILS=f"error: no wheel for this platform in {home}/wheels")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("could not be installed (error: no wheel for this platform in ~/wheels)", result.stderr)
+        self.assertNotIn(str(home), result.stderr)
+
     def test_a_failed_install_can_be_retried(self):
         write_script(self.bin / "curl", FAKE_CURL)
         failed = self.run_script("--with-uv", FAKE_INSTALL_FAILS="1")
@@ -254,7 +293,8 @@ class InstallersAgreeTests(unittest.TestCase):
             for name in ("pyproject.toml", ".python-version", "constraints.txt", "--constraints", "--python",
                          "required-version", "newer:", "older", "ok:", "missing", "no-uv", "old-uv", "+python",
                          "python', 'find'" if script == WINDOWS_SCRIPT else "python find", "--with-uv",
-                         "uv is too old", "uv is not installed"):
+                         "uv is too old", "uv is not installed", "--no-cache", "not allowed to write to",
+                         "cache', 'dir'" if script == WINDOWS_SCRIPT else "cache dir"):
                 self.assertIn(name, text, f"{script.name}: {name}")
             self.assertNotIn("plugin.json", text, f"{script.name} reads the version from a manifest")
 
