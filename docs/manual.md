@@ -6,7 +6,7 @@ jobkit provides three skills for Claude Code and Codex. Requests use plain langu
 | --- | --- | --- |
 | interview-prep | Mock interviews with role questions, leadership questions and personal stories. | [interview-prep.md](guides/interview-prep.md) |
 | tutor | Teaching before quizzing, and interview readiness reports. | [tutor.md](guides/tutor.md) |
-| resume-workflows | Resume import, tailoring for a job posting, and match scoring (early preview). | [resume-workflows.md](guides/resume-workflows.md) |
+| resume-workflows | Resume import, tailoring for a job posting, and match scoring (beta). | [resume-workflows.md](guides/resume-workflows.md) |
 
 The pages in `plugins/jobkit/skills/` are the agent's instructions; these pages are for users of jobkit. Settings and interview progress can be checked from the command line with the [top commands to explore](explore.md).
 
@@ -29,7 +29,7 @@ Conventions shared by all commands:
 | `build-resume` | Write a tailored resume | [resume-workflows.md](guides/resume-workflows.md#build-resume) |
 | `jobkit` | The home folder and database: init, status, export, backup | [below](#jobkit) |
 | `lead` | Leadership questions | [interview-prep.md](guides/interview-prep.md#lead) |
-| `match-score` | Rate how well resume lines cover a posting (early preview) | [resume-workflows.md](guides/resume-workflows.md#match-score) |
+| `match-score` | Rate how well resume lines cover a posting (beta) | [resume-workflows.md](guides/resume-workflows.md#match-score) |
 | `prep` | Interview stories and engagements | [interview-prep.md](guides/interview-prep.md#prep) |
 | `questions` | Search records, local prompts and practice progress for a role | [interview-prep.md](guides/interview-prep.md#questions) |
 | `resume-lines` | Find lines over 200 characters and check a shorter wording | [resume-workflows.md](guides/resume-workflows.md#resume-lines) |

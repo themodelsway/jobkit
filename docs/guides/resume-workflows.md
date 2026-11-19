@@ -17,7 +17,7 @@ For a PDF with a text layer, the parser output can be compared with a reading of
 
 **Checking the result.** The skill reports what it found: employers, lines and skills, and anything that needs a human look. The skill tells the agent to review the data for any potential inconsistency between what the resumes say about the same facts, such as contact details, employer names, titles, dates, locations and numbers, and to ask the user about each one. Differences explained by when a resume was written or by tailoring for one posting are not raised. Both versions can be reviewed and reconciled or kept as a variant. A reconciled value is saved with the jobkit command that stores that kind of data; when no command can correct a value, such as a date, a title or a location, the user corrects it in the resume file, and the skill tells the agent to offer to note it as an open item.
 
-## Tailoring a resume (early preview)
+## Tailoring a resume (beta)
 
 For a supplied job posting, the skill:
 
@@ -28,7 +28,7 @@ For a supplied job posting, the skill:
 
 The draft requires user review and explicit approval; the skill never approves one on its own. Suggested wording remains subject to user acceptance. Rankings use keywords and tags; final bullet selection requires user review.
 
-## Match score (early preview)
+## Match score (beta)
 
 Rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The model used by the agent rates each requirement against the lines; the command checks and adds up. Where the agent can run it, the skill has the first rating pass done by the `jd-matcher` helper. A stored score is reused when the posting, the resume data, the scoring settings and the assessment date all match; otherwise the posting is assessed again.
 
@@ -146,7 +146,7 @@ Finds stored lines over 200 characters and checks a proposed shorter wording. It
 
 ### `match-score`
 
-> **Early preview.** The levels, weights and wording are first versions and may change; treat the numbers as a rough guide.
+> **Beta.** The levels, weights and wording are first versions and may change; treat the numbers as a rough guide.
 
 Rates how well the stored resume lines cover a job posting, as a lower and an upper match score with the gaps. It is a match estimate: **not** any employer's applicant tracking system score and not a prediction of a hiring decision (every report says so). It is not `query-resume match` (an alias of `for-jd`), which ranks lines and gives no score. The model used by the agent rates the requirements, following the `resume-workflows` skill; this command checks and adds up. The request and result are described in [data-structures.md](../references/data-structures.md#match-scores-match-score). In the formula every credit, weight and threshold is a placeholder default. A skill line earns credit only when it is not flagged for review, not ignored and does not explicitly say that skill was not used professionally (a line that only reads like training counts for at most partial; both kinds are listed in the report's assumptions); a reviewer can contest a code-rated level with a reason (`contest`), and the report shows both levels.
 

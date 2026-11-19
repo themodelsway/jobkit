@@ -2,7 +2,7 @@
 
 jobkit is an interview preparation plugin for Claude Code and Codex. It provides three skills: interview practice, tutoring with readiness reports, and resume workflows. Requests use plain language, and each skill guides the agent through the task.
 
-The plugin imports resumes and uses the experience in them as context for targeted drills, mock interviews, and stories organized using STAR and other common answer formats. Company research and resume match scoring against job postings (in early preview) help with focused preparation. Readiness reports identify gaps and suggest what to work on next.
+The plugin imports resumes and uses the experience in them as context for targeted drills, mock interviews, and stories organized using STAR and other common answer formats. Company research and resume match scoring against job postings (in beta) help with focused preparation. Readiness reports identify gaps and suggest what to work on next.
 
 Claude Code and Codex are coding agents, referred to as **agents** here for short. The agent loads jobkit's skills and runs its commands within its permission boundaries. The **model** is the language model the agent uses: it interprets requests and the content supplied, such as resume text or page images, and writes the responses.
 
@@ -19,7 +19,7 @@ Claude Code and Codex are coding agents, referred to as **agents** here for shor
                                   ▼                      ▼
                          jobkit datastore:          mock interviews and lessons,
                          resumes, stories,          readiness reports, draft
-                         sessions, match results    resume (preview)
+                         sessions, match results    resume (beta)
                      
 ```
 
@@ -40,7 +40,7 @@ Once installed, start the agent in a new empty folder, not in the folder that ho
 2. **Topic instruction.** The tutor explains a topic, a question or one of the user's stories first, then checks understanding with a short quiz.
 3. **Practice.** A mock interview asks first, gives no hints, then grades the answers. A session can be stopped and resumed later.
 4. **Readiness assessment.** A report shows what has been rehearsed, what is solid and what is still untested, optionally for a supplied job posting.
-5. **Early preview: resume tailoring.** For a supplied job posting, the skill builds a tailored draft resume or estimates how well the stored resumes match the posting.
+5. **Beta: resume tailoring.** For a supplied job posting, the skill builds a tailored draft resume or estimates how well the stored resumes match the posting.
 
 ## Features
 
@@ -73,9 +73,9 @@ The tutor teaches a card, question or story first, then checks understanding wit
 
 A report of coverage and evidence per area, optionally limited to one job posting. Each card or question reads as untested, some gaps, solid-once, solid-repeated, aging or solid-unlogged (confidence recorded by hand, no logged answer); stories show their status and recent rehearsal. There is deliberately no single score.
 
-### Resume tailoring and match score (early preview)
+### Resume tailoring and match score (beta)
 
-Resume tailoring and match scoring are early previews. Their output requires review before use.
+Resume tailoring and match scoring are in beta. Their output requires review before use.
 
 - **Tailoring.** Given a job posting, it builds a resume from the stored lines. It ranks the lines per employer, suggests opening summaries, lists the skills the posting asks for that no stored line supports, and writes a Markdown draft. The draft requires review before use.
 - **Match score.** It rates how well the resume lines cover a posting: a lower and an upper score, the requirements the resumes do not show yet, and the assumptions made. It is an estimate of coverage. It is not any employer's applicant-tracking score, and it does not predict whether the user will be hired. The first step saves the posting in the data folder, so the later steps name it instead of passing it again. Each completed scoring run also removes saved match results unused for more than 90 days and saved postings unused for more than 30 days; nothing removes them on a schedule.

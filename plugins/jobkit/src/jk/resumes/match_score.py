@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""EARLY PREVIEW: rate how well your stored resume lines cover a job posting (a match estimate, not any ATS score).
+"""BETA: rate how well your stored resume lines cover a job posting (a match estimate, not any ATS score).
 
   match-score extract --jd posting.txt          # the requirements code can rate, the skills, education and
                                                 # certifications to cite, and a posting KEY; or the stored result

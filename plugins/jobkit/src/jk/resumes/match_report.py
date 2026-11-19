@@ -10,7 +10,7 @@ from typing import Any, Final
 from jk.resumes import match_engine as me
 
 CAVEAT: Final[str] = ("This is an estimate of how well your resume lines match this posting. It is not any employer's "
-                      "applicant tracking system score, and it does not predict a hiring decision. This feature is an early preview: "
+                      "applicant tracking system score, and it does not predict a hiring decision. This feature is in beta: "
                       "the weights and the way the score is worked out may still change.")
 LOW_COVERAGE: Final[int] = 70
 LEVEL_WORDS: Final[dict[str, str]] = me.LEVEL_WORDS

@@ -34,7 +34,7 @@ class SkillSectionTests(unittest.TestCase):
         text = "\n".join(section())
         self.assertIn("never ask the user anything", text)
         self.assertIn("not the score any employer's tracking software gives", text)
-        self.assertIn("This feature is an early preview", text)
+        self.assertIn("This feature is in beta", text)
         self.assertNotIn("ATS", text)
 
     def test_the_rubric_is_named_from_the_skill_folder(self):

@@ -330,7 +330,7 @@ class SharedTextTests(unittest.TestCase):
         text = setup_text("welcome")
         items = [x for x in text.splitlines() if re.match(r"^> \d\. \*\*", x)]
         self.assertEqual(len(items), 5, items)
-        self.assertIn("early preview", items[4])
+        self.assertIn("(beta)", items[4])
         self.assertIn("job posting", items[4])
         said = [x for x in text.splitlines() if x.startswith(">")]
         self.assertFalse(any("draft" in x or "Tailor" in x for x in said), "the welcome advertises tailoring")

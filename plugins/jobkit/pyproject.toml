@@ -1,6 +1,6 @@
 [project]
 name = "jobkit"
-version = "0.7.2"
+version = "0.7.3"
 description = "Local resume data, matching and interview-prep tools for a job search"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

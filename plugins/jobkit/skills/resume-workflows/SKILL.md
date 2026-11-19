@@ -39,7 +39,7 @@ Everything the user reads is in everyday words. Lines that start with `>` in thi
 
 Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. The resume data model (layouts, how lines are matched across resumes, curation) is in `data-model.md` (in this skill's folder); read it before changing how resumes are read or tagged.
 
-## Building a resume for a job posting (early preview)
+## Building a resume for a job posting (beta)
 1. Ask:
    > Please paste the job posting here.
 2. Read the posting and list every skill, tool or duty it asks for. Run `build-resume -` with the posting on stdin and one `--requirement "NAME"` for each item in that list, including ones the user may not have (a missing one is reported as a gap; leaving the flag out means such skills are not checked). If the output lists possible matches (a skill name that is also an ordinary word, with its sentence), read each sentence and, for the ones that really mean the skill, run the command again with `--requirement NAME`. It picks the best-fitting opening summary, the best non-duplicate lines per company, grouped under each role with its own title and dates (same scoring as `query-resume for-jd`), the skills the posting asks for grouped, certifications and education, and writes a Markdown file under the jobkit home folder's `output/resumes/`.
@@ -47,7 +47,7 @@ Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. T
    > A few lines were left out because their numbers may be off. Want to go through them now?
    If the report lists lines over the limit, say how many are long in one sentence; do not offer to rewrite them.
    Also say, the first time in a conversation:
-   > This feature is an early preview, so please look the draft over before you use it.
+   > This feature is in beta, so please look the draft over before you use it.
    Never invent resume lines; suggest wording and let the user decide.
    If the output lists lines it set aside or capped, say in plain words which skill each concerns. For a line that reads like training, ask one at a time:
    > Your line "TEXT" sounds like training. Did you also use this skill at work?
@@ -60,7 +60,7 @@ Flags: `build-resume --help`, `process-resumes --help`, `query-resume --help`. T
 6. Years of experience: the build shows the figure saved in the profile (`profile status` shows it). If none is saved, take the figure the user gave in their open items (`profile open`) and save it with `profile set years_experience N`; if there is none, and the stored summaries disagree in a way the resumes' dates do not explain (an older resume states fewer years), ask which number is right before using one; when the dates explain it, use the figure from the newest resume:
    > Your resumes say different numbers of years of experience. Which one should I use?
 
-## Rating how well the resume matches a job posting (early preview)
+## Rating how well the resume matches a job posting (beta)
 Use this when the user asks how well their resume matches a posting or wants a score. The result is a match estimate, never an employer's applicant tracking score, and the user must not be told otherwise. Do every technical step yourself, and never ask the user anything from the first step to the end of the report: settle every doubt with the rules in `match-rubric.md` (in this skill's folder) (read it before step 3; it also gives the request format) and report what you assumed. Flags: `match-score --help`.
 1. If the posting is not already in the conversation, say:
    > Please paste the job posting here.
@@ -77,7 +77,7 @@ Use this when the user asks how well their resume matches a posting or wants a s
    > Your profile matches this posting about LOW to HIGH out of 100. The lower number counts only what your lines clearly show; the higher number is what it would be if every close call went your way.
    Then each thing you assumed, one short line each (lines the report lists as reading like training, or as not shown in the profile, are among them: say them the same way and ask nothing); if the report says the posting was vague, say it was hard to judge in places. End with:
    > This is only an estimate of how well your lines match this posting. It is not the score any employer's tracking software gives, and it does not tell you whether you will be hired.
-   > This feature is an early preview, so the numbers and the way they are worked out may still change.
+   > This feature is in beta, so the numbers and the way they are worked out may still change.
    Say "level of the role" for the band, and never show file names, commands, ids or the words band, preset, fallback or flag. Say "not shown in your profile yet", never that the user lacks a skill.
 7. If the report lists a people-leadership item as not or only partly shown, run `lead profile show` and add one statement, never a question. If it holds a team size or number of reports for an employer, offer one line of wording built only from those facts, say it is only a suggestion and that nothing was changed. If it holds none, say:
    > If you tell me how many people you led and for how long, I can suggest a line for your resume.
